@@ -25,7 +25,7 @@ A move proposed by the LLM that cannot be played in the current position: badly 
 _Avoid_: Invalid move, wrong move
 
 **Retry**:
-A further attempt the LLM gets after an illegal move, told why the previous move was rejected. Limited to three per turn.
+A further attempt the LLM gets after an illegal move, told why the previous move was rejected. Limited to three per turn, so four attempts in total.
 _Avoid_: Re-prompt, second chance
 
 **Retry feedback**:
