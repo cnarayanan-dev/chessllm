@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChessLLM: user story prioritization</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a65; --line: #e3e1da;
+    --accent: #2f5d50; --accent-soft: #e4eeea; --warn: #9a5b13; --warn-soft: #f6ecdc;
+    --off: #a3a19a; --off-soft: #efeee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --panel: #201f1d; --ink: #ecebe6; --muted: #9c9a93; --line: #34332f;
+      --accent: #7fbfa9; --accent-soft: #233630; --warn: #e0a95c; --warn-soft: #3a2e1d;
+      --off: #6d6b65; --off-soft: #2a2927;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 28px 32px 8px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 12px; }
+  .sub { color: var(--muted); margin: 0; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; padding: 16px 32px 40px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .controls { display: flex; gap: 28px; flex-wrap: wrap; align-items: end; margin-bottom: 16px; }
+  .controls label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  .controls output { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 180px; accent-color: var(--accent); }
+  .bar { position: relative; height: 26px; border-radius: 6px; background: var(--off-soft); overflow: hidden; display: flex; }
+  .bar .seg { height: 100%; border-right: 2px solid var(--panel); background: var(--accent); color: #fff;
+              font-size: 11px; display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; }
+  .bar .seg.stretch { background: var(--warn); }
+  .bar .limit { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+  .barlegend { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin: 6px 0 18px; font-variant-numeric: tabular-nums; }
+  .story { display: grid; grid-template-columns: 34px minmax(0, 1fr) 210px; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); align-items: start; }
+  .story:first-of-type { border-top: 0; }
+  .id { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
+  .story.sel .id { color: var(--accent); }
+  .story.stretch .id { color: var(--warn); }
+  .title { font-weight: 600; }
+  .text { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--off-soft); color: var(--muted); }
+  .tag.in { background: var(--accent-soft); color: var(--accent); }
+  .tag.st { background: var(--warn-soft); color: var(--warn); }
+  .knobs { display: grid; gap: 8px; }
+  .knob { display: grid; grid-template-columns: 52px 1fr 38px; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .knob input { width: 100%; accent-color: var(--accent); }
+  .knob output { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .seg3 { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg3 button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; padding: 4px 0; cursor: pointer; }
+  .seg3 button + button { border-left: 1px solid var(--line); }
+  .seg3 button.on { background: var(--accent); color: #fff; }
+  .seg3 button.on.no { background: var(--off); }
+  ol.plan { margin: 0; padding-left: 20px; }
+  ol.plan li { margin: 0 0 10px; }
+  ol.plan .t { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bucket { margin-top: 18px; }
+  .bucket ul { margin: 0; padding-left: 18px; color: var(--muted); }
+  .rec { background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; margin-bottom: 18px; }
+  .rec p { margin: 0 0 8px; } .rec p:last-child { margin: 0; }
+  .btns { display: flex; gap: 8px; margin-top: 18px; }
+  .btns button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line);
+                 background: var(--panel); color: var(--ink); cursor: pointer; }
+  .btns button:hover { border-color: var(--accent); }
+  aside { position: sticky; top: 16px; align-self: start; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ChessLLM: which user stories fit this afternoon?</h1>
+  <p class="sub">Constraint from Notion: first version this afternoon, 4 h budget, local Ollama models only. Move the sliders to change value and effort; the plan on the right updates as you go.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="controls">
+      <label>Time budget <output id="budgetOut"></output>
+        <input id="budget" type="range" min="1" max="12" step="0.25"></label>
+      <label>Buffer for surprises <output id="bufferOut"></output>
+        <input id="buffer" type="range" min="0" max="40" step="5"></label>
+    </div>
+    <div class="bar" id="bar"></div>
+    <div class="barlegend"><span id="usedTxt"></span><span id="limitTxt"></span></div>
+    <h2>User stories</h2>
+    <div id="stories"></div>
+  </section>
+
+  <aside class="panel">
+    <h2>Suggestion</h2>
+    <div class="rec">
+      <p><strong>Build one game loop with a switch for two modes:</strong> <em>constrained</em> (the LLM picks from the legal-move list) and <em>free</em> (the LLM says any move, and the game counts how long it stays legal).</p>
+      <p>Stories 3 and 6 describe the same constrained mode, and 2 and 7 the same free mode, so building one switch covers four stories. The free-mode legal-move count is your headline metric for the article and gives you a Levy-style hook.</p>
+      <p>Leave Elo, RAG and prompt injection for later. You can only compute Elo once LLM-vs-engine games run unattended, and small local models take several seconds per move.</p>
+    </div>
+    <h2>This afternoon</h2>
+    <ol class="plan" id="plan"></ol>
+    <div class="bucket" id="stretchBox"><h2>Stretch, if the buffer isn't needed</h2><ul id="stretch"></ul></div>
+    <div class="bucket"><h2>Later</h2><ul id="later"></ul></div>
+    <div class="bucket" id="wontBox"><h2>Won't do now</h2><ul id="wont"></ul></div>
+    <div class="btns">
+      <button id="copy">Copy plan as Markdown</button>
+      <button id="reset">Reset to suggestion</button>
+    </div>
+  </aside>
+</main>
+
+<script>
+const DEFAULTS = {
+  budget: 4, buffer: 15,
+  stories: [
+    { id: 3, title: "Play against an LLM (legal moves only)", text: "As a user I want to play against an LLM that only plays legal moves, to evaluate it and produce showcase games.",
+      value: 5, effort: 1.5, deps: [], mode: "must", note: "Foundation: board, CLI loop, Ollama call, move parsing" },
+    { id: 6, title: "Constrained output (legal-move list in prompt)", text: "As a scientist I want to play an LLM with limited output choice, to see how it performs.",
+      value: 4, effort: 0.25, deps: [3], mode: "auto", note: "Same as #3's constrained mode: pass the legal moves and retry if it answers off-list" },
+    { id: 7, title: "Free mode (LLM may say any move)", text: "As a player I want to play an LLM that can say any move, to see if I can beat it.",
+      value: 4, effort: 0.5, deps: [3], mode: "auto", note: "Switch on the same loop: no list given, so the game validates the move instead" },
+    { id: 2, title: "Count legal moves until it fails", text: "As a user I want to see how many legal moves the LLM plays until it can't anymore.",
+      value: 5, effort: 0.5, deps: [7], mode: "auto", note: "Headline metric for the article; log it per model" },
+    { id: 9, title: "Editable system prompt", text: "As a user I want to modify the LLM's system prompt, to see how it changes.",
+      value: 2, effort: 0.25, deps: [3], mode: "auto", note: "Read the prompt from a file or CLI flag" },
+    { id: 4, title: "LLM vs LLM", text: "As a user I want LLMs to face off against each other, to compare them.",
+      value: 4, effort: 0.75, deps: [3], mode: "auto", note: "Player interface (human / LLM / engine) and save games as PGN" },
+    { id: 8, title: "Prompt injection", text: "As a scientist I want to inject prompts (\"you are checkmated\") to test resistance.",
+      value: 3, effort: 1, deps: [3], mode: "auto", note: "Good LinkedIn content, but needs a fixed test protocol" },
+    { id: 1, title: "Elo per model", text: "As a user I want to see each LLM's Elo, to compare models with each other and with me.",
+      value: 5, effort: 2.5, deps: [4], mode: "auto", note: "Needs Stockfish at limited strength and many unattended games" },
+    { id: 5, title: "RAG with a chess knowledge base", text: "As a scientist I want to play an LLM with RAG, to see whether retrieval helps.",
+      value: 3, effort: 4, deps: [3], mode: "auto", note: "Needs a knowledge base, embeddings and a retrieval design: a project of its own" },
+  ],
+};
+
+const KEY = "chessllm-prioritization-v1";
+let state = load();
+
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.stories) return s; } catch {}
+  return structuredClone(DEFAULTS);
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+const byId = id => state.stories.find(s => s.id === id);
+const fmt = h => (Math.round(h * 100) / 100).toString().replace(/\.0+$/, "") + " h";
+
+// Returns story ids not yet in `chosen` that `id` needs, deps first; null if one is excluded.
+function bundle(id, chosen, seen = new Set()) {
+  if (chosen.has(id) || seen.has(id)) return [];
+  seen.add(id);
+  const s = byId(id);
+  if (s.mode === "wont") return null;
+  const out = [];
+  for (const d of s.deps) {
+    const b = bundle(d, chosen, seen);
+    if (b === null) return null;
+    out.push(...b);
+  }
+  out.push(id);
+  return out;
+}
+
+// Greedy: pinned stories first, then the best value-per-hour bundle that still fits.
+function plan(capacity) {
+  const chosen = new Set(), order = [];
+  let used = 0;
+  const take = ids => { for (const i of ids) { chosen.add(i); order.push(i); used += byId(i).effort; } };
+  for (const s of state.stories.filter(s => s.mode === "must")) {
+    const b = bundle(s.id, chosen); if (b) take(b);
+  }
+  for (;;) {
+    let best = null;
+    for (const s of state.stories) {
+      if (s.mode !== "auto" || chosen.has(s.id)) continue;
+      const b = bundle(s.id, chosen); if (!b) continue;
+      const cost = b.reduce((a, i) => a + byId(i).effort, 0);
+      const val = b.reduce((a, i) => a + byId(i).value, 0);
+      if (used + cost > capacity + 1e-9) continue;
+      const ratio = val / Math.max(cost, 0.05);
+      if (!best || ratio > best.ratio) best = { b, ratio };
+    }
+    if (!best) break;
+    take(best.b);
+  }
+  return { order, used, chosen };
+}
+
+function render() {
+  const cap = state.budget * (1 - state.buffer / 100);
+  const main = plan(cap);
+  const full = plan(state.budget);
+  const stretch = full.order.filter(i => !main.chosen.has(i));
+  const stretchSet = new Set(stretch);
+
+  document.getElementById("budget").value = state.budget;
+  document.getElementById("buffer").value = state.buffer;
+  document.getElementById("budgetOut").textContent = fmt(state.budget);
+  document.getElementById("bufferOut").textContent = state.buffer + "%";
+
+  const bar = document.getElementById("bar");
+  const scale = Math.max(state.budget, main.used + stretch.reduce((a, i) => a + byId(i).effort, 0));
+  bar.innerHTML = "";
+  for (const i of [...main.order, ...stretch]) {
+    const s = byId(i), seg = document.createElement("div");
+    seg.className = "seg" + (stretchSet.has(i) ? " stretch" : "");
+    seg.style.width = (s.effort / scale * 100) + "%";
+    seg.textContent = "#" + i; seg.title = s.title + " · " + fmt(s.effort);
+    bar.append(seg);
+  }
+  const lim = document.createElement("div");
+  lim.className = "limit"; lim.style.left = (cap / scale * 100) + "%"; lim.title = "Budget minus buffer";
+  bar.append(lim);
+  document.getElementById("usedTxt").textContent = `Planned ${fmt(main.used)}` + (stretch.length ? ` + stretch ${fmt(full.used - main.used)}` : "");
+  document.getElementById("limitTxt").textContent = `Usable ${fmt(cap)} of ${fmt(state.budget)}`;
+
+  const list = document.getElementById("stories");
+  list.innerHTML = "";
+  for (const s of state.stories) {
+    const inMain = main.chosen.has(s.id), inStretch = stretchSet.has(s.id);
+    const el = document.createElement("div");
+    el.className = "story" + (inMain ? " sel" : inStretch ? " stretch" : "");
+    const deps = s.deps.map(d => `<span class="tag">needs #${d}</span>`).join("");
+    const status = inMain ? `<span class="tag in">this afternoon</span>` : inStretch ? `<span class="tag st">stretch</span>` : "";
+    el.innerHTML = `
+      <div class="id">#${s.id}</div>
+      <div><div class="title">${s.title}</div><div class="text">${s.text}</div>
+        <div class="text"><em>${s.note}</em></div>
+        <div class="tags">${status}${deps}<span class="tag">${(s.value / s.effort).toFixed(1)} value/h</span></div></div>
+      <div class="knobs">
+        <label class="knob">Value <input type="range" min="1" max="5" step="1" value="${s.value}" data-k="value"><output>${s.value}</output></label>
+        <label class="knob">Effort <input type="range" min="0.25" max="6" step="0.25" value="${s.effort}" data-k="effort"><output>${fmt(s.effort)}</output></label>
+        <div class="seg3">${["must", "auto", "wont"].map(m =>
+          `<button data-m="${m}" class="${s.mode === m ? "on" + (m === "wont" ? " no" : "") : ""}">${{ must: "Must", auto: "Auto", wont: "Won't" }[m]}</button>`).join("")}</div>
+      </div>`;
+    el.querySelectorAll("input[type=range]").forEach(inp => inp.addEventListener("input", () => {
+      s[inp.dataset.k] = Number(inp.value); save(); render();
+    }));
+    el.querySelectorAll(".seg3 button").forEach(b => b.addEventListener("click", () => {
+      s.mode = b.dataset.m; save(); render();
+    }));
+    list.append(el);
+  }
+
+  let t = 0;
+  document.getElementById("plan").innerHTML = main.order.map(i => {
+    const s = byId(i); t += s.effort;
+    return `<li><strong>#${i} ${s.title}</strong><br><span class="t">${fmt(s.effort)} · done at ${fmt(t)}</span></li>`;
+  }).join("") || "<li>Nothing fits. Raise the budget or lower effort.</li>";
+  const li = i => `<li>#${i} ${byId(i).title} (${fmt(byId(i).effort)})</li>`;
+  document.getElementById("stretch").innerHTML = stretch.map(li).join("");
+  document.getElementById("stretchBox").hidden = !stretch.length;
+  const later = state.stories.filter(s => s.mode !== "wont" && !main.chosen.has(s.id) && !stretchSet.has(s.id)).map(s => s.id);
+  document.getElementById("later").innerHTML = later.map(li).join("") || "<li>Nothing left</li>";
+  const wont = state.stories.filter(s => s.mode === "wont").map(s => s.id);
+  document.getElementById("wont").innerHTML = wont.map(li).join("");
+  document.getElementById("wontBox").hidden = !wont.length;
+
+  window.__md = [
+    `## Plan (budget ${fmt(state.budget)}, ${state.buffer}% buffer)`,
+    ...main.order.map((i, n) => `${n + 1}. #${i} ${byId(i).title} (${fmt(byId(i).effort)})`),
+    stretch.length ? `\n**Stretch:** ` + stretch.map(i => `#${i} ${byId(i).title}`).join(", ") : "",
+    later.length ? `\n**Later:** ` + later.map(i => `#${i} ${byId(i).title}`).join(", ") : "",
+  ].filter(Boolean).join("\n");
+}
+
+document.getElementById("budget").addEventListener("input", e => { state.budget = Number(e.target.value); save(); render(); });
+document.getElementById("buffer").addEventListener("input", e => { state.buffer = Number(e.target.value); save(); render(); });
+document.getElementById("reset").addEventListener("click", () => { state = structuredClone(DEFAULTS); save(); render(); });
+document.getElementById("copy").addEventListener("click", async e => {
+  await navigator.clipboard.writeText(window.__md);
+  e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy plan as Markdown", 1200);
+});
+render();
+</script>
+</body>
+</html>
