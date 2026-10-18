@@ -10,6 +10,7 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
+- **Close through the commit**: the commit that completes a ticket ends its message with `Closes #<number>` (one line per ticket, before the `Co-Authored-By` line). GitHub closes the issue when the commit reaches `main`. Partial work or follow-ups use `Refs #<number>` instead, so the issue stays open.
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
