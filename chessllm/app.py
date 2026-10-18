@@ -1,5 +1,6 @@
 """HTTP API and static page."""
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,8 @@ class HumanMove(BaseModel):
     uci: str
 
 
-def create_app(player: LlmPlayer, settings: Settings = Settings(), games_dir: Path = GAMES_DIR) -> FastAPI:
+def create_app(player_for: Callable[[Settings], LlmPlayer], games_dir: Path = GAMES_DIR) -> FastAPI:
+    """player_for builds the LLM player of each game from that game's settings."""
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
@@ -29,9 +31,10 @@ def create_app(player: LlmPlayer, settings: Settings = Settings(), games_dir: Pa
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.post("/api/games")
-    def start_game() -> dict[str, Any]:
+    def start_game(settings: Settings | None = None) -> dict[str, Any]:
         nonlocal game
-        game = GameSession(player, settings, GameLog(games_dir, settings.model))
+        settings = settings or Settings()
+        game = GameSession(player_for(settings), settings, GameLog(games_dir, settings.model))
         return game.state()
 
     def current_game() -> GameSession:

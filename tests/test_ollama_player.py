@@ -34,11 +34,37 @@ def test_the_adapter_asks_ollama_with_thinking_on_and_the_free_move_schema():
     assert "enum" not in schema["properties"]["move"]
 
 
-def test_the_adapter_gives_up_after_the_time_limit():
+def test_with_thinking_off_the_adapter_asks_for_the_reasoning_before_the_move():
+    calls = []
+
+    def chat(**request):
+        calls.append(request)
+        message = OllamaMessage(role="assistant", content='{"reasoning": "Mirror the centre pawn.", "move": "e5"}')
+        return ChatResponse(message=message)
+
+    player = OllamaPlayer("qwen3.5:9b", thinking=False, chat=chat)
+
+    reply = player.reply([Message("user", "PGN: 1. e4")])
+
+    assert reply.raw == '{"reasoning": "Mirror the centre pawn.", "move": "e5"}'
+    assert reply.thinking is None
+    [request] = calls
+    assert request["model"] == "qwen3.5:9b"
+    assert request["think"] is False
+    schema = request["format"]
+    assert list(schema["properties"]) == ["reasoning", "move"]
+    assert schema["required"] == ["reasoning", "move"]
+    assert schema["properties"]["reasoning"]["type"] == "string"
+    assert schema["properties"]["move"]["type"] == "string"
+    assert "enum" not in schema["properties"]["move"]
+
+
+@pytest.mark.parametrize("thinking", [True, False])
+def test_the_adapter_gives_up_after_the_time_limit(thinking):
     def chat(**request):
         raise httpx.ReadTimeout("timed out")
 
-    player = OllamaPlayer("qwen3.5:9b", chat=chat, timeout_s=180)
+    player = OllamaPlayer("qwen3.5:9b", thinking=thinking, chat=chat, timeout_s=180)
 
     with pytest.raises(LlmTimeout) as raised:
         player.reply([Message("user", "PGN: 1. e4")])

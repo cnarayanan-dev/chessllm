@@ -25,6 +25,13 @@ class MoveAnswer(BaseModel):
     move: str
 
 
+class ReasonedMoveAnswer(BaseModel):
+    """The answer schema with thinking off: the reasoning comes first, so the model reasons before it moves."""
+
+    reasoning: str
+    move: str
+
+
 class LlmTimeout(Exception):
     """The model gave no answer within the time limit, so the call was cancelled."""
 

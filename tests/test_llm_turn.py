@@ -1,3 +1,5 @@
+from conftest import Raw
+
 from chessllm.game import Settings
 from chessllm.players import Message
 
@@ -72,9 +74,49 @@ def test_the_default_opponent_is_qwen_with_thinking_on(scripted):
 
 
 def test_the_game_reports_the_settings_it_was_started_with(scripted):
-    client, _ = scripted([], settings=Settings(model="gemma3:4b"))
+    client, _ = scripted([])
 
-    assert client.post("/api/games").json()["settings"] == {"model": "gemma3:4b", "thinking": True}
+    state = client.post("/api/games", json={"model": "gemma3:4b", "thinking": False}).json()
+
+    assert state["settings"] == {"model": "gemma3:4b", "thinking": False}
+
+
+def test_the_player_for_a_game_is_built_once_from_that_games_settings(scripted):
+    client, player = scripted(["e5", "Nc6", "d5"])
+    client.post("/api/games", json={"model": "gemma3:4b", "thinking": False})
+    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+
+    state = client.post("/api/games/current/moves", json={"uci": "g1f3"}).json()
+
+    assert player.built_for == [Settings(model="gemma3:4b", thinking=False)]
+    assert state["settings"] == {"model": "gemma3:4b", "thinking": False}
+
+
+def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
+    client, player = scripted(["e5", "d5"])
+    client.post("/api/games", json={"model": "gemma3:4b", "thinking": False})
+    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+
+    state = client.post("/api/games", json={"thinking": True}).json()
+    client.post("/api/games/current/moves", json={"uci": "d2d4"})
+
+    assert player.built_for == [Settings(model="gemma3:4b", thinking=False), Settings()]
+    assert state["settings"] == {"model": "qwen3.5:9b", "thinking": True}
+
+
+def test_with_thinking_off_a_legal_reply_is_applied_and_its_reasoning_shown_as_the_thinking(scripted):
+    reply = '{"reasoning": "Mirror the centre pawn.", "move": "e5"}'
+    client, _ = scripted([Raw(reply)])
+    client.post("/api/games", json={"thinking": False})
+
+    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+
+    assert state["pgn"] == "1. e4 e5"
+    [attempt] = state["llm_turn"]["attempts"]
+    assert attempt["result"] == "legal"
+    assert attempt["move"] == "e5"
+    assert attempt["thinking"] == "Mirror the centre pawn."
+    assert state["llm_turn"]["thinking"] == "Mirror the centre pawn."
 
 
 def test_a_new_game_clears_the_llm_turn(scripted):

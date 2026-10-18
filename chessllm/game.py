@@ -7,7 +7,7 @@ from typing import Any
 import chess
 from pydantic import ValidationError
 
-from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer
+from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
 from chessllm.prompt import SYSTEM_PROMPT_FILE, retry_feedback, turn_messages
 
@@ -35,10 +35,19 @@ MAX_ATTEMPTS = 4
 ILLEGAL_KINDS = ("invalid", "illegal", "ambiguous")
 
 
+def reasoning(raw: str) -> str | None:
+    """The reasoning of an answer in the thinking-off schema, or None if the answer has none."""
+    try:
+        return ReasonedMoveAnswer.model_validate_json(raw).reasoning
+    except ValidationError:
+        return None
+
+
 def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, str]:
     """Judge the raw answer as given: (the move as written, the legal move or None, "legal" or the failure kind).
 
-    An answer that isn't the move schema is an invalid move, written as the raw reply."""
+    The move is read from either answer schema, since MoveAnswer ignores the reasoning field. An answer that
+    isn't the move schema is an invalid move, written as the raw reply."""
     try:
         san = MoveAnswer.model_validate_json(raw).move
     except ValidationError:
@@ -166,10 +175,12 @@ class GameSession:
                 self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
                 break
             written, move, result = judge(board, reply.raw)
-            attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": reply.thinking}
+            # With thinking off, the reasoning in the answer stands in for the thinking text.
+            thinking = reply.thinking if self._settings.thinking else reasoning(reply.raw)
+            attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking}
             attempt["latency_s"] = reply.latency_s
             self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
-            self._llm_turn["thinking"] = reply.thinking
+            self._llm_turn["thinking"] = thinking
             if move is not None:
                 board.push(move)
                 if number > 1:

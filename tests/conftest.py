@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from chessllm.app import create_app
+from chessllm.game import Settings
 from chessllm.players import LlmReply, Message
 
 
@@ -14,12 +15,18 @@ class Raw(str):
 class ScriptedPlayer:
     """Test fake for the LLM player port: answers with the scripted SAN moves in order, as the JSON
     {"move": "<san>"}, and records every prompt. A scripted exception is raised instead of answering.
-    Thinking texts, if given, go with the replies in order."""
+    Thinking texts, if given, go with the replies in order. It serves every game, recording the settings
+    of each game it is built for."""
 
     def __init__(self, replies: list[str | Exception], thinking: list[str] | None = None) -> None:
         self.replies = list(replies)
         self.thinking = list(thinking) if thinking is not None else None
         self.prompts: list[list[Message]] = []
+        self.built_for: list[Settings] = []
+
+    def for_settings(self, settings: Settings) -> "ScriptedPlayer":
+        self.built_for.append(settings)
+        return self
 
     def reply(self, messages: list[Message]) -> LlmReply:
         self.prompts.append(messages)
@@ -36,10 +43,10 @@ def scripted(tmp_path):
     """Makes an app playing against a ScriptedPlayer. Game logs go to tmp_path / "games" unless games_dir is given."""
 
     def make(
-        replies: list[str | Exception], thinking: list[str] | None = None, **settings
+        replies: list[str | Exception], thinking: list[str] | None = None, **options
     ) -> tuple[TestClient, ScriptedPlayer]:
         player = ScriptedPlayer(replies, thinking)
-        settings.setdefault("games_dir", tmp_path / "games")
-        return TestClient(create_app(player, **settings)), player
+        options.setdefault("games_dir", tmp_path / "games")
+        return TestClient(create_app(player.for_settings, **options)), player
 
     return make
