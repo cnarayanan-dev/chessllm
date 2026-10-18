@@ -1,8 +1,10 @@
+import httpx
+import pytest
 from ollama import ChatResponse
 from ollama import Message as OllamaMessage
 
 from chessllm.ollama_player import OllamaPlayer
-from chessllm.players import LlmReply, Message
+from chessllm.players import LlmReply, LlmTimeout, Message
 
 
 def test_the_adapter_asks_ollama_with_thinking_on_and_the_free_move_schema():
@@ -30,3 +32,14 @@ def test_the_adapter_asks_ollama_with_thinking_on_and_the_free_move_schema():
     assert schema["required"] == ["move"]
     assert schema["properties"]["move"]["type"] == "string"
     assert "enum" not in schema["properties"]["move"]
+
+
+def test_the_adapter_gives_up_after_the_time_limit():
+    def chat(**request):
+        raise httpx.ReadTimeout("timed out")
+
+    player = OllamaPlayer("qwen3.5:9b", chat=chat, timeout_s=180)
+
+    with pytest.raises(LlmTimeout) as raised:
+        player.reply([Message("user", "PGN: 1. e4")])
+    assert raised.value.timeout_s == 180

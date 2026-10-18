@@ -2,7 +2,7 @@ import pytest
 from conftest import Raw
 
 from chessllm.game import Settings
-from chessllm.players import Message
+from chessllm.players import LlmTimeout, Message
 
 DEFAULT_SYSTEM_PROMPT = """You are playing chess as Black against a human playing White.
 Each turn you get the game so far in PGN and the current position in FEN.
@@ -86,6 +86,17 @@ def test_the_human_can_play_again_after_a_bad_llm_reply(scripted):
     state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
 
     assert state["pgn"] == "1. e4 e5"
+
+
+def test_a_turn_over_the_time_limit_is_reported_as_too_long_thinking_without_changing_the_game(scripted):
+    client, _ = scripted([LlmTimeout(180)])
+    before = client.post("/api/games").json()
+
+    response = client.post("/api/games/current/moves", json={"uci": "e2e4"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Too long thinking: qwen3.5:9b gave no answer within 3 minutes."
+    assert client.get("/api/games/current").json() == before
 
 
 def test_the_default_opponent_is_qwen_with_thinking_on(scripted):

@@ -6,7 +6,7 @@ from typing import Any
 import chess
 from pydantic import ValidationError
 
-from chessllm.players import LlmPlayer, MoveAnswer
+from chessllm.players import LlmPlayer, LlmTimeout, MoveAnswer
 from chessllm.prompt import turn_messages
 
 
@@ -83,6 +83,10 @@ class GameSession:
         model = self._settings.model
         try:
             reply = self._player.reply(turn_messages(self._pgn(), board.fen()))
+        except LlmTimeout as timeout:
+            raise FailedLlmTurn(
+                f"Too long thinking: {model} gave no answer within {timeout.timeout_s / 60:g} minutes."
+            ) from None
         except Exception as error:
             raise FailedLlmTurn(f"{model} did not reply: {error}") from error
         try:
