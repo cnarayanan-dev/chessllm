@@ -43,3 +43,7 @@ def test_the_adapter_gives_up_after_the_time_limit():
     with pytest.raises(LlmTimeout) as raised:
         player.reply([Message("user", "PGN: 1. e4")])
     assert raised.value.timeout_s == 180
+
+
+def test_the_default_time_limit_is_five_minutes():
+    assert OllamaPlayer("qwen3.5:9b", chat=lambda **request: None).timeout_s == 300

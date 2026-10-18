@@ -9,7 +9,7 @@ import ollama
 from chessllm.players import LlmReply, LlmTimeout, Message, MoveAnswer
 
 # Long thinking can run for many minutes and still end without an answer, so a turn is cut off here.
-TIMEOUT_S = 180.0
+TIMEOUT_S = 300.0
 
 
 class OllamaPlayer:
@@ -22,7 +22,7 @@ class OllamaPlayer:
     ) -> None:
         self._model = model
         self._chat = chat or ollama.Client(timeout=timeout_s).chat
-        self._timeout_s = timeout_s
+        self.timeout_s = timeout_s
 
     def reply(self, messages: list[Message]) -> LlmReply:
         started = time.perf_counter()
@@ -34,6 +34,6 @@ class OllamaPlayer:
                 format=MoveAnswer.model_json_schema(),
             )
         except httpx.TimeoutException:
-            raise LlmTimeout(self._timeout_s) from None
+            raise LlmTimeout(self.timeout_s) from None
         latency_s = time.perf_counter() - started
         return LlmReply(raw=response.message.content or "", thinking=response.message.thinking, latency_s=latency_s)

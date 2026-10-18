@@ -89,13 +89,13 @@ def test_the_human_can_play_again_after_a_bad_llm_reply(scripted):
 
 
 def test_a_turn_over_the_time_limit_is_reported_as_too_long_thinking_without_changing_the_game(scripted):
-    client, _ = scripted([LlmTimeout(180)])
+    client, _ = scripted([LlmTimeout(300)])
     before = client.post("/api/games").json()
 
     response = client.post("/api/games/current/moves", json={"uci": "e2e4"})
 
     assert response.status_code == 502
-    assert response.json()["detail"] == "Too long thinking: qwen3.5:9b gave no answer within 3 minutes."
+    assert response.json()["detail"] == "Too long thinking: qwen3.5:9b gave no answer within 5 minutes."
     assert client.get("/api/games/current").json() == before
 
 
