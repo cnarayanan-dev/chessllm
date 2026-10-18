@@ -58,6 +58,7 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
                 "raw_reply": '{"move": "Nc6"}',
                 "thinking": "Defend e5.",
                 "error": None,
+                "latency_s": 0.0,
             }
         ],
         "thinking": "Defend e5.",

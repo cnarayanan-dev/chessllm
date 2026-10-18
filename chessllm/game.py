@@ -1,13 +1,15 @@
 """One game between the human (White) and the LLM player (Black)."""
 
 from dataclasses import asdict, dataclass
+from datetime import date
 from typing import Any
 
 import chess
 from pydantic import ValidationError
 
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer
-from chessllm.prompt import retry_feedback, turn_messages
+from chessllm.game_log import GameLog, now
+from chessllm.prompt import SYSTEM_PROMPT_FILE, retry_feedback, turn_messages
 
 
 @dataclass(frozen=True)
@@ -55,9 +57,10 @@ def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, str]:
 
 
 class GameSession:
-    def __init__(self, player: LlmPlayer, settings: Settings) -> None:
+    def __init__(self, player: LlmPlayer, settings: Settings, log: GameLog) -> None:
         self._player = player
         self._settings = settings
+        self._log = log
         self._board = chess.Board()
         self._llm_turn: dict[str, Any] | None = None
         self._end: GameEnd | None = None
@@ -65,6 +68,19 @@ class GameSession:
         self._streak_broken = False
         self._illegal_moves = dict.fromkeys(ILLEGAL_KINDS, 0)
         self._recovered_turns = 0
+        log.write(
+            "game_start",
+            game_id=log.game_id,
+            model=settings.model,
+            llm_color="black",
+            mode="free",
+            thinking=settings.thinking,
+            sampling="model_default",
+            retry_feedback="explained",
+            max_retries=MAX_ATTEMPTS - 1,
+            prompt_file=str(SYSTEM_PROMPT_FILE),
+            started_at=now(),
+        )
 
     def play_human_move(self, uci: str) -> None:
         """Apply the human's move (White) and let the LLM reply.
@@ -79,12 +95,35 @@ class GameSession:
             raise RejectedHumanMove(f"not a UCI move: {uci!r}") from None
         if board.turn != chess.WHITE or not board.is_legal(move):
             raise RejectedHumanMove(f"illegal move: {uci}")
+        san = board.san(move)
         board.push(move)
+        self._log.write("human_move", ply=len(board.move_stack), move=san, fen_after=board.fen())
         self._check_end()
         if self._end is None:
             self._play_llm_turn()
             if self._end is None:
                 self._check_end()
+        if self._end is not None:
+            self._write_end(self._end)
+
+    def _write_end(self, end: GameEnd) -> None:
+        board = self._board
+        stats = self._stats()
+        self._log.write(
+            "game_end", result=end.result, reason=end.reason, plies=len(board.move_stack), **stats, ended_at=now()
+        )
+        thinking = "thinking" if self._settings.thinking else "no thinking"
+        self._log.write_pgn(
+            board,
+            {
+                "Event": "ChessLLM",
+                "Date": f"{date.today():%Y.%m.%d}",
+                "White": "Human",
+                "Black": f"{self._settings.model} ({thinking})",
+                "Result": end.result,
+                "Termination": end.reason,
+            },
+        )
 
     def _check_end(self) -> None:
         """End the game if the position is over, counting claimable draws (threefold repetition, fifty moves).
@@ -106,13 +145,14 @@ class GameSession:
         moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
         board = self._board
         model = self._settings.model
-        messages = turn_messages(self._pgn(), board.fen())
+        pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
+        messages = turn_messages(pgn, fen)
         attempts: list[dict[str, Any]] = []
         self._llm_turn = {"attempts": attempts, "thinking": None}
         feedback = None
         for number in range(1, MAX_ATTEMPTS + 1):
             attempt: dict[str, Any] = {"move": None, "result": None, "feedback_sent": feedback}
-            attempt |= {"raw_reply": None, "thinking": None, "error": None}
+            attempt |= {"raw_reply": None, "thinking": None, "error": None, "latency_s": None}
             attempts.append(attempt)
             try:
                 reply = self._player.reply(messages)
@@ -120,12 +160,15 @@ class GameSession:
                 minutes = timeout.timeout_s / 60
                 error_text = f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
                 attempt |= {"result": "timeout", "error": error_text}
-                break
             except Exception as error:
                 attempt |= {"result": "error", "error": f"{model} did not reply: {error}"}
+            if attempt["error"] is not None:
+                self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
                 break
             written, move, result = judge(board, reply.raw)
             attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": reply.thinking}
+            attempt["latency_s"] = reply.latency_s
+            self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
             self._llm_turn["thinking"] = reply.thinking
             if move is not None:
                 board.push(move)
@@ -153,11 +196,14 @@ class GameSession:
             "status": "over" if self._end else "playing",
             "result": self._end.result if self._end else None,
             "end_reason": self._end.reason if self._end else None,
-            "stats": {
-                "legal_move_streak": self._legal_move_streak,
-                "illegal_moves": dict(self._illegal_moves),
-                "recovered_turns": self._recovered_turns,
-            },
+            "stats": self._stats(),
+        }
+
+    def _stats(self) -> dict[str, Any]:
+        return {
+            "legal_move_streak": self._legal_move_streak,
+            "illegal_moves": dict(self._illegal_moves),
+            "recovered_turns": self._recovered_turns,
         }
 
     def _human_legal_moves(self) -> list[str]:

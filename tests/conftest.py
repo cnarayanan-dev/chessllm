@@ -32,9 +32,14 @@ class ScriptedPlayer:
 
 
 @pytest.fixture
-def scripted():
-    def make(replies: list[str | Exception], thinking: list[str] | None = None, **settings) -> tuple[TestClient, ScriptedPlayer]:
+def scripted(tmp_path):
+    """Makes an app playing against a ScriptedPlayer. Game logs go to tmp_path / "games" unless games_dir is given."""
+
+    def make(
+        replies: list[str | Exception], thinking: list[str] | None = None, **settings
+    ) -> tuple[TestClient, ScriptedPlayer]:
         player = ScriptedPlayer(replies, thinking)
+        settings.setdefault("games_dir", tmp_path / "games")
         return TestClient(create_app(player, **settings)), player
 
     return make

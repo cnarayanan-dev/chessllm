@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from chessllm.game import GameSession, RejectedHumanMove, Settings
+from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.players import LlmPlayer
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -18,7 +19,7 @@ class HumanMove(BaseModel):
     uci: str
 
 
-def create_app(player: LlmPlayer, settings: Settings = Settings()) -> FastAPI:
+def create_app(player: LlmPlayer, settings: Settings = Settings(), games_dir: Path = GAMES_DIR) -> FastAPI:
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
@@ -30,7 +31,7 @@ def create_app(player: LlmPlayer, settings: Settings = Settings()) -> FastAPI:
     @app.post("/api/games")
     def start_game() -> dict[str, Any]:
         nonlocal game
-        game = GameSession(player, settings)
+        game = GameSession(player, settings, GameLog(games_dir, settings.model))
         return game.state()
 
     def current_game() -> GameSession:
