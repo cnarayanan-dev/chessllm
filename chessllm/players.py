@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-import chess
+from pydantic import BaseModel
 
 
 @dataclass(frozen=True)
@@ -19,21 +19,12 @@ class LlmReply:
     latency_s: float
 
 
+class MoveAnswer(BaseModel):
+    """The answer schema with thinking on. The move is a free string, never limited to the legal moves."""
+
+    move: str
+
+
 class LlmPlayer(Protocol):
     def reply(self, messages: list[Message]) -> LlmReply: ...
 
-
-class FirstLegalMovePlayer:
-    """Placeholder opponent until the Ollama adapter exists: plays the first legal move in the position.
-
-    It reads the position from the "FEN: ..." line of the turn message, like a model would."""
-
-    def reply(self, messages: list[Message]) -> LlmReply:
-        fen = next(
-            line.removeprefix("FEN: ")
-            for line in reversed(messages[-1].content.splitlines())
-            if line.startswith("FEN: ")
-        )
-        board = chess.Board(fen)
-        move = next(iter(board.legal_moves))
-        return LlmReply(raw=board.san(move), thinking=None, latency_s=0.0)

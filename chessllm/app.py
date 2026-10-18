@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from chessllm.game import GameSession, RejectedHumanMove
+from chessllm.game import FailedLlmTurn, GameSession, RejectedHumanMove, Settings
 from chessllm.players import LlmPlayer
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -18,7 +18,7 @@ class HumanMove(BaseModel):
     uci: str
 
 
-def create_app(player: LlmPlayer) -> FastAPI:
+def create_app(player: LlmPlayer, settings: Settings = Settings()) -> FastAPI:
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
@@ -30,7 +30,7 @@ def create_app(player: LlmPlayer) -> FastAPI:
     @app.post("/api/games")
     def start_game() -> dict[str, Any]:
         nonlocal game
-        game = GameSession(player)
+        game = GameSession(player, settings)
         return game.state()
 
     def current_game() -> GameSession:
@@ -49,6 +49,8 @@ def create_app(player: LlmPlayer) -> FastAPI:
             session.play_human_move(move.uci)
         except RejectedHumanMove as error:
             raise HTTPException(400, str(error)) from None
+        except FailedLlmTurn as error:
+            raise HTTPException(502, str(error)) from None
         return session.state()
 
     return app

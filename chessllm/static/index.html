@@ -41,6 +41,9 @@
   .status { color: var(--muted); }
   .callout { border-left: 3px solid var(--red); background: var(--red-soft); border-radius: 4px; padding: 8px 10px; font-size: 13px; }
   .callout[hidden] { display: none; }
+  .thinking summary { cursor: pointer; color: var(--muted); }
+  .thinking[hidden] { display: none; }
+  .thinking-text { margin-top: 8px; max-height: 320px; overflow-y: auto; white-space: pre-wrap; font-size: 13px; color: var(--muted); }
   footer { text-align: center; color: var(--faint); font-size: 12px; padding: 0 20px 24px; }
 </style>
 </head>
@@ -57,6 +60,10 @@
   <div class="side">
     <div class="card"><div class="status" id="status">Loading…</div></div>
     <div class="callout" id="error" hidden></div>
+    <details class="card thinking" id="thinkingPanel" hidden>
+      <summary>Show thinking</summary>
+      <div class="thinking-text" id="thinking"></div>
+    </details>
     <div class="card">
       <div class="label">Moves</div>
       <div class="moves" id="moves"></div>
@@ -94,6 +101,9 @@ async function show(next) {
   state = next
   $("moves").textContent = state.pgn
   $("status").textContent = state.turn === "white" ? "Your move (White)" : "Waiting for Black…"
+  const thinking = state.llm_turn?.thinking
+  $("thinkingPanel").hidden = !thinking
+  $("thinking").textContent = thinking ?? ""
   board.removeMarkers(MARKER_TYPE.square)
   if (state.last_move) {
     board.addMarker(MARKER_TYPE.square, state.last_move.slice(0, 2))
@@ -104,17 +114,30 @@ async function show(next) {
   if (state.human_legal_moves.length) board.enableMoveInput(onMoveInput, COLOR.white)
 }
 
+// The board stays locked while the LLM thinks, and a running timer shows the app has not frozen.
 async function play(uci) {
   board.disableMoveInput()
+  $("newGame").disabled = true
   $("error").hidden = true
-  $("status").textContent = "Black is thinking…"
+  $("thinkingPanel").hidden = true
+  const started = Date.now()
+  const tick = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000)
+    $("status").textContent = `${state.settings.model} is thinking… ${seconds}s`
+  }
+  tick()
+  const timer = setInterval(tick, 1000)
+  let next = state // on an error, snap the piece back to the backend's position
   try {
-    await show(await api("POST", "/api/games/current/moves", {uci}))
+    next = await api("POST", "/api/games/current/moves", {uci})
   } catch (error) {
     $("error").textContent = error.message
     $("error").hidden = false
-    await show(state) // snap the piece back to the backend's position
+  } finally {
+    clearInterval(timer)
+    $("newGame").disabled = false
   }
+  await show(next)
 }
 
 function onMoveInput(event) {
