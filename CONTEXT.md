@@ -6,13 +6,33 @@ A benchmark of how well small local LLMs play chess, by playing them against hum
 
 ### Play modes
 
+**Play mode**:
+The combination of whether the **Legal-move list** is shown and whether **Enforced decoding** is on, fixed for a whole game. One of four: Free, Listed, Blind enforced, Listed enforced.
+_Avoid_: Game type, variant
+
+**Legal-move list**:
+The list of every legal move in the current position, shown to the LLM in its prompt.
+_Avoid_: Move options, candidate moves
+
+**Enforced decoding**:
+Generation of the LLM's reply under a constraint that only lets it produce one of the legal moves, so it cannot propose an illegal move.
+_Avoid_: Constrained decoding, grammar mode, structured output
+
 **Free mode**:
-A game in which the LLM is shown the position but not the list of legal moves, so it can propose an illegal move.
+A game with no **Legal-move list** and no **Enforced decoding**, so the LLM can propose an illegal move.
 _Avoid_: Unconstrained mode, open mode
 
-**Constrained mode**:
-A game in which the LLM is given the list of legal moves and must choose one of them.
-_Avoid_: Limited output, legal-only mode
+**Listed mode**:
+A game in which the LLM is shown the **Legal-move list** but not held to it, so it can still propose an illegal move.
+_Avoid_: Constrained mode, limited output, legal-only mode
+
+**Blind enforced mode**:
+A game with **Enforced decoding** but no **Legal-move list**: the LLM cannot propose an illegal move and is not told what its options are.
+_Avoid_: Constrained mode, grammar mode
+
+**Listed enforced mode**:
+A game with both the **Legal-move list** and **Enforced decoding**: the LLM sees its options and cannot leave them.
+_Avoid_: Constrained mode, fully constrained mode
 
 ### Moves
 
@@ -33,7 +53,7 @@ What the LLM is told after an illegal move. One of three levels: *explained* (th
 _Avoid_: Error message, hint mode
 
 **Forfeit**:
-Loss of the game by the LLM after it uses up its retries without proposing a legal move.
+Loss of the game by the LLM after it uses up its retries without proposing a legal move, or at once when it gives no answer at all (it thinks past the time limit or the call fails).
 _Avoid_: Resign, disqualification
 
 **Legal-move streak**:

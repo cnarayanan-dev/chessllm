@@ -15,3 +15,11 @@ def turn_messages(pgn: str, fen: str, system_prompt_file: Path = SYSTEM_PROMPT_F
         Message("system", system_prompt_file.read_text(encoding="utf-8")),
         Message("user", f"PGN: {pgn}\nFEN: {fen}"),
     ]
+
+
+def retry_feedback(move: str, kind: str, attempt: int, max_attempts: int) -> str:
+    """The explained retry feedback: the rejected move and the kind of failure, never the answer."""
+    return (
+        f'Your move "{move}" is illegal in this position (kind: {kind} move). '
+        f"Attempt {attempt} of {max_attempts}. Reply with a different legal move."
+    )

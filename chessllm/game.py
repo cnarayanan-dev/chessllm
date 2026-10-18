@@ -6,8 +6,8 @@ from typing import Any
 import chess
 from pydantic import ValidationError
 
-from chessllm.players import LlmPlayer, LlmTimeout, MoveAnswer
-from chessllm.prompt import turn_messages
+from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer
+from chessllm.prompt import retry_feedback, turn_messages
 
 
 @dataclass(frozen=True)
@@ -28,8 +28,30 @@ class GameEnd:
     reason: str  # "checkmate", "stalemate", "threefold_repetition", "fifty_moves", "insufficient_material", "forfeit", ...
 
 
-class FailedLlmTurn(Exception):
-    """The LLM gave no legal move. Until retries exist, the turn is undone and the human moves again."""
+# One attempt and three retries per turn; after the fourth illegal move the LLM forfeits.
+MAX_ATTEMPTS = 4
+ILLEGAL_KINDS = ("invalid", "illegal", "ambiguous")
+
+
+def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, str]:
+    """Judge the raw answer as given: (the move as written, the legal move or None, "legal" or the failure kind).
+
+    An answer that isn't the move schema is an invalid move, written as the raw reply."""
+    try:
+        san = MoveAnswer.model_validate_json(raw).move
+    except ValidationError:
+        return raw, None, "invalid"
+    try:
+        move = board.parse_san(san)
+    except chess.AmbiguousMoveError:
+        return san, None, "ambiguous"
+    except chess.IllegalMoveError:
+        return san, None, "illegal"
+    except chess.InvalidMoveError:
+        return san, None, "invalid"
+    if not move:  # python-chess reads "--", "0000" and "Z0" as a null move, which would let Black pass
+        return san, None, "invalid"
+    return san, move, "legal"
 
 
 class GameSession:
@@ -39,11 +61,15 @@ class GameSession:
         self._board = chess.Board()
         self._llm_turn: dict[str, Any] | None = None
         self._end: GameEnd | None = None
+        self._legal_move_streak = 0
+        self._streak_broken = False
+        self._illegal_moves = dict.fromkeys(ILLEGAL_KINDS, 0)
+        self._recovered_turns = 0
 
     def play_human_move(self, uci: str) -> None:
         """Apply the human's move (White) and let the LLM reply.
 
-        Raises RejectedHumanMove or FailedLlmTurn and leaves the game unchanged."""
+        Raises RejectedHumanMove and leaves the game unchanged."""
         board = self._board
         if self._end is not None:
             raise RejectedHumanMove("the game is over")
@@ -56,12 +82,9 @@ class GameSession:
         board.push(move)
         self._check_end()
         if self._end is None:
-            try:
-                self._play_llm_turn()
-            except FailedLlmTurn:
-                board.pop()
-                raise
-            self._check_end()
+            self._play_llm_turn()
+            if self._end is None:
+                self._check_end()
 
     def _check_end(self) -> None:
         """End the game if the position is over, counting claimable draws (threefold repetition, fifty moves).
@@ -79,28 +102,43 @@ class GameSession:
             self._end = GameEnd("1/2-1/2", "fifty_moves")
 
     def _play_llm_turn(self) -> None:
+        """Ask the LLM for a move, with a retry after each illegal move. It forfeits after MAX_ATTEMPTS illegal
+        moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
         board = self._board
         model = self._settings.model
-        try:
-            reply = self._player.reply(turn_messages(self._pgn(), board.fen()))
-        except LlmTimeout as timeout:
-            raise FailedLlmTurn(
-                f"Too long thinking: {model} gave no answer within {timeout.timeout_s / 60:g} minutes."
-            ) from None
-        except Exception as error:
-            raise FailedLlmTurn(f"{model} did not reply: {error}") from error
-        try:
-            answer = MoveAnswer.model_validate_json(reply.raw)
-        except ValidationError:
-            raise FailedLlmTurn(f"{model} gave an unreadable answer: {reply.raw!r}") from None
-        try:
-            board.push_san(answer.move)
-        except ValueError:
-            raise FailedLlmTurn(f"{model} played an illegal move: {answer.move!r}") from None
-        self._llm_turn = {
-            "attempts": [{"move": answer.move, "result": "legal", "feedback_sent": None}],
-            "thinking": reply.thinking,
-        }
+        messages = turn_messages(self._pgn(), board.fen())
+        attempts: list[dict[str, Any]] = []
+        self._llm_turn = {"attempts": attempts, "thinking": None}
+        feedback = None
+        for number in range(1, MAX_ATTEMPTS + 1):
+            attempt: dict[str, Any] = {"move": None, "result": None, "feedback_sent": feedback}
+            attempt |= {"raw_reply": None, "thinking": None, "error": None}
+            attempts.append(attempt)
+            try:
+                reply = self._player.reply(messages)
+            except LlmTimeout as timeout:
+                minutes = timeout.timeout_s / 60
+                error_text = f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
+                attempt |= {"result": "timeout", "error": error_text}
+                break
+            except Exception as error:
+                attempt |= {"result": "error", "error": f"{model} did not reply: {error}"}
+                break
+            written, move, result = judge(board, reply.raw)
+            attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": reply.thinking}
+            self._llm_turn["thinking"] = reply.thinking
+            if move is not None:
+                board.push(move)
+                if number > 1:
+                    self._recovered_turns += 1
+                if not self._streak_broken:
+                    self._legal_move_streak += 1
+                return
+            self._illegal_moves[result] += 1
+            self._streak_broken = True
+            feedback = retry_feedback(written, result, number, MAX_ATTEMPTS)
+            messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
+        self._end = GameEnd("1-0", "forfeit")
 
     def state(self) -> dict[str, Any]:
         board = self._board
@@ -115,6 +153,11 @@ class GameSession:
             "status": "over" if self._end else "playing",
             "result": self._end.result if self._end else None,
             "end_reason": self._end.reason if self._end else None,
+            "stats": {
+                "legal_move_streak": self._legal_move_streak,
+                "illegal_moves": dict(self._illegal_moves),
+                "recovered_turns": self._recovered_turns,
+            },
         }
 
     def _human_legal_moves(self) -> list[str]:
