@@ -1,0 +1,6 @@
+# Sampling options sent to Ollama with every LLM turn, read when a game starts.
+# Leave them unset to play at each model's own defaults, so results stay comparable.
+# Options: temperature, top_k, top_p, min_p, typical_p, repeat_penalty, repeat_last_n,
+# presence_penalty, frequency_penalty, seed, mirostat, mirostat_tau, mirostat_eta.
+#
+# temperature = 0.7

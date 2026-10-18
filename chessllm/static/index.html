@@ -15,21 +15,27 @@
 <style>
   :root {
     --bg: #ffffff; --soft: #f7f7f5; --hover: #efefed; --ink: #37352f; --muted: #787774; --faint: #9b9a97;
-    --line: #e9e9e7; --accent: #2383e2; --red: #e03e3e; --red-soft: #fbe4e4;
+    --line: #e9e9e7; --accent: #2383e2; --accent-soft: #e7f1fb; --red: #e03e3e; --red-soft: #fbe4e4;
+    --shadow: 0 0 0 1px rgba(15,15,15,.05), 0 5px 10px rgba(15,15,15,.1), 0 15px 40px rgba(15,15,15,.2);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #191919; --soft: #202020; --hover: #2c2c2c; --ink: #e6e6e4; --muted: #9b9b9b; --faint: #6f6f6f;
-      --line: #2f2f2f; --accent: #529cca; --red: #ff7369; --red-soft: #3a2422;
+      --line: #2f2f2f; --accent: #529cca; --accent-soft: #1f2e3a; --red: #ff7369; --red-soft: #3a2422;
+      --shadow: 0 0 0 1px rgba(255,255,255,.08), 0 5px 10px rgba(0,0,0,.3), 0 15px 40px rgba(0,0,0,.5);
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Helvetica, sans-serif; }
   button { font: inherit; color: inherit; }
+  kbd { font: 11px ui-monospace, monospace; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); background: var(--soft); color: var(--muted); }
   .top { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); }
   .top .brand { font-weight: 600; }
   .top .spacer { flex: 1; }
-  .ghost { border: 0; background: transparent; padding: 5px 8px; border-radius: 5px; cursor: pointer; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+  .chip.pending { background: var(--accent-soft); color: var(--accent); }
+  .ghost { border: 0; background: transparent; padding: 5px 8px; border-radius: 5px; cursor: pointer; color: var(--muted); display: inline-flex; gap: 8px; align-items: center; }
   .ghost:hover { background: var(--hover); }
   .layout { display: grid; grid-template-columns: minmax(320px, 560px) 340px; gap: 32px; justify-content: center; padding: 28px 20px 40px; }
   @media (max-width: 960px) { .layout { grid-template-columns: minmax(280px, 560px); } }
@@ -53,6 +59,38 @@
   .banner .spacer { flex: 1; }
   .banner button { border: 1px solid var(--line); background: var(--bg); padding: 5px 10px; border-radius: 5px; cursor: pointer; }
   .banner button:hover { background: var(--hover); }
+
+  /* Settings modal (Notion style), opened with ⌘K */
+  .scrim { position: fixed; inset: 0; background: rgba(15,15,15,.45); z-index: 20; }
+  .scrim[hidden], .modal[hidden] { display: none; }
+  .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(880px, 94vw); height: min(560px, 88vh);
+           background: var(--bg); border-radius: 10px; box-shadow: var(--shadow); z-index: 21; overflow: hidden;
+           display: grid; grid-template-columns: 220px 1fr; }
+  .modal nav { background: var(--soft); padding: 14px 6px; }
+  .modal nav .who { font-size: 12px; color: var(--muted); padding: 2px 10px 10px; }
+  .modal nav button { display: flex; width: 100%; gap: 8px; border: 0; background: transparent; text-align: left; padding: 5px 10px; border-radius: 5px; cursor: pointer; color: var(--muted); }
+  .modal nav button.on { background: var(--hover); color: var(--ink); font-weight: 500; }
+  .modal .pane { padding: 34px 48px; overflow: auto; position: relative; }
+  .modal section[hidden] { display: none; }
+  .modal h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .modal .close { position: absolute; top: 12px; right: 14px; }
+  .row { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .row .txt { flex: 1; } .row .t { font-weight: 500; } .row .d { color: var(--muted); font-size: 12.5px; }
+  .select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 5px; padding: 5px 8px; font: inherit; min-width: 170px; max-width: 260px; }
+  .switch { width: 34px; height: 20px; border-radius: 99px; background: var(--line); border: 0; position: relative; cursor: pointer; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .switch.on { background: var(--accent); } .switch.on::after { left: 16px; }
+  .radios { display: grid; gap: 8px; padding: 14px 0; }
+  .radio { display: flex; flex-direction: column; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; text-align: left; background: transparent; }
+  .radio.on { border-color: var(--accent); background: var(--accent-soft); }
+  .radio .t { font-weight: 500; } .radio .d { color: var(--muted); font-size: 12.5px; }
+  .ro-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .ro-table td { padding: 9px 0; border-bottom: 1px solid var(--line); } .ro-table td:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .note { font-size: 12.5px; color: var(--muted); background: var(--soft); border-radius: 5px; padding: 8px 10px; margin-top: 16px; display: flex; align-items: center; gap: 8px; }
+  .note .spacer { flex: 1; }
+  .primary { border: 0; background: var(--accent); color: #fff; border-radius: 5px; padding: 6px 12px; cursor: pointer; font-weight: 500; }
+  .primary[hidden], .chip[hidden] { display: none; }
+  .primary:disabled { opacity: .5; cursor: default; }
   footer { text-align: center; color: var(--faint); font-size: 12px; padding: 0 20px 24px; }
 </style>
 </head>
@@ -60,8 +98,10 @@
 
 <div class="top">
   <span class="brand">♞ ChessLLM</span>
+  <div class="chips" id="chips"></div>
   <span class="spacer"></span>
   <button class="ghost" id="newGame">New game</button>
+  <button class="ghost" id="openSettings">⚙ Settings <kbd>⌘K</kbd></button>
 </div>
 
 <div class="layout">
@@ -88,6 +128,39 @@
 
 <footer>Pieces: Merida by Armando Hernandez Marroquin, GPLv2+</footer>
 
+<div class="scrim" id="scrim" hidden></div>
+<div class="modal" id="settings" role="dialog" aria-modal="true" aria-label="Settings" hidden>
+  <nav>
+    <div class="who">ChessLLM settings</div>
+    <button data-section="game">♟ Game</button>
+    <button data-section="model">◆ Model</button>
+    <button data-section="advanced">⚙ Advanced</button>
+  </nav>
+  <div class="pane">
+    <button class="ghost close" id="closeSettings" aria-label="Close">✕</button>
+    <section data-section="game">
+      <h2>Game</h2>
+      <div class="row"><div class="txt"><div class="t">Your colour</div><div class="d">Fixed in v1: you play White, the LLM plays Black</div></div><span class="chip">White</span></div>
+      <div class="row"><div class="txt"><div class="t">Mode</div><div class="d">Free mode: the LLM is not shown the legal moves</div></div><span class="chip">Free</span></div>
+      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
+      <div class="radios" id="feedbackLevels"></div>
+    </section>
+    <section data-section="model">
+      <h2>Model</h2>
+      <div class="row"><div class="txt"><div class="t">Model</div><div class="d" id="modelHint">Installed Ollama models that can chat</div></div>
+        <select class="select" id="model"></select></div>
+      <div class="row"><div class="txt"><div class="t">Thinking</div><div class="d">The model reasons before answering. Slower, likely stronger play. The thinking text is saved to the game log.</div></div>
+        <button class="switch" id="thinkingSwitch" role="switch" aria-label="Thinking"></button></div>
+    </section>
+    <section data-section="advanced">
+      <h2>Advanced</h2>
+      <div class="row" style="border:0"><div class="txt"><div class="d" id="samplingHint"></div></div></div>
+      <table class="ro-table" id="sampling"></table>
+    </section>
+    <div class="note">Changes apply when you start a new game.<span class="chip pending" id="modalPending" hidden>changes apply next game</span><span class="spacer"></span><button class="primary" id="startNext" hidden>Start new game</button></div>
+  </div>
+</div>
+
 <script type="module">
 import {Chessboard, COLOR, INPUT_EVENT_TYPE} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/src/Chessboard.js"
 import {Markers, MARKER_TYPE} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/src/extensions/markers/Markers.js"
@@ -100,6 +173,7 @@ const board = new Chessboard($("board"), {
   extensions: [{class: Markers, props: {autoMarkers: MARKER_TYPE.frame}}, {class: PromotionDialog}],
 })
 let state = null
+let waiting = false // the LLM is choosing a move, so no new game can start
 
 const RESULT_TITLES = {"1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "Draw"}
 const END_REASONS = {
@@ -150,6 +224,7 @@ async function show(next) {
   $("status").textContent = state.status === "over" ? "Game over" : state.turn === "white" ? "Your move (White)" : "Waiting for Black…"
   showBanner()
   showCallouts()
+  showSettings()
   const thinking = state.llm_turn?.thinking
   $("thinkingPanel").hidden = !thinking
   $("thinking").textContent = thinking ?? ""
@@ -166,14 +241,16 @@ async function show(next) {
 // The board stays locked while the LLM thinks, and a running timer shows the app has not frozen.
 async function play(uci) {
   board.disableMoveInput()
-  $("newGame").disabled = true
+  waiting = true
+  $("newGame").disabled = $("startNext").disabled = true
   $("error").hidden = true
   $("thinkingPanel").hidden = true
   $("callouts").replaceChildren()
   const started = Date.now()
   const tick = () => {
     const seconds = Math.floor((Date.now() - started) / 1000)
-    $("status").textContent = `${state.settings.model} is thinking… ${seconds}s`
+    const doing = state.settings.thinking ? "is thinking…" : "is choosing a move…"
+    $("status").textContent = `${state.settings.model} ${doing} ${seconds}s`
   }
   tick()
   const timer = setInterval(tick, 1000)
@@ -185,7 +262,8 @@ async function play(uci) {
     $("error").hidden = false
   } finally {
     clearInterval(timer)
-    $("newGame").disabled = false
+    waiting = false
+    $("newGame").disabled = $("startNext").disabled = false
   }
   await show(next)
 }
@@ -213,17 +291,135 @@ function onMoveInput(event) {
   }
 }
 
+// Settings: chosen in the modal, sent with the next "New game". The running game keeps its own settings.
+const FEEDBACK_LEVELS = {
+  explained: {name: "Explained", description: "The move and the kind of failure"},
+  bare: {name: "Bare", description: "Only that it was illegal"},
+  hinted: {name: "Hinted", description: "Also lists the legal moves (muddies free mode)"},
+}
+let next = null // {model, thinking, retry_feedback} for the next game
+let models = null // the installed chat models, or null until listed
+let modelsError = null // why they could not be listed
+let section = "game"
+
+const pending = () => ["model", "thinking", "retry_feedback"].some(key => next[key] !== state.settings[key])
+
+function chip(text, className = "chip") {
+  const element = document.createElement("span")
+  element.className = className
+  element.textContent = text
+  return element
+}
+
+function showSettings() {
+  const settings = state.settings
+  next ??= {model: settings.model, thinking: settings.thinking, retry_feedback: settings.retry_feedback}
+  $("chips").replaceChildren(
+    chip(settings.model),
+    chip(`thinking ${settings.thinking ? "on" : "off"}`),
+    chip(`${FEEDBACK_LEVELS[settings.retry_feedback].name.toLowerCase()} feedback`),
+    ...(pending() ? [chip("changes apply next game", "chip pending")] : []),
+  )
+  $("modalPending").hidden = !pending()
+  $("startNext").hidden = !pending()
+  $("startNext").disabled = waiting
+  if ($("settings").hidden) return
+
+  document.querySelectorAll("#settings [data-section]").forEach(element => {
+    if (element.tagName === "BUTTON") element.classList.toggle("on", element.dataset.section === section)
+    else element.hidden = element.dataset.section !== section
+  })
+  $("feedbackLevels").replaceChildren(...Object.entries(FEEDBACK_LEVELS).map(([level, {name, description}]) => {
+    const card = document.createElement("button")
+    card.className = "radio" + (next.retry_feedback === level ? " on" : "")
+    card.setAttribute("role", "radio")
+    card.setAttribute("aria-checked", next.retry_feedback === level)
+    card.append(chip(name + (level === "explained" ? " · default" : ""), "t"), chip(description, "d"))
+    card.onclick = () => { next.retry_feedback = level; showSettings() }
+    return card
+  }))
+  // The chosen model stays listed even when Ollama doesn't report it, e.g. while Ollama is down.
+  const names = (models ?? []).map(model => model.name)
+  if (!names.includes(next.model)) names.unshift(next.model)
+  $("model").replaceChildren(...names.map(name => new Option(name, name, false, name === next.model)))
+  $("modelHint").textContent = modelsError ? `Could not list the models: ${modelsError}` : "Installed Ollama models that can chat"
+  $("thinkingSwitch").classList.toggle("on", next.thinking)
+  $("thinkingSwitch").setAttribute("aria-checked", next.thinking)
+  const sampling = models?.find(model => model.name === next.model)?.sampling
+  $("samplingHint").textContent = sampling === undefined
+    ? modelsError ? `Could not read the sampling settings: ${modelsError}` : "The sampling settings show once Ollama lists the model."
+    : `Sampling for ${next.model}: the model's defaults, overridden by chessllm/sampling.toml. Change them in that file.`
+  $("sampling").replaceChildren(...Object.entries(sampling ?? {}).map(([name, value]) => {
+    const row = document.createElement("tr")
+    row.append(...[name, value].map(text => Object.assign(document.createElement("td"), {textContent: text})))
+    return row
+  }))
+  if (sampling && !Object.keys(sampling).length) {
+    const row = document.createElement("tr")
+    row.append(Object.assign(document.createElement("td"), {textContent: "No sampling parameters set: Ollama's built-in defaults"}))
+    $("sampling").replaceChildren(row)
+  }
+}
+
+async function openSettings() {
+  $("scrim").hidden = $("settings").hidden = false
+  showSettings()
+  try {
+    models = await api("GET", "/api/models") // listed afresh each time, so new models and config edits show up
+    modelsError = null
+  } catch (error) {
+    models = null
+    modelsError = error.message
+  }
+  showSettings()
+}
+
+function closeSettings() {
+  $("scrim").hidden = $("settings").hidden = true
+}
+
+document.querySelectorAll("#settings nav button").forEach(button => {
+  button.onclick = () => { section = button.dataset.section; showSettings() }
+})
+$("model").onchange = event => { next.model = event.target.value; showSettings() }
+$("thinkingSwitch").onclick = () => { next.thinking = !next.thinking; showSettings() }
+$("openSettings").onclick = openSettings
+$("closeSettings").onclick = closeSettings
+$("scrim").onclick = closeSettings
+document.addEventListener("keydown", event => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault()
+    $("settings").hidden ? openSettings() : closeSettings()
+  } else if (event.key === "Escape" && !$("settings").hidden) {
+    closeSettings()
+  }
+})
+
 async function newGame() {
+  if (waiting) return
   $("error").hidden = true
-  await show(await api("POST", "/api/games"))
+  closeSettings()
+  try {
+    await show(await api("POST", "/api/games", next))
+  } catch (error) {
+    $("error").textContent = error.message
+    $("error").hidden = false
+  }
 }
 $("newGame").onclick = newGame
 $("bannerNewGame").onclick = newGame
+$("startNext").onclick = newGame
 
 try {
   await show(await api("GET", "/api/games/current"))
 } catch {
-  await show(await api("POST", "/api/games"))
+  try {
+    await show(await api("POST", "/api/games"))
+  } catch (error) {
+    $("status").textContent = "Could not start a game"
+    $("error").textContent = error.message
+    $("error").hidden = false
+  }
 }
 </script>
 </body>

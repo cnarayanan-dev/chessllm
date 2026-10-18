@@ -1,6 +1,6 @@
 """One game between the human (White) and the LLM player (Black)."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any
 
@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
-from chessllm.prompt import SYSTEM_PROMPT_FILE, retry_feedback, turn_messages
+from chessllm.prompt import SYSTEM_PROMPT_FILE, RetryFeedback, retry_feedback, turn_messages
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,8 @@ class Settings:
 
     model: str = "qwen3.5:9b"
     thinking: bool = True
+    retry_feedback: RetryFeedback = "explained"
+    sampling: dict[str, float] = field(default_factory=dict)  # from the config file; empty means the model's defaults
 
 
 class RejectedHumanMove(Exception):
@@ -84,8 +86,8 @@ class GameSession:
             llm_color="black",
             mode="free",
             thinking=settings.thinking,
-            sampling="model_default",
-            retry_feedback="explained",
+            sampling=settings.sampling or "model_default",
+            retry_feedback=settings.retry_feedback,
             max_retries=MAX_ATTEMPTS - 1,
             prompt_file=str(SYSTEM_PROMPT_FILE),
             started_at=now(),
@@ -190,7 +192,8 @@ class GameSession:
                 return
             self._illegal_moves[result] += 1
             self._streak_broken = True
-            feedback = retry_feedback(written, result, number, MAX_ATTEMPTS)
+            legal_moves = [board.san(legal) for legal in board.legal_moves]
+            feedback = retry_feedback(self._settings.retry_feedback, written, result, number, MAX_ATTEMPTS, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
         self._end = GameEnd("1-0", "forfeit")
 

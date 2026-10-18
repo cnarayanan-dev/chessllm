@@ -40,13 +40,15 @@ class ScriptedPlayer:
 
 @pytest.fixture
 def scripted(tmp_path):
-    """Makes an app playing against a ScriptedPlayer. Game logs go to tmp_path / "games" unless games_dir is given."""
+    """Makes an app playing against a ScriptedPlayer. Game logs go to tmp_path / "games" unless games_dir is given,
+    and there is no sampling config unless sampling_file is given."""
 
     def make(
         replies: list[str | Exception], thinking: list[str] | None = None, **options
     ) -> tuple[TestClient, ScriptedPlayer]:
         player = ScriptedPlayer(replies, thinking)
         options.setdefault("games_dir", tmp_path / "games")
+        options.setdefault("sampling_file", tmp_path / "no-sampling.toml")
         return TestClient(create_app(player.for_settings, **options)), player
 
     return make

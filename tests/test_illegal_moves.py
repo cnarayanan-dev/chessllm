@@ -165,3 +165,34 @@ def test_a_new_game_starts_with_clean_stats(scripted):
         "recovered_turns": 0,
     }
     assert state["llm_turn"] is None
+
+
+def test_bare_feedback_says_only_that_the_move_was_illegal(scripted):
+    client, player = scripted(["Qh4", "banana", "e5"])
+    client.post("/api/games", json={"retry_feedback": "bare"})
+
+    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+
+    assert [prompt[-1].content for prompt in player.prompts[1:]] == [
+        'Your move "Qh4" is illegal. Attempt 1 of 4. Try again.',
+        'Your move "banana" is illegal. Attempt 2 of 4. Try again.',
+    ]
+    assert state["settings"]["retry_feedback"] == "bare"
+
+
+def test_hinted_feedback_adds_the_legal_moves_in_san(scripted):
+    client, player = scripted(["Qh4", "e5"])
+    client.post("/api/games", json={"retry_feedback": "hinted"})
+
+    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+
+    legal_after_e4 = (
+        "Nh6 Nf6 Nc6 Na6 h6 g6 f6 e6 d6 c6 b6 a6 h5 g5 f5 e5 d5 c5 b5 a5"
+    )
+    assert player.prompts[1][-1].content == explained("Qh4", "illegal", 1) + f"\nLegal moves: {legal_after_e4}"
+
+
+def test_an_unknown_retry_feedback_level_is_refused(scripted):
+    client, _ = scripted([])
+
+    assert client.post("/api/games", json={"retry_feedback": "loud"}).status_code == 422

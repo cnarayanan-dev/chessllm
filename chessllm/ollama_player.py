@@ -25,9 +25,11 @@ class OllamaPlayer:
         thinking: bool = True,
         chat: Callable[..., ollama.ChatResponse] | None = None,
         timeout_s: float = TIMEOUT_S,
+        sampling: dict[str, float] | None = None,
     ) -> None:
         self._model = model
         self._thinking = thinking
+        self._sampling = sampling or None  # None plays at the model's own defaults
         self._chat = chat or ollama.Client(timeout=timeout_s).chat
         self.timeout_s = timeout_s
 
@@ -39,6 +41,7 @@ class OllamaPlayer:
                 messages=[{"role": message.role, "content": message.content} for message in messages],
                 think=self._thinking,
                 format=(MoveAnswer if self._thinking else ReasonedMoveAnswer).model_json_schema(),
+                options=self._sampling,
             )
         except httpx.TimeoutException:
             raise LlmTimeout(self.timeout_s) from None

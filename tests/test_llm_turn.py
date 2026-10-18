@@ -70,15 +70,20 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
 def test_the_default_opponent_is_qwen_with_thinking_on(scripted):
     client, _ = scripted([])
 
-    assert client.post("/api/games").json()["settings"] == {"model": "qwen3.5:9b", "thinking": True}
+    assert client.post("/api/games").json()["settings"] == {
+        "model": "qwen3.5:9b",
+        "thinking": True,
+        "retry_feedback": "explained",
+        "sampling": {},
+    }
 
 
 def test_the_game_reports_the_settings_it_was_started_with(scripted):
     client, _ = scripted([])
 
-    state = client.post("/api/games", json={"model": "gemma3:4b", "thinking": False}).json()
+    state = client.post("/api/games", json={"model": "gemma3:4b", "thinking": False, "retry_feedback": "bare"}).json()
 
-    assert state["settings"] == {"model": "gemma3:4b", "thinking": False}
+    assert state["settings"] == {"model": "gemma3:4b", "thinking": False, "retry_feedback": "bare", "sampling": {}}
 
 
 def test_the_player_for_a_game_is_built_once_from_that_games_settings(scripted):
@@ -89,19 +94,20 @@ def test_the_player_for_a_game_is_built_once_from_that_games_settings(scripted):
     state = client.post("/api/games/current/moves", json={"uci": "g1f3"}).json()
 
     assert player.built_for == [Settings(model="gemma3:4b", thinking=False)]
-    assert state["settings"] == {"model": "gemma3:4b", "thinking": False}
+    assert (state["settings"]["model"], state["settings"]["thinking"]) == ("gemma3:4b", False)
 
 
 def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
-    client, player = scripted(["e5", "d5"])
-    client.post("/api/games", json={"model": "gemma3:4b", "thinking": False})
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    client, player = scripted(["Qh4", "e5", "d5"])
+    client.post("/api/games", json={"model": "gemma3:4b", "thinking": False, "retry_feedback": "bare"})
+    playing = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
 
     state = client.post("/api/games", json={"thinking": True}).json()
     client.post("/api/games/current/moves", json={"uci": "d2d4"})
 
-    assert player.built_for == [Settings(model="gemma3:4b", thinking=False), Settings()]
-    assert state["settings"] == {"model": "qwen3.5:9b", "thinking": True}
+    assert playing["llm_turn"]["attempts"][1]["feedback_sent"].endswith("Try again.")  # bare
+    assert player.built_for == [Settings(model="gemma3:4b", thinking=False, retry_feedback="bare"), Settings()]
+    assert state["settings"] == {"model": "qwen3.5:9b", "thinking": True, "retry_feedback": "explained", "sampling": {}}
 
 
 def test_with_thinking_off_a_legal_reply_is_applied_and_its_reasoning_shown_as_the_thinking(scripted):

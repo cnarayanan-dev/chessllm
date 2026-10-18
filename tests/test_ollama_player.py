@@ -73,3 +73,16 @@ def test_the_adapter_gives_up_after_the_time_limit(thinking):
 
 def test_the_default_time_limit_is_five_minutes():
     assert OllamaPlayer("qwen3.5:9b", chat=lambda **request: None).timeout_s == 300
+
+
+def test_the_adapter_sends_the_sampling_options():
+    calls = []
+
+    def chat(**request):
+        calls.append(request)
+        return ChatResponse(message=OllamaMessage(role="assistant", content='{"move": "e5"}'))
+
+    OllamaPlayer("qwen3.5:9b", chat=chat, sampling={"temperature": 0.2}).reply([Message("user", "PGN: 1. e4")])
+    OllamaPlayer("qwen3.5:9b", chat=chat).reply([Message("user", "PGN: 1. e4")])
+
+    assert [request["options"] for request in calls] == [{"temperature": 0.2}, None]

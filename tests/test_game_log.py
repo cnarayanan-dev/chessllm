@@ -138,3 +138,15 @@ def test_each_game_gets_its_own_files_and_id(scripted, tmp_path):
 
     starts = [events(log)[0] for log in logs(tmp_path / "games", ".jsonl")]
     assert len({start["game_id"] for start in starts}) == 3
+
+
+def test_the_log_records_the_retry_feedback_and_the_sampling_from_the_config(scripted, tmp_path):
+    config = tmp_path / "sampling.toml"
+    config.write_text("temperature = 0.2\n")
+    client, _ = scripted([], sampling_file=config)
+
+    client.post("/api/games", json={"retry_feedback": "hinted"})
+
+    [log] = logs(tmp_path / "games", ".jsonl")
+    [start] = events(log)
+    assert (start["retry_feedback"], start["sampling"]) == ("hinted", {"temperature": 0.2})
