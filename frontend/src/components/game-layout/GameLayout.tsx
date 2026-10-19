@@ -3,11 +3,11 @@ import type { ReactNode } from 'react'
 import './game-layout.css'
 
 type GameLayoutProps = {
-  /** The left column: the Game card (and later the Reasoning panel under it). */
+  /** The left column: the Game card, and the Reasoning panel under it. */
   game: ReactNode
   /** The board column's stack, at the board's width: the board, with what goes directly above and below it. */
   board: ReactNode
-  /** The right column: the moves, for now with the status line and the Thinking above them. */
+  /** The right column: the moves, for now with the status line above them. */
   moves: ReactNode
 }
 

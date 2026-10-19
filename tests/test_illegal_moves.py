@@ -152,6 +152,33 @@ def test_a_timeout_or_a_failed_call_forfeits_at_once(scripted, failure, result, 
     assert state["pgn"] == "1. e4"
 
 
+def test_each_attempt_with_thinking_off_has_its_reasoning_and_the_turn_its_last_attempts(scripted):
+    client, _ = scripted([
+        Raw('{"reasoning": "The queen attacks f2.", "move": "Qh4"}'),
+        Raw('{"reasoning": "Take the centre.", "move": "e5"}'),
+    ])
+    client.post("/api/games", json=play_llm(thinking=False))
+
+    state = play_move(client, "e2e4").json()
+
+    assert [a["reasoning"] for a in state["llm_turn"]["attempts"]] == ["The queen attacks f2.", "Take the centre."]
+    assert state["llm_turn"]["reasoning"] == "Take the centre."  # the attempt that was played
+
+
+def test_an_attempt_without_an_answer_has_no_reasoning_and_neither_has_its_turn(scripted):
+    client, _ = scripted([Raw('{"reasoning": "The queen attacks f2.", "move": "Qh4"}'), LlmTimeout(300)])
+    client.post("/api/games", json=play_llm(thinking=False))
+
+    state = play_move(client, "e2e4").json()
+
+    assert [(a["reasoning"], a["thinking"]) for a in state["llm_turn"]["attempts"]] == [
+        ("The queen attacks f2.", None),
+        (None, None),
+    ]
+    assert state["llm_turn"]["reasoning"] is None  # the last try's, which gave no answer
+    assert state["end_reason"] == "forfeit"
+
+
 def test_a_timeout_after_an_illegal_move_still_forfeits_at_once(scripted):
     client, player = start(scripted, ["Qh4", LlmTimeout(300), "e5"])
 

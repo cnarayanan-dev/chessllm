@@ -4,12 +4,14 @@ instead of Ollama, and the game logs in a temporary directory.
     uv run python -m tests.e2e_server --port 8123
 
 POST /e2e/script {"white": [...], "black": [...]} sets the SAN replies of each side's LLM for the games started after
-it; each game's LLM plays its own copy of the script, from the start (a ScriptedPlayer, as in tests/conftest.py).
+it; each game's LLM plays its own copy of the script, from the start (a ScriptedPlayer, as in tests/conftest.py). With
+thinking off each reply carries a Reasoning, "Reasoning for <san>.", as Ollama's answers do.
 
 POST /e2e/leaderboard-games replaces every game log with the synthetic games of tests/e2e_leaderboard.py, for the
 analytics page."""
 
 import argparse
+import json
 import tempfile
 from pathlib import Path
 
@@ -18,7 +20,7 @@ from pydantic import BaseModel
 
 from chessllm.app import create_app
 from chessllm.game import Color, Settings
-from tests.conftest import ScriptedPlayer
+from tests.conftest import Raw, ScriptedPlayer
 from tests.e2e_leaderboard import write_leaderboard_games
 
 
@@ -35,7 +37,10 @@ def main() -> None:
     script = Script()
 
     def player_for(settings: Settings, color: Color) -> ScriptedPlayer:
-        return ScriptedPlayer(list(getattr(script, color))).for_settings(settings, color)
+        replies: list[str | BaseException] = list(getattr(script, color))
+        if not settings.llm_sides()[color].thinking:
+            replies = [Raw(json.dumps({"reasoning": f"Reasoning for {san}.", "move": san})) for san in replies]
+        return ScriptedPlayer(replies).for_settings(settings, color)
 
     temp = Path(tempfile.mkdtemp(prefix="chessllm-e2e-"))
     games_dir = temp / "games"

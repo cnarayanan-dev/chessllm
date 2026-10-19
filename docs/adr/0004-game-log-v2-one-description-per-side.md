@@ -15,3 +15,4 @@ With the LLM faceoff a game can have two LLMs, and the version 1 log only had ro
 - A human's side has `null` stats, which is different from ADR 0003's `null` metrics under Enforced decoding: there the side is an LLM and the metric is not applicable, here there is no LLM at all.
 - The log and PGN filenames name both sides, White first: `<start>_<white>_vs_<black>.jsonl`, with `human` for a human side.
 - The system prompt file stays at the top level: `prompt_file` in Play LLM, which has one LLM side, and `prompt_files` keyed by colour in an LLM faceoff, written per side even when both sides read the same file.
+- An `llm_attempt`'s `thinking` holds the **Reasoning** (CONTEXT.md) when thinking is off, as it did before the API gave each attempt and LLM turn a `reasoning` field of its own (#56): the API separates **Thinking** and Reasoning, the log does not.

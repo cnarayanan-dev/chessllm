@@ -49,6 +49,7 @@ async function llmMoving(color: 'white' | 'black') {
 }
 const topBar = () => screen.getByRole('banner')
 const gameCard = () => screen.getByRole('region', { name: 'Game' })
+const reasoning = () => screen.getByRole('region', { name: 'Reasoning' })
 /** The Game card's players, White first, each as its side and name. */
 const players = () =>
   within(within(gameCard()).getByRole('list', { name: 'Players' }))
@@ -154,7 +155,7 @@ test("the human's move lands at once, then the LLM's turn runs, timed in its str
   expect(playMoveSound).toHaveBeenCalledTimes(2)
 })
 
-test("a thinking LLM's move is timed too, and its thinking can be shown once its move lands", async () => {
+test("a thinking LLM's move is timed too, and once its move lands its Thinking is not shown", async () => {
   const thinking = (game: GameState) => ({
     ...game,
     settings: { ...game.settings, black: { ...afterE4().settings.black, thinking: true } },
@@ -166,13 +167,14 @@ test("a thinking LLM's move is timed too, and its thinking can be shown once its
   renderApp()
 
   await llmMoving('black')
-  expect(screen.getByText('Show thinking')).not.toBeVisible()
 
   const landed = aTurn('e5', { thinking: 'The king pawn, to fight for the centre.' })
   await act(async () => turn.resolve(Response.json(thinking(afterE5({ llm_turn: landed, llm_turns: [landed] })))))
 
-  await userEvent.click(await screen.findByText('Show thinking'))
-  expect(await screen.findByText('The king pawn, to fight for the centre.')).toBeVisible()
+  // "Show thinking" is hidden for now; the Reasoning panel says a thinking LLM gives no Reasoning.
+  expect(await within(reasoning()).findByText('qwen3.5:9b plays with thinking on, so it gives no Reasoning.')).toBeVisible()
+  expect(screen.queryByText('Show thinking')).not.toBeInTheDocument()
+  expect(screen.queryByText('The king pawn, to fight for the centre.')).not.toBeInTheDocument()
 })
 
 test('a rejected move shows the error and snaps the piece back', async () => {
@@ -503,6 +505,24 @@ describe('the move history', () => {
     await yourMove()
     expect(backToLive()).not.toBeInTheDocument()
     await waitFor(() => expect(board.input?.color).toBe('w'))
+  })
+
+  test('the Reasoning panel under the Game card follows the position stepped to', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+    expect(gameCard().nextElementSibling).toBe(reasoning())
+    expect(within(reasoning()).getByText('Reasoning for e5.')).toBeVisible()
+
+    await userEvent.keyboard('{ArrowLeft}')
+
+    expect(within(reasoning()).getByText('The LLM has not moved yet.')).toBeVisible()
+
+    await userEvent.keyboard('{ArrowRight}')
+
+    expect(within(reasoning()).getByTestId('reasoning-move')).toHaveTextContent('qwen3.5:9b · 1… e5')
+    expect(within(reasoning()).getByText('Reasoning for e5.')).toBeVisible()
   })
 
   test('clicking a move in the move list views the position after it', async () => {

@@ -82,7 +82,13 @@ export function afterE4(overrides: Partial<GameState> = {}): GameState {
   })
 }
 
-/** An LLM turn whose only attempt is the legal move given. */
+/** The Reasoning the fixtures' LLMs give for a move, with thinking off. */
+export const reasoningFor = (move: string) => `Reasoning for ${move}.`
+
+/** The raw reply with thinking off: the Reasoning, then the move. */
+const replyWith = (move: string) => JSON.stringify({ reasoning: reasoningFor(move), move })
+
+/** An LLM turn whose only attempt is the legal move given, with thinking off. */
 export function aTurn(move: string, overrides: Partial<LlmTurn> = {}): LlmTurn {
   return {
     ply: 2,
@@ -94,13 +100,15 @@ export function aTurn(move: string, overrides: Partial<LlmTurn> = {}): LlmTurn {
         notation_slip: false,
         result: 'legal',
         feedback_sent: null,
-        raw_reply: `{"move": "${move}"}`,
+        raw_reply: replyWith(move),
         thinking: null,
+        reasoning: reasoningFor(move),
         error: null,
         latency_s: 1.2,
       },
     ],
     thinking: null,
+    reasoning: reasoningFor(move),
     ...overrides,
   }
 }
@@ -152,8 +160,9 @@ export function chaosAttempt(move: string, resolution: Resolution, overrides: Pa
     notation_slip: false,
     result: 'illegal',
     feedback_sent: null,
-    raw_reply: `{"move": "${move}"}`,
+    raw_reply: replyWith(move),
     thinking: null,
+    reasoning: reasoningFor(move),
     error: null,
     latency_s: 1.2,
     resolution,
@@ -172,7 +181,13 @@ export function chaosGame(count: number, overrides: Partial<GameState> = {}): Ga
       ? []
       : [
           resolution
-            ? { ply: index + 1, color: 'black' as const, attempts: [chaosAttempt(written, resolution)], thinking: null }
+            ? {
+                ply: index + 1,
+                color: 'black' as const,
+                attempts: [chaosAttempt(written, resolution)],
+                thinking: null,
+                reasoning: reasoningFor(written),
+              }
             : aTurn(written, { ply: index + 1 }),
         ],
   )

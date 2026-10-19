@@ -63,11 +63,13 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
                 "feedback_sent": None,
                 "raw_reply": '{"move": "Nc6"}',
                 "thinking": "Defend e5.",
+                "reasoning": None,
                 "error": None,
                 "latency_s": 0.0,
             }
         ],
         "thinking": "Defend e5.",
+        "reasoning": None,
     }
 
 
@@ -148,7 +150,7 @@ def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
     }
 
 
-def test_with_thinking_off_a_legal_reply_is_applied_and_its_reasoning_shown_as_the_thinking(scripted):
+def test_with_thinking_off_a_legal_reply_is_applied_and_its_reasoning_shown_with_no_thinking(scripted):
     reply = '{"reasoning": "Mirror the centre pawn.", "move": "e5"}'
     client, _ = scripted([Raw(reply)])
     client.post("/api/games", json=play_llm(thinking=False))
@@ -159,8 +161,8 @@ def test_with_thinking_off_a_legal_reply_is_applied_and_its_reasoning_shown_as_t
     [attempt] = state["llm_turn"]["attempts"]
     assert attempt["result"] == "legal"
     assert attempt["move"] == "e5"
-    assert attempt["thinking"] == "Mirror the centre pawn."
-    assert state["llm_turn"]["thinking"] == "Mirror the centre pawn."
+    assert (attempt["reasoning"], attempt["thinking"]) == ("Mirror the centre pawn.", None)
+    assert (state["llm_turn"]["reasoning"], state["llm_turn"]["thinking"]) == ("Mirror the centre pawn.", None)
 
 
 def test_a_new_game_clears_the_llm_turn(scripted):

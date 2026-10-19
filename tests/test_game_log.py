@@ -4,7 +4,7 @@ import json
 import chess
 import chess.pgn
 
-from conftest import play_llm, play_move
+from conftest import Raw, play_llm, play_move
 
 from chessllm.players import LlmTimeout
 
@@ -79,6 +79,17 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
     assert attempt_2["feedback_sent"].startswith('Your move "Qh4" is illegal')
     assert (attempt_2["move"], attempt_2["result"]) == ("e5", "legal")
     assert attempt_2["latency_s"] == 0.0
+
+
+def test_with_thinking_off_the_log_keeps_the_reasoning_as_the_attempts_thinking(scripted, tmp_path):
+    client, _ = scripted([Raw('{"reasoning": "Mirror the centre pawn.", "move": "e5"}')])
+    client.post("/api/games", json=play_llm(thinking=False))
+
+    play_move(client, "e2e4")
+
+    *_, attempt = events(logs(tmp_path / "games", ".jsonl")[0])
+    assert attempt["thinking"] == "Mirror the centre pawn."
+    assert "reasoning" not in attempt
 
 
 def test_a_finished_game_ends_its_log_with_the_summary_and_writes_a_pgn(scripted, tmp_path):

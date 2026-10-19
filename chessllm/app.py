@@ -99,7 +99,8 @@ class Attempt(BaseModel):
     result: Literal["legal", "invalid", "illegal", "ambiguous", "timeout", "error"] | None
     feedback_sent: str | None  # the retry feedback this try answers, None on the first
     raw_reply: str | None
-    thinking: str | None
+    thinking: str | None  # the Thinking, with thinking on
+    reasoning: str | None  # the Reasoning in the answer, with thinking off
     error: str | None  # why the call failed or timed out
     latency_s: float | None
     # Only under Chaos rules, and only when there was a move to resolve; a chaos move or spawn was played.
@@ -111,6 +112,7 @@ class LlmTurn(BaseModel):
     color: Color
     attempts: list[Attempt]
     thinking: str | None  # the thinking of the last try that answered
+    reasoning: str | None  # the Reasoning of the last try: the one played, or the last before a Forfeit
 
 
 class Ply(BaseModel):

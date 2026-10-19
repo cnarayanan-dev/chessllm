@@ -183,6 +183,15 @@ def reasoning(raw: str) -> str | None:
         return None
 
 
+def logged_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
+    """The attempt as the game log has it, unchanged since before the API gave the Reasoning a field of its own:
+    with thinking off, the Reasoning is the attempt's thinking."""
+    logged = {key: value for key, value in attempt.items() if key != "reasoning"}
+    if attempt["reasoning"] is not None:
+        logged["thinking"] = attempt["reasoning"]
+    return logged
+
+
 def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, str]:
     """Judge the raw answer as given: (the move as written, the legal move or None, "legal" or the failure kind).
 
@@ -437,14 +446,14 @@ class GameSession:
         prompt_file = SYSTEM_PROMPT_FILES[side.llm_constraints]
         messages = turn_messages(pgn, fen, color, prompt_file, listed_moves)
         attempts: list[dict[str, Any]] = []
-        turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None}
+        turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None, "reasoning": None}
         self._llm_turns.append(turn)
         feedback = None
         max_attempts = self._settings.max_attempts
         for number in range(1, max_attempts + 1):
             attempt: dict[str, Any] = {
                 "move": None, "san": None, "notation_slip": False, "result": None, "feedback_sent": feedback,
-                "raw_reply": None, "thinking": None, "error": None, "latency_s": None,
+                "raw_reply": None, "thinking": None, "reasoning": None, "error": None, "latency_s": None,
             }
             if self._chaos:
                 attempt["resolution"] = None  # None when there was no move the resolver could look at
@@ -459,13 +468,17 @@ class GameSession:
                 attempt |= {"result": "error", "error": f"{model} did not reply: {error}"}
             if attempt["error"] is not None:
                 self._log.write(
-                    "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt
+                    "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
+                    **logged_attempt(attempt),
                 )
+                turn["reasoning"] = None  # the turn's Reasoning is its last attempt's: none without an answer
                 break
             written, move, result = judge(board, reply.raw)
-            # With thinking off, the reasoning in the answer stands in for the thinking text.
-            thinking = reply.thinking if side.thinking else reasoning(reply.raw)
-            attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking}
+            # Thinking with thinking on; with it off, the Reasoning written in the answer instead.
+            thinking, reasoned = (reply.thinking, None) if side.thinking else (None, reasoning(reply.raw))
+            attempt |= {
+                "move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking, "reasoning": reasoned,
+            }
             if move is not None:  # legal as written; a slip if not written exactly as its standard SAN (ADR 0002)
                 attempt["san"] = board.san(move)
                 attempt["notation_slip"] = written != attempt["san"]
@@ -475,9 +488,10 @@ class GameSession:
                 attempt["resolution"] = resolution.as_dict()
             attempt["latency_s"] = reply.latency_s
             self._log.write(
-                "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt
+                "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
+                **logged_attempt(attempt),
             )
-            turn["thinking"] = thinking
+            turn |= {"thinking": thinking, "reasoning": reasoned}
             if move is not None:
                 self._play_legal(move)
                 if number > 1:

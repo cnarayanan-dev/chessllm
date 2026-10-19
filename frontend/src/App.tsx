@@ -8,12 +8,12 @@ import { GameCard } from '@/components/game-card/GameCard'
 import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
+import { ReasoningPanel } from '@/components/reasoning/ReasoningPanel'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { chaosShown, type ChaosShown } from '@/game/chaos'
 import {
   boardInput,
@@ -24,7 +24,7 @@ import {
   type Shown,
 } from '@/game/gameLoop'
 import { useGameLoop } from '@/game/useGameLoop'
-import { faceoff, historyStatusText, llmName } from '@/game/wording'
+import { historyStatusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsModal } from '@/settings/SettingsModal'
 
@@ -76,26 +76,6 @@ function ChaosCaption({ chaos }: { chaos: ChaosShown }) {
       {chaos.kind === 'spawn' ? '✦ ' : '↯ '}
       {chaos.caption}
     </div>
-  )
-}
-
-/** The last LLM turn's thinking. In a faceoff it stays up, named by its side, as the next turn starts at once. */
-function Thinking({ game, hidden }: { game: GameState; hidden: boolean }) {
-  const thinking = game.llm_turn?.thinking
-  const named = faceoff(game) && thinking && game.llm_turn
-  return (
-    <Collapsible hidden={hidden || !thinking}>
-      <Card size="sm">
-        <CardContent>
-          <CollapsibleTrigger className="cursor-pointer text-muted-foreground">
-            {named ? `Show thinking · ${llmName(game, game.llm_turn!.color)}` : 'Show thinking'}
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 max-h-80 overflow-y-auto text-sm whitespace-pre-wrap text-muted-foreground">
-            {thinking}
-          </CollapsibleContent>
-        </CardContent>
-      </Card>
-    </Collapsible>
   )
 }
 
@@ -166,9 +146,13 @@ export default function App() {
       )}
       <GameLayout
         game={
-          // The Reasoning panel is to go under the Game card; the Thinking stays with the moves for now.
-          game ? (
-            <GameCard game={game} pending={pending} error={error} onNewGame={startNewGame} />
+          // The Reasoning panel follows the position on the board. "Show thinking" is hidden for now; the Thinking
+          // stays in the API and the game log. (`shown` is set whenever `game` is.)
+          game && shown ? (
+            <>
+              <GameCard game={game} pending={pending} error={error} onNewGame={startNewGame} />
+              <ReasoningPanel game={game} ply={shown.ply} live={!history} />
+            </>
           ) : (
             error !== null && (
               <Alert variant="destructive">
@@ -208,8 +192,6 @@ export default function App() {
         moves={
           <>
             {game && history && shown && <Status game={game} viewing={{ shown, history, onLive: backToLive }} />}
-            {/* In Play LLM the thinking hides as the LLM's next turn starts. */}
-            {game && <Thinking game={game} hidden={running && !faceoff(game)} />}
             {game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
           </>
         }
