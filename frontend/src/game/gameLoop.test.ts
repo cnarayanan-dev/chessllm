@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { NewGame } from '@/api/types'
+import type { GameState, NewGame } from '@/api/types'
 import { gameLoop, initialGameLoop, phase, type GameLoop, type GameLoopAction } from '@/game/gameLoop'
 import { aGame, aTurn, afterE4, afterE5 } from '@/test/games'
 
@@ -252,6 +252,106 @@ describe('new game', () => {
 
   test('with no settings, asks for the default game', () => {
     expect(gameLoop(waiting, { type: 'new-game', newGame: null }).request).toMatchObject({ kind: 'start', newGame: null })
+  })
+})
+
+describe('an LLM faceoff', () => {
+  const llm = afterE4().settings.black
+  const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+  const started = aGame({ human_legal_moves: [], settings })
+  const turn = (ply: number, color: 'white' | 'black', move: string) => aTurn(move, { ply, color })
+  // The game after `plies` LLM turns, each with its legal move.
+  const after = (plies: number, overrides: Partial<GameState> = {}): GameState => {
+    const turns = Array.from({ length: plies }, (_, i) => turn(i + 1, i % 2 ? 'black' : 'white', `m${i + 1}`))
+    return { ...started, turn: plies % 2 ? 'black' : 'white', llm_turns: turns, llm_turn: turns.at(-1) ?? null, ...overrides }
+  }
+  // Four illegal tries: the side forfeits.
+  const forfeitOf = (ply: number, color: 'white' | 'black') =>
+    aTurn('Ke2', {
+      ply,
+      color,
+      attempts: Array.from({ length: 4 }, () => ({ ...aTurn('Ke2').attempts[0], result: 'illegal' as const })),
+    })
+  const playing = run(received(initialGameLoop, started))
+
+  test("asks for White's first turn as soon as the game is shown, and the board takes no move", () => {
+    expect(playing.request).toMatchObject({ kind: 'llm-turn', game: started })
+    expect(phase(playing)).toBe('llm')
+    expect(gameLoop(playing, { type: 'human-move', uci: 'e2e4' })).toBe(playing)
+  })
+
+  test('asks for the next turn after each LLM turn, with no pause, until the game is over', () => {
+    let state = playing
+    const asked: number[] = [state.request!.id]
+    for (let plies = 1; plies <= 3; plies++) {
+      state = gameLoop(state, received(state, after(plies)))
+      expect(state.request).toMatchObject({ kind: 'llm-turn', game: after(plies) })
+      asked.push(state.request!.id)
+    }
+    state = gameLoop(state, received(state, after(4, { status: 'over', result: '1-0', end_reason: 'checkmate' })))
+
+    expect(new Set(asked).size).toBe(4)
+    expect(state.moveSounds).toBe(4)
+    expect(phase(state)).toBe('over')
+    expect(state.request).toBeNull()
+  })
+
+  test('stops on New game: the abandoned turn is dropped and no turn of the old game follows', () => {
+    const midGame = gameLoop(playing, received(playing, after(1)))
+    const abandoned = midGame.request!.id
+    const starting = gameLoop(midGame, { type: 'new-game', newGame: null })
+    const humanGame = aGame({ game_id: 'game-2' })
+    const state = gameLoop(starting, received(starting, humanGame))
+
+    expect(gameLoop(starting, { type: 'received', requestId: abandoned, game: after(2) })).toBe(starting)
+    expect(gameLoop(state, { type: 'received', requestId: abandoned, game: after(2) })).toBe(state)
+    expect(state.game).toBe(humanGame)
+    expect(state.request).toBeNull()
+  })
+
+  test.each([
+    ['White', 1, 'white', '0-1'],
+    ['Black', 2, 'black', '1-0'],
+  ] as const)('a forfeit by %s ends it, without a sound, and no turn follows', (_, ply, color, result) => {
+    const before = ply === 1 ? playing : gameLoop(playing, received(playing, after(ply - 1)))
+    const forfeit = forfeitOf(ply, color)
+    const over = after(ply - 1, {
+      llm_turn: forfeit,
+      llm_turns: [...after(ply - 1).llm_turns, forfeit],
+      status: 'over',
+      result,
+      end_reason: 'forfeit',
+    })
+
+    const state = gameLoop(before, received(before, over))
+
+    expect(state.moveSounds).toBe(before.moveSounds)
+    expect(phase(state)).toBe('over')
+    expect(state.request).toBeNull()
+  })
+})
+
+describe("the next game's setup", () => {
+  test('is set up as the first game shown was, and kept as other games arrive', () => {
+    const shown = run(received(initialGameLoop, afterE4()))
+    expect(initialGameLoop.next).toBeNull()
+    expect(shown.next).toEqual({
+      mode: 'play_llm',
+      human_color: 'white',
+      models: { white: 'qwen3.5:9b', black: 'qwen3.5:9b' },
+      custom: false,
+      sides: {
+        white: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+        black: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+      },
+    })
+
+    const changed = { ...shown.next!, mode: 'llm_faceoff' as const }
+    const edited = gameLoop(shown, { type: 'next-game', next: changed })
+    const landed = gameLoop(edited, received(edited, afterE5()))
+
+    expect(edited.next).toBe(changed)
+    expect(landed.next).toBe(changed)
   })
 })
 

@@ -5,6 +5,7 @@ import { ApiError, getGame, playLlmTurn, playMove, startGame } from '@/api/clien
 import type { GameState, NewGame } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { gameLoop, initialGameLoop, llmToMove, type Request } from '@/game/gameLoop'
+import type { NextGame } from '@/settings/next-game'
 
 const POLL_MS = 2000
 
@@ -89,6 +90,7 @@ export function useGameLoop() {
 
   const newGame = useCallback((settings: NewGame | null) => dispatch({ type: 'new-game', newGame: settings }), [])
   const humanMove = useCallback((uci: string) => dispatch({ type: 'human-move', uci }), [])
+  const changeNext = useCallback((next: NextGame) => dispatch({ type: 'next-game', next }), [])
 
-  return { state, newGame, humanMove }
+  return { state, newGame, humanMove, changeNext }
 }

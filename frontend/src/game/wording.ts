@@ -1,5 +1,5 @@
 // The words around the board, as the old page has them: the chips, the status line and the end-of-game banner.
-import type { Color, GameSettings, GameState, NewGame } from '@/api/types'
+import type { Color, GameSettings, GameState } from '@/api/types'
 import { humanColor } from '@/game/gameLoop'
 
 export const COLORS: readonly Color[] = ['white', 'black']
@@ -89,9 +89,4 @@ export function settingsChips(game: GameState): string[] {
     ...perSide((side) => LLM_CONSTRAINTS_NAMES[side.llm_constraints].toLowerCase()),
     ...perSide((side) => `${FEEDBACK_NAMES[side.retry_feedback].toLowerCase()} feedback`),
   ]
-}
-
-/** The new-game request for another game under the same settings, as New game sends with no changes in the modal. */
-export function newGameFrom(settings: GameSettings): NewGame {
-  return { mode: settings.mode, white: settings.white, black: settings.black, rules: settings.rules ?? 'standard' }
 }

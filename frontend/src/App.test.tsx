@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import App from '@/App'
 import type { GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
@@ -9,7 +9,7 @@ import { fakeBackend, later } from '@/test/fakeBackend'
 import { theBoard } from '@/test/fakeChessboard'
 import { aGame, aTurn, afterE4, afterE5 } from '@/test/games'
 
-vi.mock('@/components/board/moveSound', () => ({ playMoveSound: vi.fn() }))
+vi.mock('@/components/board/moveSound', () => ({ playMoveSound: vi.fn(), isMoveSoundOn: () => true, setMoveSoundOn: vi.fn() }))
 
 beforeEach(() => {
   vi.mocked(playMoveSound).mockClear()
@@ -251,4 +251,107 @@ test('New game in the banner starts the next game', async () => {
 
   expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
   expect(screen.queryByTestId('banner')).not.toBeInTheDocument()
+})
+
+describe('settings', () => {
+  const models = [{ name: 'qwen3.5:9b', thinking: true, sampling: {} }]
+  const topBar = () => screen.getByRole('banner')
+
+  test('the settings button opens the modal; a change is pending in the top bar, and the running game keeps its settings', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models))
+    renderApp()
+    await screen.findByText('Your move (White)')
+    expect(within(topBar()).queryByText('changes apply next game')).not.toBeInTheDocument()
+
+    await userEvent.click(within(topBar()).getByRole('button', { name: /Settings/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' })
+    await userEvent.click(within(dialog).getByRole('radio', { name: /^Black/ }))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(within(topBar()).getByText('changes apply next game')).toBeInTheDocument()
+    expect(within(topBar()).getByText('you play White')).toBeInTheDocument()
+    expect(status()).toHaveTextContent('Your move (White)')
+  })
+
+  test('New game starts the next game, after which no change is pending', async () => {
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(aGame()))
+      .on('GET /api/models', Response.json(models))
+      .on('POST /api/games', Response.json(llmPlaysWhite({ game_id: 'game-2' })))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    renderApp()
+    await screen.findByText('Your move (White)')
+
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    await userEvent.click(await screen.findByRole('radio', { name: /^Black/ }))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
+
+    expect(await within(topBar()).findByText('you play Black')).toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games')[0].body).toEqual({
+      mode: 'play_llm',
+      white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+      black: { player: 'human' },
+      rules: 'standard',
+    })
+    expect(within(topBar()).queryByText('changes apply next game')).not.toBeInTheDocument()
+  })
+
+  test('an LLM faceoff started from the modal plays itself to the end, White at the bottom and the board locked', async () => {
+    const llm = afterE4().settings.black
+    const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+    const faceoff = (overrides: Partial<GameState>) =>
+      aGame({ game_id: 'game-2', human_legal_moves: [], settings, ...overrides })
+    const white = aTurn('e4', { ply: 1, color: 'white' })
+    const black = aTurn('e5', { ply: 2, color: 'black' })
+    const third = later()
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(aGame()))
+      .on('GET /api/models', Response.json(models))
+      .on('POST /api/games', Response.json(faceoff({})))
+      .on(
+        'POST /api/games/current/llm-turn',
+        Response.json(faceoff({ fen: afterE4().fen, turn: 'black', last_move: 'e2e4', llm_turn: white, llm_turns: [white] })),
+        Response.json(faceoff({ fen: afterE5().fen, last_move: 'e7e5', llm_turn: black, llm_turns: [white, black] })),
+        third.promise,
+      )
+    renderApp()
+    await screen.findByText('Your move (White)')
+
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    await userEvent.click(await screen.findByRole('radio', { name: /^LLM faceoff/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start new game' }))
+
+    // Each turn is asked for as soon as the last one lands: the third runs.
+    await waitFor(() => expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(3))
+    expect(status()).toHaveTextContent('♔ White · qwen3.5:9b is choosing a move… 0s')
+    expect(backend.sentTo('POST /api/games')[0].body).toMatchObject({ mode: 'llm_faceoff', white: llm, black: llm })
+    expect(within(topBar()).getByText('qwen3.5:9b vs qwen3.5:9b')).toBeInTheDocument()
+    expect(theBoard().orientation).toBe('w')
+    expect(theBoard().input).toBeNull()
+    expect(playMoveSound).toHaveBeenCalledTimes(2)
+
+    const forfeit = aTurn('Ke2', {
+      ply: 3,
+      color: 'white',
+      attempts: Array.from({ length: 4 }, () => ({ ...aTurn('Ke2').attempts[0], result: 'illegal' as const })),
+    })
+    const over = faceoff({
+      fen: afterE5().fen,
+      llm_turn: forfeit,
+      llm_turns: [white, black, forfeit],
+      status: 'over',
+      result: '0-1',
+      end_reason: 'forfeit',
+    })
+    await act(async () => third.resolve(Response.json(over)))
+
+    const banner = await screen.findByTestId('banner')
+    expect(within(banner).getByText('qwen3.5:9b (Black) wins')).toBeInTheDocument()
+    expect(within(banner).getByText('by forfeit: qwen3.5:9b gave no legal move in 4 tries')).toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(3)
+    expect(theBoard().input).toBeNull()
+  })
 })

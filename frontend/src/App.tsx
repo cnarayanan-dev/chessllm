@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { modelsQuery } from '@/api/models'
 import type { GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -8,7 +10,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { humanColor, phase, waitingForLlm } from '@/game/gameLoop'
 import { useGameLoop } from '@/game/useGameLoop'
-import { bannerText, faceoff, llmName, newGameFrom, settingsChips, statusText } from '@/game/wording'
+import { bannerText, faceoff, llmName, settingsChips, statusText } from '@/game/wording'
+import { isPending, newGameRequest, type Models } from '@/settings/next-game'
+import { SettingsButton, SettingsModal } from '@/settings/SettingsModal'
 
 const NO_MOVES: readonly string[] = []
 
@@ -67,14 +71,19 @@ function Thinking({ game, hidden }: { game: GameState; hidden: boolean }) {
 }
 
 export default function App() {
-  const { state, newGame, humanMove } = useGameLoop()
-  const { game, error, request } = state
+  const { state, newGame, humanMove, changeNext } = useGameLoop()
+  const { game, error, request, next } = state
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  // The models as the Settings modal last listed them, or null until it has: they decide whether thinking is on.
+  const modelsList = useQuery({ ...modelsQuery, enabled: false })
+  const models: Models = modelsList.isError ? null : (modelsList.data ?? null)
+  const pending = game !== null && next !== null && isPending(next, models, game.settings)
   const running = waitingForLlm(state)
   const human = game && humanColor(game)
   // A new array with every state, so the same position given again snaps a rejected move's piece back.
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
-  // Another game under the running game's settings, or the default game if none could be loaded.
-  const startNewGame = () => newGame(game ? newGameFrom(game.settings) : null)
+  // The next game, as set up in the Settings modal, or the default game if none could be loaded.
+  const startNewGame = () => newGame(next ? newGameRequest(next, models) : null)
 
   return (
     <div className="min-h-svh text-sm">
@@ -82,12 +91,24 @@ export default function App() {
         <span className="font-semibold">♞ ChessLLM</span>
         <div className="ml-2 flex flex-wrap gap-1.5">
           {game && settingsChips(game).map((chip) => <Badge variant="secondary" key={chip}>{chip}</Badge>)}
+          {pending && <Badge className="bg-primary/10 text-primary">changes apply next game</Badge>}
         </div>
         <span className="flex-1" />
         <Button variant="ghost" onClick={startNewGame}>
           New game
         </Button>
+        <SettingsButton onClick={() => setSettingsOpen(true)} />
       </header>
+      {game && next && (
+        <SettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          running={game.settings}
+          next={next}
+          onNextChange={changeNext}
+          onStartNext={newGame}
+        />
+      )}
       <main className="grid grid-cols-[minmax(320px,560px)_340px] justify-center gap-8 px-5 pt-7 pb-10 max-[960px]:grid-cols-[minmax(280px,560px)]">
         {game ? (
           <Board
