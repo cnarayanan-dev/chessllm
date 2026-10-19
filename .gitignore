@@ -5,4 +5,6 @@ __pycache__/
 .idea/
 games/
 frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
 chessllm/static/dist/
