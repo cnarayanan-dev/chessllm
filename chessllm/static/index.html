@@ -80,10 +80,16 @@
   .switch { width: 34px; height: 20px; border-radius: 99px; background: var(--line); border: 0; position: relative; cursor: pointer; flex: none; }
   .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
   .switch.on { background: var(--accent); } .switch:disabled { opacity: .4; cursor: default; } .switch.on::after { left: 16px; }
-  .radios { display: grid; gap: 8px; padding: 14px 0; }
-  .radio { display: flex; flex-direction: column; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; text-align: left; background: transparent; }
+  .radios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 0; }
+  .radio { position: relative; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; text-align: center; background: transparent; }
+  .radio:hover { background: var(--hover); }
   .radio.on { border-color: var(--accent); background: var(--accent-soft); }
-  .radio .t { font-weight: 500; } .radio .d { color: var(--muted); font-size: 12.5px; }
+  .radio .t { font-weight: 500; } .radio .default { color: var(--faint); font-size: 11px; margin-left: 4px; }
+  /* The description shows only on hover, as a tooltip under the card. */
+  .radio .d { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 1; width: max-content; max-width: 220px;
+              padding: 6px 9px; border-radius: 5px; background: var(--ink); color: var(--bg); font-size: 12px; pointer-events: none;
+              opacity: 0; transition: opacity .12s; }
+  .radio:hover .d, .radio:focus-visible .d { opacity: 1; }
   .ro-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
   .ro-table td { padding: 9px 0; border-bottom: 1px solid var(--line); } .ro-table td:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
   .note { font-size: 12.5px; color: var(--muted); background: var(--soft); border-radius: 5px; padding: 8px 10px; margin-top: 16px; display: flex; align-items: center; gap: 8px; }
@@ -334,7 +340,7 @@ function showSettings() {
     card.className = "radio" + (next.retry_feedback === level ? " on" : "")
     card.setAttribute("role", "radio")
     card.setAttribute("aria-checked", next.retry_feedback === level)
-    card.append(chip(name + (level === "explained" ? " · default" : ""), "t"), chip(description, "d"))
+    card.append(chip(name, "t"), ...(level === "explained" ? [chip("default", "default")] : []), chip(description, "d"))
     card.onclick = () => { next.retry_feedback = level; showSettings() }
     return card
   }))
