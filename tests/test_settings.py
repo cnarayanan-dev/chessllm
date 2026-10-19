@@ -14,6 +14,7 @@ def test_the_models_offered_are_the_saved_list_with_whether_each_can_think(scrip
         ("qwen3.5:9b", True),
         ("qwen3.8:latest", True),
         ("llama3:8b", False),
+        ("gemma3:12b", False),
     ]
 
 

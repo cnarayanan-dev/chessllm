@@ -33,11 +33,13 @@ class LlmModel:
 
 
 # The models offered in the settings modal. Their thinking was checked on 2026-10-19 against the capabilities
-# `ollama show` reports and the Ollama library (ollama.com/library/qwen3.5, ollama.com/library/llama3).
+# `ollama show` reports and the Ollama library (ollama.com/library/qwen3.5, ollama.com/library/llama3,
+# ollama.com/library/gemma3).
 LLM_MODELS = [
     LlmModel("qwen3.5:9b", thinking=True),  # Qwen 3.5, 9.7B parameters
     LlmModel("qwen3.8:latest", thinking=True),  # Qwen 3.8, 27.8B parameters
     LlmModel("llama3:8b", thinking=False),  # Llama 3, 8B parameters
+    LlmModel("gemma3:12b", thinking=False),  # Gemma 3, 11.8B parameters
 ]
 
 
