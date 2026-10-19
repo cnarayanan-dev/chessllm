@@ -42,6 +42,37 @@
   .layout { display: grid; grid-template-columns: minmax(320px, 560px) 340px; gap: 32px; justify-content: center; padding: 28px 20px 40px; }
   @media (max-width: 960px) { .layout { grid-template-columns: minmax(280px, 560px); } }
   #board { width: 100%; aspect-ratio: 1 / 1; }
+  /* The Lichess look: brown squares, coordinates in the opposite square's colour, and tints instead of frames. */
+  .cm-chessboard.lichess .board .square.white { fill: #f0d9b5; }
+  .cm-chessboard.lichess .board .square.black { fill: #b58863; }
+  .cm-chessboard.lichess .board .border { stroke-width: 0; fill: #b58863; }
+  .cm-chessboard.lichess .coordinates { pointer-events: none; user-select: none; }
+  .cm-chessboard.lichess .coordinates .coordinate { font-size: 7px; font-weight: 600; cursor: default; }
+  .cm-chessboard.lichess .coordinates .coordinate.black { fill: #f0d9b5; }
+  .cm-chessboard.lichess .coordinates .coordinate.white { fill: #b58863; }
+  .cm-chessboard .markers .marker.last-move { fill: rgb(155, 199, 0); opacity: .41; }
+  .cm-chessboard .markers .marker.selected { fill: rgb(20, 85, 30); opacity: .5; }
+  .cm-chessboard .markers .marker.target-dot { fill: rgb(20, 85, 30); opacity: .5; }
+  .cm-chessboard .markers .marker.target-ring { fill: none; stroke: rgb(20, 85, 30); stroke-width: 4px; opacity: .5; }
+  .cm-chessboard .markers .marker.check { fill: url(#check-glow); }
+  .board-wrap { position: relative; }
+  /* Board flashes: an LLM turn's mistakes, shown when the turn comes back whatever the switch says.
+     No close button: each fades out after 7 s and is then removed. */
+  .flash { animation: flash-in .2s ease-out, flash-out .4s ease-in 7s forwards; pointer-events: none; z-index: 5; }
+  @keyframes flash-in { from { opacity: 0; } }
+  @keyframes flash-out { to { opacity: 0; visibility: hidden; } }
+  .center-flash { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 230px;
+    background: var(--bg); border: 1px solid var(--red); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.22); overflow: hidden; }
+  .center-flash .head { background: var(--red); color: #fff; font-weight: 600; font-size: 13px; padding: 6px 12px; }
+  .center-flash .line { font-family: ui-monospace, monospace; font-size: 13px; padding: 4px 12px; }
+  .center-flash .line:first-of-type { padding-top: 8px; }
+  .center-flash .line:last-of-type { padding-bottom: 8px; }
+  .center-flash .kind { color: var(--muted); }
+  .bubble { position: absolute; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; padding: 5px 9px;
+    background: var(--amber); color: #fff; border-radius: 6px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+  .bubble code { font-family: ui-monospace, monospace; }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: var(--amber); }
+  .square-ring { position: absolute; border: 3px solid var(--amber); border-radius: 3px; }
   .side { display: flex; flex-direction: column; gap: 14px; }
   .card { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
@@ -135,8 +166,13 @@
   <button class="ghost" id="openSettings">⚙ Settings <kbd>⌘K</kbd></button>
 </div>
 
+<svg width="0" height="0" style="position:absolute"><defs>
+  <radialGradient id="check-glow"><stop offset="0%" stop-color="#ff0000"/><stop offset="25%" stop-color="#e70000"/>
+    <stop offset="89%" stop-color="#a90000" stop-opacity="0"/><stop offset="100%" stop-color="#9e0000" stop-opacity="0"/></radialGradient>
+</defs></svg>
+
 <div class="layout">
-  <div id="board"></div>
+  <div class="board-wrap" id="boardWrap"><div id="board"></div></div>
   <div class="side">
     <div class="banner" id="banner" hidden>
       <div><div class="title" id="bannerTitle"></div><div class="reason" id="bannerReason"></div></div>
@@ -161,7 +197,7 @@
   </div>
 </div>
 
-<footer>Pieces: Merida by Armando Hernandez Marroquin, GPLv2+</footer>
+<footer>Pieces: Merida by Armando Hernandez Marroquin, GPLv2+ · Move sound: Kenney, CC0</footer>
 
 <div class="scrim" id="scrim" hidden></div>
 <div class="modal" id="settings" role="dialog" aria-modal="true" aria-label="Settings" hidden>
@@ -181,6 +217,8 @@
       <div class="radios" id="llmConstraints" style="grid-template-columns:repeat(2, 1fr)"></div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d" id="feedbackHint">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
       <div class="radios" id="feedbackLevels"></div>
+      <div class="row"><div class="txt"><div class="t">Move sound</div><div class="d">A click on every move, yours and the LLM's. Applies at once, in this browser.</div></div>
+        <button class="switch" id="moveSoundSwitch" role="switch" aria-label="Move sound"></button></div>
     </section>
     <section data-section="model">
       <h2>Model</h2>
@@ -200,15 +238,22 @@
 
 <script type="module">
 import {Chessboard, COLOR, INPUT_EVENT_TYPE} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/src/Chessboard.js"
-import {Markers, MARKER_TYPE} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/src/extensions/markers/Markers.js"
+import {Markers} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/src/extensions/markers/Markers.js"
 import {PromotionDialog, PROMOTION_DIALOG_RESULT_TYPE} from "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/src/extensions/promotion-dialog/PromotionDialog.js"
 
 const $ = id => document.getElementById(id)
 const board = new Chessboard($("board"), {
   assetsUrl: "https://cdn.jsdelivr.net/npm/cm-chessboard@8.15.3/assets/",
-  style: {pieces: {file: "/static/pieces/merida.svg"}},
-  extensions: [{class: Markers, props: {autoMarkers: MARKER_TYPE.frame}}, {class: PromotionDialog}],
+  style: {cssClass: "lichess", pieces: {file: "/static/pieces/merida.svg"}},
+  extensions: [{class: Markers, props: {autoMarkers: null}}, {class: PromotionDialog}],
 })
+const MARKER = {
+  lastMove: {class: "last-move", slice: "markerSquare"},
+  selected: {class: "selected", slice: "markerSquare"},
+  targetDot: {class: "target-dot", slice: "markerDot", position: "above"},
+  targetRing: {class: "target-ring", slice: "markerCircle"},
+  check: {class: "check", slice: "markerSquare"},
+}
 let state = null
 let waiting = false // the LLM is choosing a move, so no new game can start
 
@@ -272,6 +317,48 @@ function showMoves() {
   $("totals").textContent = `${tries} · ⚑ ${slips} notation ${slips === 1 ? "slip" : "slips"}`
 }
 
+// The picked-up piece's square, and a dot on every square it can reach, a ring where it captures. They come from
+// human_legal_moves, the same list that refuses illegal drops, so the page works out no moves of its own (ADR 0001).
+function showTargets(from) {
+  clearTargets()
+  board.addMarker(MARKER.selected, from)
+  const targets = new Set(state.human_legal_moves.filter(uci => uci.startsWith(from)).map(uci => uci.slice(2, 4)))
+  for (const to of targets) board.addMarker(board.getPiece(to) ? MARKER.targetRing : MARKER.targetDot, to)
+}
+
+function clearTargets() {
+  for (const type of [MARKER.selected, MARKER.targetDot, MARKER.targetRing]) board.removeMarkers(type)
+}
+
+// The side to move's king, if the backend says it is in check.
+function showCheck() {
+  if (!state.check) return
+  const king = state.turn === "white" ? "wk" : "bk"
+  const squares = [..."abcdefgh"].flatMap(file => [..."12345678"].map(rank => file + rank))
+  const square = squares.find(square => board.getPiece(square) === king)
+  if (square) board.addMarker(MARKER.check, square)
+}
+
+// One sound for every legal move, the human's and the LLM's. A page setting, like the switch below.
+const MOVE_SOUND_KEY = "chessllm.moveSound"
+const moveSound = new Audio("/static/sounds/move.mp3")
+let soundOn = localStorage.getItem(MOVE_SOUND_KEY) !== "off"
+function playMoveSound() {
+  if (!soundOn) return
+  moveSound.currentTime = 0
+  moveSound.play().catch(() => {}) // the browser may refuse until the page has had a click
+}
+function showMoveSoundSwitch() {
+  $("moveSoundSwitch").classList.toggle("on", soundOn)
+  $("moveSoundSwitch").setAttribute("aria-checked", soundOn)
+}
+$("moveSoundSwitch").onclick = () => {
+  soundOn = !soundOn
+  localStorage.setItem(MOVE_SOUND_KEY, soundOn ? "on" : "off")
+  showMoveSoundSwitch()
+}
+showMoveSoundSwitch()
+
 // The switch is a page setting, kept in the browser across games and reloads.
 const MISTAKES_KEY = "chessllm.showMistakes"
 function showMistakesSwitch() {
@@ -309,18 +396,65 @@ async function show(next) {
   const thinking = state.llm_turn?.thinking
   $("thinkingPanel").hidden = !thinking
   $("thinking").textContent = thinking ?? ""
-  board.removeMarkers(MARKER_TYPE.square)
+  clearTargets()
+  board.removeMarkers(MARKER.lastMove)
+  board.removeMarkers(MARKER.check) // at once, not after the pieces have moved
   if (state.last_move) {
-    board.addMarker(MARKER_TYPE.square, state.last_move.slice(0, 2))
-    board.addMarker(MARKER_TYPE.square, state.last_move.slice(2, 4))
+    board.addMarker(MARKER.lastMove, state.last_move.slice(0, 2))
+    board.addMarker(MARKER.lastMove, state.last_move.slice(2, 4))
   }
   // The human's pieces at the bottom. The board turns after the position is set: an animated turn redraws a stale position.
   const turn = board.getOrientation() !== COLOR[human]
   await board.setPosition(state.fen, animate && !turn)
   if (turn) await board.setOrientation(COLOR[human])
+  showCheck() // once the position is set, so the king is found where it now stands
   board.disableMoveInput() // stays locked once the game is over, until "New game"
   if (state.status === "playing" && state.human_legal_moves.length) board.enableMoveInput(onMoveInput, COLOR[human])
 }
+
+// Board flashes: a turn's result arrives at once, so its flashes appear together. The illegal tries are listed in a
+// card in the middle of the board, and a Notation slip rings the square the move landed on.
+function flashNode(tag, className, ...children) {
+  const node = document.createElement(tag)
+  node.className = className
+  node.append(...children)
+  return node
+}
+
+function clearFlashes() {
+  document.querySelectorAll(".flash").forEach(flash => flash.remove())
+}
+
+function flashTurn(turn, landedOn) {
+  clearFlashes()
+  const illegal = turn.attempts.filter(a => a.result !== "legal" && !a.error)
+  const error = turn.attempts.find(a => a.error)?.error // a forfeit with no answer
+  const forfeit = !turn.attempts.some(a => a.result === "legal")
+  if (illegal.length || forfeit) {
+    const head = !forfeit ? `✗ LLM move illegal${illegal.length > 1 ? ` ×${illegal.length}` : ""}`
+      : error ? "✗ LLM forfeits: no answer" : `✗ LLM forfeits: ${illegal.length} illegal moves`
+    const card = flashNode("div", "flash center-flash", flashNode("div", "head", head))
+    for (const attempt of illegal) {
+      const kind = flashNode("span", "kind", `${attempt.result} · try ${turn.attempts.indexOf(attempt) + 1} of 4`)
+      card.append(flashNode("div", "line", flashNode("s", "", attempt.move), " ", kind))
+    }
+    if (error) card.append(flashNode("div", "line", flashNode("span", "kind", `⚠ ${error}`)))
+    $("boardWrap").append(card)
+  }
+  const slip = turn.attempts.find(a => a.notation_slip)
+  const square = slip && $("board").querySelector(`rect.square[data-square="${landedOn}"]`)
+  if (square) {
+    const wrap = $("boardWrap").getBoundingClientRect()
+    const box = square.getBoundingClientRect()
+    const [x, y] = [box.left - wrap.left, box.top - wrap.top]
+    const ring = flashNode("div", "flash square-ring")
+    Object.assign(ring.style, {left: `${x}px`, top: `${y}px`, width: `${box.width}px`, height: `${box.height}px`})
+    const bubble = flashNode("div", "flash bubble", "⚑ written ", flashNode("code", "", `"${slip.move}"`), ` → ${slip.san}`)
+    Object.assign(bubble.style, {left: `${x + box.width / 2}px`, top: `${y}px`})
+    $("boardWrap").append(ring, bubble)
+  }
+}
+addEventListener("animationend", event => { if (event.animationName === "flash-out") event.target.remove() })
 
 // The board stays locked while the LLM thinks, and a running timer shows the app has not frozen.
 // settings are those of the game the LLM is moving in. Returns the next state, or null on an error.
@@ -364,6 +498,7 @@ async function receive(received) {
 // running (another tab, or this page before a reload). The page can't attach to that turn, so it checks the game
 // every 2s until the turn has landed. A stale state also gets a 409, and the first check settles it.
 async function llmTurn() {
+  const turnsBefore = state.llm_turns.length
   const next = await whileLlmMoves(state.settings, async () => {
     try {
       return await api("POST", "/api/games/current/llm-turn")
@@ -376,7 +511,10 @@ async function llmTurn() {
       }
     }
   })
+  const landed = next && next.llm_turns.length > turnsBefore // only a turn that has just landed
+  if (landed && next.llm_turn.attempts.some(attempt => attempt.result === "legal")) playMoveSound() // not a forfeit
   await show(next ?? state)
+  if (landed) flashTurn(next.llm_turn, next.last_move?.slice(2, 4))
 }
 
 // The human's move comes back at once, so the castling rook, an en passant capture or a promotion shows before the
@@ -393,15 +531,22 @@ async function play(uci) {
     await show(state) // snap the piece back to the backend's position
     return
   }
+  playMoveSound() // once the backend has taken the move, so a rejected one stays silent
   await receive(next)
 }
 
 function onMoveInput(event) {
   const legal = state.human_legal_moves
   switch (event.type) {
-    case INPUT_EVENT_TYPE.moveInputStarted:
-      return legal.some(uci => uci.startsWith(event.squareFrom))
+    case INPUT_EVENT_TYPE.moveInputStarted: {
+      const movable = legal.some(uci => uci.startsWith(event.squareFrom))
+      if (movable) showTargets(event.squareFrom)
+      return movable
+    }
+    case INPUT_EVENT_TYPE.moveInputCanceled:
+      return clearTargets()
     case INPUT_EVENT_TYPE.validateMoveInput: {
+      clearTargets() // on a drop, or a click on another piece, which picks that one up next
       const uci = event.squareFrom + event.squareTo
       if (legal.includes(uci)) {
         play(uci)
@@ -577,6 +722,7 @@ async function newGame() {
   if (waiting) return
   $("error").hidden = true
   closeSettings()
+  clearFlashes()
   let started
   try {
     started = await api("POST", "/api/games", next)

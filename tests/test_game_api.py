@@ -98,3 +98,14 @@ def test_a_human_move_on_blacks_turn_is_rejected(scripted):
 
     assert response.status_code == 400
     assert client.get("/api/games/current").json() == before
+
+
+def test_the_state_says_whether_the_side_to_move_is_in_check(scripted):
+    client, _ = scripted(["e5", "Qh4"])
+    assert client.post("/api/games").json()["check"] is False
+
+    assert play_move(client, "e2e4").json()["check"] is False
+    response = play_move(client, "f2f3")  # 1. e4 e5 2. f3 Qh4+
+
+    assert response.json()["pgn"] == "1. e4 e5 2. f3 Qh4+"
+    assert response.json()["check"] is True
