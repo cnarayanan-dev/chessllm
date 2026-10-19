@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { expect, test, vi } from 'vitest'
 import type { Attempt, GameState } from '@/api/types'
 import { MovesCard } from '@/components/moves/MovesCard'
-import { aGame, aTurn } from '@/test/games'
+import { aGame, aTurn, chaosAttempt, chaosGame, E4, E5, NF3, plies } from '@/test/games'
+
+const NF6: [string, string, string] = ['g8f6', 'Nf6', 'rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2']
 
 const moveList = () => screen.getByTestId('moves')
 /** The move list's text, one row per move number: its number, White's and Black's move. */
@@ -18,7 +20,7 @@ const rows = () => {
 }
 
 test('lists the moves, one row per move number, the last move marked', () => {
-  render(<MovesCard game={aGame({ pgn: '1. e4 e5 2. Nf3', llm_turns: [aTurn('e5')] })} />)
+  render(<MovesCard game={aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })} />)
 
   expect(rows()).toEqual([
     ['1.', 'e4', 'e5'],
@@ -30,7 +32,7 @@ test('lists the moves, one row per move number, the last move marked', () => {
 
 test('clicking a move views the position after it', async () => {
   const onView = vi.fn()
-  render(<MovesCard game={aGame({ pgn: '1. e4 e5 2. Nf3', llm_turns: [aTurn('e5')] })} viewed={null} onView={onView} />)
+  render(<MovesCard game={aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })} viewed={null} onView={onView} />)
 
   await userEvent.click(within(moveList()).getByRole('button', { name: 'e5' }))
   await userEvent.click(within(moveList()).getByRole('button', { name: 'Nf3' }))
@@ -39,7 +41,7 @@ test('clicking a move views the position after it', async () => {
 })
 
 test('the move viewed in the history is marked, and the last move still is', () => {
-  render(<MovesCard game={aGame({ pgn: '1. e4 e5 2. Nf3', llm_turns: [aTurn('e5')] })} viewed={2} onView={vi.fn()} />)
+  render(<MovesCard game={aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })} viewed={2} onView={vi.fn()} />)
 
   expect(within(moveList()).getByText('e5')).toHaveClass('viewed')
   expect(within(moveList()).getByText('e5')).toHaveAttribute('aria-current', 'step')
@@ -60,7 +62,7 @@ const withMistakes = (): GameState => {
       anAttempt('g8f6', 'legal', { san: 'Nf6', notation_slip: true }),
     ],
   })
-  return aGame({ pgn: '1. e4 Nf6', llm_turn: turn, llm_turns: [turn] })
+  return aGame({ plies: plies(E4, NF6), llm_turn: turn, llm_turns: [turn] })
 }
 
 const chips = () => [...moveList().querySelectorAll('.mistake')].map((chip) => chip.textContent)
@@ -86,7 +88,7 @@ test('a forfeited turn has no move, but its illegal tries show under the ply the
       anAttempt('Bb4', 'ambiguous'),
     ],
   })
-  render(<MovesCard game={aGame({ pgn: '1. e4', llm_turn: turn, llm_turns: [turn], status: 'over' })} />)
+  render(<MovesCard game={aGame({ plies: plies(E4), llm_turn: turn, llm_turns: [turn], status: 'over' })} />)
 
   expect(rows()).toEqual([['1.', 'e4', '']])
   expect(chips()).toEqual([
@@ -99,10 +101,35 @@ test('a forfeited turn has no move, but its illegal tries show under the ply the
 
 test('a forfeit with no answer shows why', () => {
   const turn = aTurn('', { attempts: [anAttempt(null, 'timeout', { error: 'no answer within 300s' })] })
-  render(<MovesCard game={aGame({ pgn: '1. e4', llm_turn: turn, llm_turns: [turn], status: 'over' })} />)
+  render(<MovesCard game={aGame({ plies: plies(E4), llm_turn: turn, llm_turns: [turn], status: 'over' })} />)
 
   expect(chips()).toEqual(['⚠ no answer within 300s'])
   expect(within(moveList()).getByText('⚠ no answer within 300s')).toHaveClass('mistake', 'error')
+})
+
+test("under Chaos rules a chaos move is listed as the LLM wrote it, in red, a spawn in purple, with no chip", () => {
+  render(<MovesCard game={chaosGame(8)} />)
+
+  expect(rows()).toEqual([
+    ['1.', 'e4', 'Bb4'],
+    ['2.', 'c3', 'Qg5'],
+    ['3.', 'd4', 'e5'],
+    ['4.', 'Bxg5', 'Qd5'],
+  ])
+  expect(within(moveList()).getByText('Bb4')).toHaveClass('chaos')
+  expect(within(moveList()).getByText('Qg5')).toHaveClass('chaos')
+  expect(within(moveList()).getByText('Qd5')).toHaveClass('spawn')
+  expect(within(moveList()).getByText('Qd5')).not.toHaveClass('chaos')
+  expect(within(moveList()).getByText('e5')).not.toHaveClass('chaos')
+  expect(chips()).toEqual([])
+})
+
+test('an invalid try before a chaos move stays struck through under it', () => {
+  const turn = aTurn('Bb4', { attempts: [anAttempt('Bb9', 'invalid'), chaosAttempt('Bb4', { kind: 'chaos', from: 'f8', to: 'b4', piece: 'b', rook: null, reason: 'the bishop on f8 moves' } as const)] })
+  render(<MovesCard game={chaosGame(2, { llm_turn: turn, llm_turns: [turn] })} />)
+
+  expect(chips()).toEqual(['✗ Bb9 invalid · try 1'])
+  expect(within(moveList()).getByText('Bb4')).toHaveClass('chaos')
 })
 
 const totals = () => screen.getByTestId('totals').textContent

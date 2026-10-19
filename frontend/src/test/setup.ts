@@ -6,6 +6,7 @@ import { resetBoards } from '@/test/fakeChessboard'
 // jsdom can't draw cm-chessboard's SVG, so every test gets the fake board.
 vi.mock('cm-chessboard/src/Chessboard.js', () => import('@/test/fakeChessboard'))
 vi.mock('cm-chessboard/src/extensions/markers/Markers.js', () => import('@/test/fakeChessboard'))
+vi.mock('cm-chessboard/src/extensions/arrows/Arrows.js', () => import('@/test/fakeChessboard'))
 vi.mock('cm-chessboard/src/extensions/promotion-dialog/PromotionDialog.js', () => import('@/test/fakeChessboard'))
 
 afterEach(() => {

@@ -13,6 +13,7 @@
   pull the view; it only marks that there is news.
 */
 import type { Color, GameState, LlmTurn, NewGame, Ply } from '@/api/types'
+import { played } from '@/game/chaos'
 import { nextGameFrom, type NextGame } from '@/settings/next-game'
 
 /** The one request to the backend in flight. */
@@ -143,9 +144,9 @@ function llmTurnLanded(game: GameState | null, next: GameState): boolean {
   return game !== null && next.game_id === game.game_id && next.llm_turns.length > game.llm_turns.length
 }
 
-/** Whether an LLM turn of the same game has landed in `next`, and played a move rather than forfeiting. */
+/** Whether an LLM turn of the same game has landed in `next`, and played a move (a chaos move too) rather than forfeiting. */
 function movedByLlm(game: GameState | null, next: GameState): boolean {
-  return llmTurnLanded(game, next) && (next.llm_turn?.attempts.some((attempt) => attempt.result === 'legal') ?? false)
+  return llmTurnLanded(game, next) && (next.llm_turn?.attempts.some(played) ?? false)
 }
 
 function send(state: GameLoop, request: NewRequest): GameLoop {

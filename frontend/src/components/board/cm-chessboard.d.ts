@@ -19,6 +19,7 @@ declare module 'cm-chessboard/src/Chessboard.js' {
   }
 
   export type MarkerType = { class: string; slice: string; position?: 'above' }
+  export type ArrowType = { class: string }
 
   export type PromotionResult = { type: 'pieceSelected' | 'canceled'; square: string; piece?: string }
 
@@ -42,6 +43,9 @@ declare module 'cm-chessboard/src/Chessboard.js' {
     // Added by the Markers extension.
     addMarker(type: MarkerType, square: string): void
     removeMarkers(type?: MarkerType, square?: string): void
+    // Added by the Arrows extension.
+    addArrow(type: ArrowType, from: string, to: string): void
+    removeArrows(type?: ArrowType, from?: string, to?: string): void
     // Added by the PromotionDialog extension.
     showPromotionDialog(square: string, color: BoardColor, callback: (result: PromotionResult) => void): void
   }
@@ -49,6 +53,10 @@ declare module 'cm-chessboard/src/Chessboard.js' {
 
 declare module 'cm-chessboard/src/extensions/markers/Markers.js' {
   export class Markers {}
+}
+
+declare module 'cm-chessboard/src/extensions/arrows/Arrows.js' {
+  export class Arrows {}
 }
 
 declare module 'cm-chessboard/src/extensions/promotion-dialog/PromotionDialog.js' {

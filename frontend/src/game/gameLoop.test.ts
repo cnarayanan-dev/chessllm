@@ -367,6 +367,7 @@ describe("the next game's setup", () => {
         white: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
         black: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
       },
+      rules: 'standard',
     })
 
     const changed = { ...shown.next!, mode: 'llm_faceoff' as const }

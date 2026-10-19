@@ -21,7 +21,9 @@ import {
   type NextGame,
   type RetryFeedback,
   canThink,
+  chaosAllowed,
   chooseHumanColor,
+  chooseRules,
   chooseMode,
   chooseModel,
   enforced,
@@ -58,6 +60,17 @@ const FEEDBACK_LEVELS: Options<RetryFeedback> = {
   hinted: { name: 'Hinted', description: 'Also lists the legal moves (muddies Free)' },
 }
 const colorName = (color: Color) => COLOR_NAMES[color].name
+
+/** The Chaos rules switch's hint: what it does, or why it can't be on. */
+function chaosHint(next: NextGame): string {
+  if (chaosAllowed(next))
+    return "The LLM's illegal moves are played on the board, as it wrote them, instead of retried. Badly formed notation is still retried. Unrated."
+  if (!next.custom) return "Only under Free or Listed: under Enforced decoding the LLM can't play an illegal move."
+  const enforcedSides = COLORS.filter((color) => enforced(next, color))
+    .map((color) => `${colorName(color)} plays under ${LLM_CONSTRAINTS[value(next, color, 'llm_constraints')].name}`)
+    .join(' and ')
+  return `Only when every LLM plays under Free or Listed: ${enforcedSides}.`
+}
 
 const SECTIONS = { game: '♟ Game', model: '◆ Model', advanced: '⚙ Advanced' }
 type Section = keyof typeof SECTIONS
@@ -265,6 +278,14 @@ function GameSection({ next, models, onNextChange }: SectionProps) {
           onChange={(choice) => onNextChange(setValue(next, color, 'retry_feedback', choice))}
         />
       ))}
+      <Row title="Chaos rules" description={chaosHint(next)}>
+        <Switch
+          aria-label="Chaos rules"
+          checked={next.rules === 'chaos' && chaosAllowed(next)}
+          disabled={!chaosAllowed(next)}
+          onCheckedChange={(on) => onNextChange(chooseRules(next, on ? 'chaos' : 'standard'))}
+        />
+      </Row>
       <Row title="Move sound" description="A click on every move, yours and the LLM's. Applies at once, in this browser.">
         <Switch
           aria-label="Move sound"

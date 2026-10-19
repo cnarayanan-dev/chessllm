@@ -211,3 +211,24 @@ test('the board is destroyed when it leaves the page', () => {
 
   expect(theBoard().destroyed).toBe(true)
 })
+
+const AFTER_CHAOS_BB4 = 'rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2'
+
+test("a chaos move's arrows and a spawn's marker are drawn on the position, and cleared with the next one", async () => {
+  const { rerender } = render(
+    <Board fen={AFTER_CHAOS_BB4} orientation="white" lastMove="f8b4" arrows={[['f8', 'b4']]} />,
+  )
+  const board = theBoard()
+  await waitFor(() => expect(board.arrows).toEqual([{ class: 'chaos-arrow', from: 'f8', to: 'b4' }]))
+  expect(board.marked('spawn')).toEqual([])
+
+  rerender(<Board fen={AFTER_E4} orientation="white" lastMove="Q@d5" spawn="d5" />)
+
+  await waitFor(() => expect(board.marked('spawn')).toEqual(['d5']))
+  expect(board.arrows).toEqual([])
+  expect(board.marked('last-move')).toEqual(['d5'])
+
+  rerender(<Board fen={AFTER_E4} orientation="white" lastMove="e2e4" />)
+
+  await waitFor(() => expect(board.marked('spawn')).toEqual([]))
+})

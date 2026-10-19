@@ -16,3 +16,20 @@
 .cm-chessboard .markers .marker.target-dot { fill: rgb(20, 85, 30); opacity: .5; }
 .cm-chessboard .markers .marker.target-ring { fill: none; stroke: rgb(20, 85, 30); stroke-width: 4px; opacity: .5; }
 .cm-chessboard .markers .marker.check { fill: url(#check-glow); }
+
+/* Chaos rules: a chaos move's red arrow (a castle's rook gets one too), and a Spawn's purple ring, which pops in. */
+.cm-chessboard .arrow.chaos-arrow .arrow-line { stroke: #e03e3e; stroke-linecap: round; opacity: .75; }
+.cm-chessboard .arrow.chaos-arrow .arrow-head { fill: #e03e3e; }
+.cm-chessboard .arrow.chaos-arrow { animation: chaos-in .25s ease-out; }
+/* The ring's own transform scales it to the square, so it pops in by its stroke rather than by a CSS transform. */
+.cm-chessboard .markers .marker.spawn { fill: #8e44c9; fill-opacity: .12; stroke: #8e44c9; stroke-width: 3px; opacity: .9;
+  animation: spawn-pop .5s ease-out; }
+@keyframes chaos-in { from { opacity: 0; } }
+@keyframes spawn-pop { 0% { stroke-width: 18px; opacity: 0; } 60% { stroke-width: 2px; opacity: 1; } }
+/* The caption under the board, with the resolver's reason: red for a chaos move, purple for a spawn. */
+.chaos-caption { border-radius: 6px; padding: 6px 10px; font-size: 13px; animation: chaos-in .25s ease-out; }
+.chaos-caption.chaos { background: #fbe4e4; color: #e03e3e; }
+.chaos-caption.spawn { background: #f1e6fa; color: #8e44c9; }
+@media (prefers-reduced-motion: reduce) {
+  .cm-chessboard .arrow.chaos-arrow, .cm-chessboard .markers .marker.spawn, .chaos-caption { animation: none; }
+}

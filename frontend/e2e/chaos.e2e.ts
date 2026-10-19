@@ -1,0 +1,159 @@
+// The journeys through a game under Chaos rules: the built app at / against FastAPI with scripted LLM players
+// (tests/e2e_server.py). The LLMs' illegal moves are played on the board, as the backend resolves them (ADR 0006).
+import { expect, test, type Page } from '@playwright/test'
+
+type Script = { white?: string[]; black?: string[] }
+
+const square = (page: Page, name: string) => page.locator(`.chessboard rect.square[data-square="${name}"]`)
+const pieceOn = (page: Page, name: string) => page.locator(`.chessboard g[data-piece][data-square="${name}"]`)
+async function expectPiece(page: Page, name: string, piece: string) {
+  await expect(pieceOn(page, name)).toHaveCount(1)
+  await expect(pieceOn(page, name)).toHaveAttribute('data-piece', piece)
+}
+const arrows = (page: Page) => page.locator('.chessboard .arrow.chaos-arrow')
+const spawnMarker = (page: Page) => page.locator('.chessboard .marker.spawn')
+const caption = (page: Page) => page.getByTestId('chaos-caption')
+const moves = (page: Page) => page.getByTestId('moves')
+const lastMove = (page: Page) => moves(page).locator('.ply.last')
+
+/** The human's move, as UCI, by clicking its two squares; waits until the move list ends with `then`. */
+async function move(page: Page, uci: string, then: string) {
+  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await expect(page.locator('.chessboard .board.input-enabled')).toBeAttached()
+  await square(page, uci.slice(0, 2)).click()
+  await square(page, uci.slice(2, 4)).click()
+  await expect(lastMove(page)).toHaveText(then)
+}
+
+/** Opens the page on a Standard rules Play LLM game, then sets up the next game in the Settings modal and starts it. */
+async function startFromSettings(page: Page, script: Script, setUp: (settings: ReturnType<Page['getByRole']>) => Promise<void>) {
+  await page.request.post('/e2e/script', { data: script })
+  const started = await page.request.post('/api/games', {
+    data: { mode: 'play_llm', white: { player: 'human' }, black: { player: 'llm' } },
+  })
+  expect(started.ok()).toBe(true)
+  await page.goto('/')
+  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await expect(page.getByText('Chaos rules', { exact: true })).toHaveCount(0)
+
+  await page.getByRole('button', { name: /Settings/ }).click()
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  await setUp(settings)
+  await settings.getByRole('button', { name: 'Start new game' }).click()
+  await expect(settings).toBeHidden()
+}
+
+test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castle, then King capture', async ({ page }) => {
+  await startFromSettings(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Kh6'] }, async (settings) => {
+    await settings.getByRole('switch', { name: 'Chaos rules' }).click()
+  })
+  await expect(page.getByText('Chaos rules', { exact: true })).toBeVisible()
+
+  // The bishop jumps over its own pawn on e7.
+  await move(page, 'e2e4', 'Bb4')
+  await expect(caption(page)).toContainText('Bf8→b4: the bishop on f8 moves')
+  await expect(arrows(page)).toHaveCount(1)
+  await expect(arrows(page)).toHaveAttribute('data-arrow', 'f8b4')
+  await expectPiece(page, 'b4', 'bb')
+  await expect(lastMove(page)).toHaveClass(/chaos/)
+  await expect(page.locator('.center-flash')).toHaveCount(0)
+
+  // The human's move clears the caption and the arrow.
+  await move(page, 'c2c3', 'Qg5')
+  await expect(arrows(page)).toHaveAttribute('data-arrow', 'd8g5')
+  await move(page, 'd2d4', 'e5')
+  await expect(caption(page)).toHaveCount(0)
+  await expect(arrows(page)).toHaveCount(0)
+
+  // The queen is taken, so the next queen move is a spawn.
+  await move(page, 'c1g5', 'Qd5')
+  await expect(caption(page)).toContainText('Qd5: no queen on the board; one appears on d5')
+  await expect(spawnMarker(page)).toHaveCount(1)
+  await expect(arrows(page)).toHaveCount(0)
+  await expectPiece(page, 'd5', 'bq')
+  await expect(lastMove(page)).toHaveClass(/spawn/)
+
+  // Castling with the knight still on g8: the king and the rook move anyway, the knight is taken.
+  await move(page, 'g1f3', 'O-O')
+  await expect(caption(page)).toContainText('O-O: illegal O-O: king e8→g8, rook h8→f8')
+  await expect(arrows(page)).toHaveAttribute('data-arrow', 'e8g8')
+  await expectPiece(page, 'g8', 'bk')
+  await expectPiece(page, 'f8', 'br')
+  await expect(pieceOn(page, 'e8')).toHaveCount(0)
+  await expect(pieceOn(page, 'h8')).toHaveCount(0)
+
+  // The king walks into the bishop's line, and the human takes it.
+  await move(page, 'b1d2', 'Kh6')
+  await move(page, 'g5h6', 'Bxh6')
+  const banner = page.getByTestId('banner')
+  await expect(banner).toContainText('White wins')
+  await expect(banner).toContainText(/by King capture: .+ left its king hanging/)
+  await expect(page.getByTestId('totals')).toHaveText('✗ 5 illegal tries · ⚑ 0 notation slips · ↯ 5 chaos moves (1 spawn)')
+
+  // The history replays the spawn and the chaos move, with their marker, arrow and caption.
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
+  await expect(page.getByTestId('status')).toHaveText('Viewing 4… Qd5 · → or Back to live')
+  await expect(caption(page)).toContainText('Qd5: no queen on the board; one appears on d5')
+  await expect(spawnMarker(page)).toHaveCount(1)
+  await expectPiece(page, 'd5', 'bq')
+
+  await moves(page).getByRole('button', { name: 'Bb4' }).click()
+  await expect(page.getByTestId('status')).toHaveText('Viewing 1… Bb4 · → or Back to live')
+  await expect(caption(page)).toContainText('Bf8→b4: the bishop on f8 moves')
+  await expect(arrows(page)).toHaveAttribute('data-arrow', 'f8b4')
+  await expect(spawnMarker(page)).toHaveCount(0)
+  await expectPiece(page, 'b4', 'bb')
+  await expect(pieceOn(page, 'f8')).toHaveCount(0)
+
+  await page.keyboard.press('ArrowLeft')
+  await expect(caption(page)).toHaveCount(0)
+  await expect(arrows(page)).toHaveCount(0)
+  await expectPiece(page, 'f8', 'bb')
+})
+
+test('an LLM faceoff under Chaos rules, started from the Settings modal, ends in King capture', async ({ page }) => {
+  // White's queen jumps to f7; Black ignores the check; White takes the king.
+  await startFromSettings(page, { white: ['Qxf7', 'Qxe8'], black: ['Nf6'] }, async (settings) => {
+    await settings.getByRole('radio', { name: /LLM faceoff/ }).click()
+    await settings.getByRole('switch', { name: 'Chaos rules' }).click()
+  })
+
+  const banner = page.getByTestId('banner')
+  await expect(banner).toContainText(/\(White\) wins/)
+  await expect(banner).toContainText(/by King capture: .+ \(Black\) left its king hanging/)
+  await expect(page.getByText('Chaos rules', { exact: true })).toBeVisible()
+  await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
+  await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)
+  await expect(moves(page).getByRole('button', { name: 'Qxe8' })).not.toHaveClass(/chaos/)
+  await expect(page.getByTestId('totals')).toContainText('↯ 1 chaos move (0 spawns)')
+  await expectPiece(page, 'e8', 'wq')
+
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByTestId('status')).toHaveText(/Viewing 1\. Qxf7/)
+  await expect(caption(page)).toContainText('Qd1→f7: no queen can reach f7 by its movement; d1 is nearest')
+  await expect(arrows(page)).toHaveAttribute('data-arrow', 'd1f7')
+})
+
+test('the Chaos rules switch is off limits while an LLM plays under Enforced decoding', async ({ page }) => {
+  await page.request.post('/e2e/script', { data: {} })
+  await page.request.post('/api/games', { data: { mode: 'play_llm', white: { player: 'human' }, black: { player: 'llm' } } })
+  await page.goto('/')
+  await page.getByRole('button', { name: /Settings/ }).click()
+  const settings = page.getByRole('dialog', { name: 'Settings' })
+  const chaos = settings.getByRole('switch', { name: 'Chaos rules' })
+  await expect(chaos).toBeEnabled()
+
+  await settings.getByRole('radio', { name: /^Blind enforced/ }).click()
+  await expect(chaos).toBeDisabled()
+  await expect(settings).toContainText("Only under Free or Listed: under Enforced decoding the LLM can't play an illegal move.")
+
+  // In a faceoff customized per LLM, one enforced side is enough.
+  await settings.getByRole('radio', { name: /^Free/ }).click()
+  await settings.getByRole('radio', { name: /LLM faceoff/ }).click()
+  await settings.getByRole('switch', { name: 'Customize per LLM' }).click()
+  await expect(chaos).toBeEnabled()
+  await settings.getByRole('radiogroup', { name: 'LLM constraints' }).nth(1).getByRole('radio', { name: /^Listed enforced/ }).click()
+  await expect(chaos).toBeDisabled()
+  await expect(settings).toContainText('Only when every LLM plays under Free or Listed: Black plays under Listed enforced.')
+})

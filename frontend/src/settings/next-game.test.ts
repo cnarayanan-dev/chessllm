@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import type { GameSettings, ModelInfo, SideValues } from '@/settings/next-game'
 import {
+  chaosAllowed,
   chooseHumanColor,
+  chooseRules,
   chooseMode,
   chooseModel,
   isPending,
@@ -76,10 +78,46 @@ test('a change is pending until the next game starts', () => {
   expect(isPending(next, models, playLlm)).toBe(true)
 })
 
-test('a running Chaos rules game makes the next game a change, as it plays under Standard rules', () => {
-  const chaos: GameSettings = { ...playLlm, rules: 'chaos' }
+describe('Chaos rules', () => {
+  test('the next game keeps the running game\'s Chaos rules', () => {
+    const chaos: GameSettings = { ...playLlm, rules: 'chaos' }
+    const next = nextGameFrom(chaos)
 
-  expect(isPending(nextGameFrom(chaos), models, chaos)).toBe(true)
+    expect(newGameRequest(next, models)).toMatchObject({ rules: 'chaos' })
+    expect(isPending(next, models, chaos)).toBe(false)
+  })
+
+  test('switched on, the next game plays under Chaos rules, a change until it starts', () => {
+    const next = chooseRules(nextGameFrom(playLlm), 'chaos')
+
+    expect(newGameRequest(next, models)).toMatchObject({ rules: 'chaos' })
+    expect(isPending(next, models, playLlm)).toBe(true)
+  })
+
+  test('possible only when every LLM plays under Free or Listed', () => {
+    const next = chooseRules(nextGameFrom(playLlm), 'chaos')
+    const enforcedNext = setValue(next, 'black', 'llm_constraints', 'blind_enforced')
+
+    expect(chaosAllowed(next)).toBe(true)
+    expect(chaosAllowed(enforcedNext)).toBe(false)
+    // The choice is kept, but the game plays under Standard rules, as the backend would refuse it.
+    expect(newGameRequest(enforcedNext, models)).toMatchObject({ rules: 'standard' })
+    expect(newGameRequest(setValue(enforcedNext, 'black', 'llm_constraints', 'listed'), models)).toMatchObject({
+      rules: 'chaos',
+    })
+  })
+
+  test('customized per LLM, one enforced side is enough to rule it out', () => {
+    // White under Free, Black under Listed enforced.
+    let next = chooseRules(nextGameFrom(faceoff), 'chaos')
+    expect(next.custom).toBe(true)
+    expect(chaosAllowed(next)).toBe(false)
+    expect(newGameRequest(next, models)).toMatchObject({ rules: 'standard' })
+
+    next = setValue(next, 'black', 'llm_constraints', 'listed')
+    expect(chaosAllowed(next)).toBe(true)
+    expect(newGameRequest(next, models)).toMatchObject({ rules: 'chaos' })
+  })
 })
 
 test('a running game whose settings leave out the rules plays under Standard rules', () => {

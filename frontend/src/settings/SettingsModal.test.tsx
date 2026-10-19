@@ -283,6 +283,58 @@ describe('Game section', () => {
     expect(screen.queryByRole('button', { name: 'Start new game' })).not.toBeInTheDocument()
   })
 
+  test('the Chaos rules switch, off by default, starts the next game under Chaos rules', async () => {
+    const { user, onStartNext } = await openSettings()
+    const chaos = screen.getByRole('switch', { name: 'Chaos rules' })
+
+    expect(chaos).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByText(/The LLM's illegal moves are played on the board/)).toBeInTheDocument()
+    await user.click(chaos)
+    expect(chaos).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText('changes apply next game')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Start new game' }))
+
+    expect(onStartNext).toHaveBeenCalledWith(expect.objectContaining({ mode: 'play_llm', rules: 'chaos' }))
+  })
+
+  test('a running Chaos rules game shows the switch on', async () => {
+    await openSettings({ ...playLlm, rules: 'chaos' })
+
+    expect(screen.getByRole('switch', { name: 'Chaos rules' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByText('changes apply next game')).not.toBeInTheDocument()
+  })
+
+  test.each(['Blind enforced', 'Listed enforced'])('%s disables Chaos rules, with a hint why', async (constraints) => {
+    const { user } = await openSettings({ ...playLlm, rules: 'chaos' })
+
+    await user.click(radio(new RegExp(`^${constraints}`)))
+
+    const chaos = screen.getByRole('switch', { name: 'Chaos rules' })
+    expect(chaos).toHaveAttribute('aria-checked', 'false')
+    expect(chaos).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText(/Only under Free or Listed: under Enforced decoding the LLM can't play an illegal move\./))
+      .toBeInTheDocument()
+  })
+
+  test('customized, one enforced LLM disables Chaos rules, naming its side', async () => {
+    const { user, onStartNext } = await openSettings({
+      ...faceoff,
+      black: llm('qwen3.5:9b', { llm_constraints: 'listed_enforced' }),
+    })
+
+    const chaos = screen.getByRole('switch', { name: 'Chaos rules' })
+    expect(chaos).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText(/Only when every LLM plays under Free or Listed: Black plays under Listed enforced\./))
+      .toBeInTheDocument()
+
+    const [, black] = screen.getAllByRole('radiogroup', { name: 'LLM constraints' })
+    await user.click(within(black).getByRole('radio', { name: /^Free/ }))
+    await user.click(chaos)
+    await user.click(screen.getByRole('button', { name: 'Start new game' }))
+
+    expect(onStartNext).toHaveBeenCalledWith(expect.objectContaining({ mode: 'llm_faceoff', rules: 'chaos' }))
+  })
+
   test('the Move sound switch is kept in this browser', async () => {
     const { user } = await openSettings()
     const sound = screen.getByRole('switch', { name: 'Move sound' })

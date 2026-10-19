@@ -2,6 +2,7 @@
 // test play the user's part: start a drag, drop a piece, pick a promotion piece.
 // setup.ts puts it in place of cm-chessboard for every test.
 import type {
+  ArrowType,
   BoardColor,
   ChessboardProps,
   MarkerType,
@@ -22,6 +23,7 @@ export const INPUT_EVENT_TYPE = {
 export const PROMOTION_DIALOG_RESULT_TYPE = { pieceSelected: 'pieceSelected', canceled: 'canceled' } as const
 
 export class Markers {}
+export class Arrows {}
 export class PromotionDialog {}
 
 /** Every board created, in order. Cleared by resetBoards(). */
@@ -43,6 +45,7 @@ export class Chessboard {
   position = '8/8/8/8/8/8/8/8'
   orientation: BoardColor = 'w'
   markers: { class: string; square: string }[] = []
+  arrows: { class: string; from: string; to: string }[] = []
   input: { handler: (event: MoveInputEvent) => boolean | void; color: BoardColor | undefined } | null = null
   promotion: { square: string; color: BoardColor; callback: (result: PromotionResult) => void } | null = null
   destroyed = false
@@ -106,6 +109,14 @@ export class Chessboard {
 
   removeMarkers(type?: MarkerType) {
     this.markers = type ? this.markers.filter((marker) => marker.class !== type.class) : []
+  }
+
+  addArrow(type: ArrowType, from: string, to: string) {
+    this.arrows.push({ class: type.class, from, to })
+  }
+
+  removeArrows(type?: ArrowType) {
+    this.arrows = type ? this.arrows.filter((arrow) => arrow.class !== type.class) : []
   }
 
   /** The squares that carry a marker of this class. */

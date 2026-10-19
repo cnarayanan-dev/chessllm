@@ -9,6 +9,7 @@ type Side = Schemas['HumanSide-Input'] | LlmSide
 
 export type Mode = NewGame['mode']
 export type Color = 'white' | 'black'
+export type Rules = NewGame['rules']
 export type LlmConstraints = LlmSide['llm_constraints']
 export type RetryFeedback = LlmSide['retry_feedback']
 /** The settings an LLM side plays under, besides its model. */
@@ -25,6 +26,8 @@ export type NextGame = {
   models: Record<Color, string>
   custom: boolean
   sides: Record<Color, SideValues>
+  /** Chaos rules as chosen, kept while they aren't possible: the game then plays under Standard rules. */
+  rules: Rules
 }
 
 /** The model list from GET /api/models, or null until it has loaded. */
@@ -62,6 +65,7 @@ export function nextGameFrom(settings: GameSettings): NextGame {
     models: { white: of('white').model, black: of('black').model },
     custom: settings.mode === 'llm_faceoff' && !sameSide(sides.white, sides.black),
     sides,
+    rules: settings.rules ?? 'standard', // the API leaves out Standard rules
   }
 }
 
@@ -86,6 +90,11 @@ export const thinkingOn = (next: NextGame, models: Models, color: Color) =>
   (next.custom ? canThink(models, next.models[color]) : thinkingAllowed(next, models))
 
 export const enforced = (next: NextGame, color: Color) => ENFORCED.includes(value(next, color, 'llm_constraints'))
+
+/** Chaos rules need an LLM that can play an illegal move: every LLM side under Free or Listed. */
+export const chaosAllowed = (next: NextGame) => llmColors(next).every((color) => !enforced(next, color))
+
+export const chooseRules = (next: NextGame, rules: Rules): NextGame => ({ ...next, rules })
 
 /** Sets a side's setting: that side's alone when customizing, else both sides'. */
 export function setValue<K extends keyof SideValues>(
@@ -150,8 +159,8 @@ export function newGameRequest(next: NextGame, models: Models): NewGame {
   })
   const side = (color: Color): Side =>
     next.mode === 'play_llm' && color === next.human_color ? { player: 'human' } : llm(color)
-  // Standard rules until the Settings modal gets its Chaos rules switch (#28).
-  return { mode: next.mode, white: side('white'), black: side('black'), rules: 'standard' }
+  const rules = next.rules === 'chaos' && chaosAllowed(next) ? 'chaos' : 'standard'
+  return { mode: next.mode, white: side('white'), black: side('black'), rules }
 }
 
 /** Whether the next game differs from the running one, so the changes apply only once it starts. */

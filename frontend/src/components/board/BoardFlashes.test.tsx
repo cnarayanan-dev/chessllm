@@ -4,7 +4,7 @@ import type { Attempt, LlmTurn } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { BoardFlashes } from '@/components/board/BoardFlashes'
 import type { Flash } from '@/game/gameLoop'
-import { aTurn } from '@/test/games'
+import { aTurn, chaosAttempt } from '@/test/games'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -41,6 +41,18 @@ test("an LLM turn's illegal tries are listed in the middle of the board, by kind
 
   expect(card()).toEqual(['✗ LLM move illegal ×2', 'Nf9 invalid · try 1 of 4', 'Ke7 illegal · try 2 of 4'])
   expect(screen.getByText('Nf9').tagName).toBe('S')
+})
+
+test('under Chaos rules, the chaos move played is not an illegal try: only the badly formed one before it is', () => {
+  renderFlash(aTurn('Bb4', { attempts: [anAttempt('Bb9', 'invalid'), chaosAttempt('Bb4', { kind: 'chaos', from: 'f8', to: 'b4', piece: 'b', rook: null, reason: 'the bishop on f8 moves' } as const)] }))
+
+  expect(card()).toEqual(['✗ LLM move illegal', 'Bb9 invalid · try 1 of 4'])
+})
+
+test('a chaos move at the first try flashes nothing in the middle of the board', () => {
+  renderFlash(aTurn('Bb4', { attempts: [chaosAttempt('Bb4', { kind: 'chaos', from: 'f8', to: 'b4', piece: 'b', rook: null, reason: 'the bishop on f8 moves' } as const)] }))
+
+  expect(card()).toBeNull()
 })
 
 test('one illegal try has no count', () => {

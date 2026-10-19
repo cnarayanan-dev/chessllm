@@ -1,5 +1,5 @@
 /* The move list, ported from the old plain-HTML page, with its red and amber. */
-.moves-card { --red: #e03e3e; --red-soft: #fbe4e4; --amber: #c77d00; --amber-soft: #fbf0d9; --hover: #efefed; --faint: #9b9a97; }
+.moves-card { --red: #e03e3e; --red-soft: #fbe4e4; --amber: #c77d00; --amber-soft: #fbf0d9; --purple: #8e44c9; --hover: #efefed; --faint: #9b9a97; }
 /* Move list: one row per move number, with the LLM's mistakes under its move */
 .moves { font-family: ui-monospace, monospace; font-size: 13px; min-height: 1.5em; display: grid; grid-template-columns: 28px 1fr 1fr; row-gap: 2px; }
 .moves .no { color: var(--faint); }
@@ -10,6 +10,9 @@
 /* The move viewed in the move history, in the board's last-move green. */
 .moves .ply.viewed { background: rgba(155, 199, 0, .41); }
 .moves .ply.slip { box-shadow: inset 0 0 0 1px var(--amber); }
+/* Under Chaos rules: a chaos move in red, a spawn in purple, as the LLM wrote them. */
+.moves .ply.chaos { color: var(--red); font-weight: 600; }
+.moves .ply.spawn { color: var(--purple); font-weight: 600; }
 .mistakes { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px; margin: 1px 0 5px; }
 .mistake { font-size: 11.5px; border-radius: 4px; padding: 0 6px; line-height: 18px; white-space: nowrap; }
 .mistake.illegal, .mistake.error { background: var(--red-soft); color: var(--red); }

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { chaosShown, type ChaosShown } from '@/game/chaos'
 import {
   boardInput,
   humanColor,
@@ -25,6 +26,7 @@ import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsButton, SettingsModal } from '@/settings/SettingsModal'
 
 const NO_MOVES: readonly string[] = []
+const NO_ARROWS: readonly [string, string][] = []
 
 type StatusProps = {
   game: GameState | null
@@ -95,6 +97,16 @@ function Banner({ game, onNewGame }: { game: GameState; onNewGame: () => void })
   )
 }
 
+/** The caption under the board for the chaos move or spawn shown, live or in the move history. */
+function ChaosCaption({ chaos }: { chaos: ChaosShown }) {
+  return (
+    <div data-testid="chaos-caption" className={`chaos-caption ${chaos.kind}`} key={chaos.caption}>
+      {chaos.kind === 'spawn' ? '✦ ' : '↯ '}
+      {chaos.caption}
+    </div>
+  )
+}
+
 /** The last LLM turn's thinking. In a faceoff it stays up, named by its side, as the next turn starts at once. */
 function Thinking({ game, hidden }: { game: GameState; hidden: boolean }) {
   const thinking = game.llm_turn?.thinking
@@ -128,6 +140,10 @@ export default function App() {
   const human = game && humanColor(game)
   // A new array with every state, so the same position given again snaps a rejected move's piece back.
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
+  // The chaos move or spawn shown, from the ply's own resolution: the same live and in the history. Kept while
+  // the ply is, so the board doesn't draw its arrows again at every render.
+  const shownPly = shown?.move ?? null
+  const chaos = useMemo(() => chaosShown(shownPly), [shownPly])
   // The next game, as set up in the Settings modal, or the default game if none could be loaded.
   const startNewGame = () => newGame(next ? newGameRequest(next, models) : null)
 
@@ -173,21 +189,26 @@ export default function App() {
       )}
       <main className="grid grid-cols-[minmax(320px,560px)_340px] justify-center gap-8 px-5 pt-7 pb-10 max-[960px]:grid-cols-[minmax(280px,560px)]">
         {game && shown ? (
-          <Board
-            fen={shown.fen}
-            orientation={human ?? 'white'}
-            lastMove={shown.lastMove}
-            animateFrom={shown.animateFrom}
-            check={shown.check}
-            // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
-            // position the move left. Locked while the move history shows the past.
-            input={boardInput(state)}
-            legalMoves={legalMoves}
-            onMove={humanMove}
-          >
-            {/* The live turn's flashes, kept off a past position. */}
-            {!history && <BoardFlashes flash={state.flash} />}
-          </Board>
+          <div className="flex flex-col gap-2.5">
+            <Board
+              fen={shown.fen}
+              orientation={human ?? 'white'}
+              lastMove={shown.lastMove}
+              animateFrom={shown.animateFrom}
+              check={shown.check}
+              // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
+              // position the move left. Locked while the move history shows the past.
+              input={boardInput(state)}
+              legalMoves={legalMoves}
+              arrows={chaos?.arrows ?? NO_ARROWS}
+              spawn={chaos?.spawn ?? null}
+              onMove={humanMove}
+            >
+              {/* The live turn's flashes, kept off a past position. */}
+              {!history && <BoardFlashes flash={state.flash} />}
+            </Board>
+            {chaos && <ChaosCaption chaos={chaos} />}
+          </div>
         ) : (
           <div className="aspect-square w-full" />
         )}

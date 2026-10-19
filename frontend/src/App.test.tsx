@@ -7,7 +7,7 @@ import type { GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { fakeBackend, later } from '@/test/fakeBackend'
 import { theBoard } from '@/test/fakeChessboard'
-import { aGame, aTurn, afterE4, afterE5 } from '@/test/games'
+import { aGame, aTurn, afterE4, afterE5, chaosGame } from '@/test/games'
 
 vi.mock('@/components/board/moveSound', () => ({ playMoveSound: vi.fn(), isMoveSoundOn: () => true, setMoveSoundOn: vi.fn() }))
 
@@ -200,12 +200,12 @@ test('a draw at the Move cap names the cap in the banner', async () => {
 })
 
 test('an end reason the page has no wording for is spelled out', async () => {
-  const over = afterE4({ status: 'over', result: '1-0', end_reason: 'king_capture' })
+  const over = afterE4({ status: 'over', result: '1-0', end_reason: 'variant_win' })
   fakeBackend().on('GET /api/games/current', Response.json(over))
 
   renderApp()
 
-  expect(await screen.findByText('by king capture')).toBeInTheDocument()
+  expect(await screen.findByText('by variant win')).toBeInTheDocument()
 })
 
 test('playing Black: the board turns, and the LLM opens', async () => {
@@ -475,5 +475,124 @@ describe('the move history', () => {
     await userEvent.keyboard('{ArrowLeft}')
 
     expect(status()).toHaveTextContent('Your move (White)')
+  })
+})
+
+describe('Chaos rules', () => {
+  const caption = () => screen.queryByTestId('chaos-caption')
+
+  test('a Standard rules game has no chip, caption or arrow', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+
+    expect(screen.queryByText('Chaos rules')).not.toBeInTheDocument()
+    expect(caption()).not.toBeInTheDocument()
+    expect(board.arrows).toEqual([])
+  })
+
+  test('a chaos move lands with a red arrow and its caption, in red in the move list, with no illegal flash', async () => {
+    const turn = later()
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(chaosGame(1)))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+    renderApp()
+    expect(await screen.findByText('Chaos rules')).toBeInTheDocument()
+    const board = await waitFor(theBoard)
+
+    await act(async () => turn.resolve(Response.json(chaosGame(2))))
+
+    await waitFor(() => expect(caption()).toHaveTextContent('Bf8→b4: the bishop on f8 moves'))
+    await waitFor(() => expect(board.arrows).toEqual([{ class: 'chaos-arrow', from: 'f8', to: 'b4' }]))
+    expect(board.position).toBe('rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR')
+    expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'Bb4' })).toHaveClass('chaos')
+    expect(screen.queryByText(/LLM move illegal|LLM forfeits/)).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('moves')).queryByText(/✗/)).not.toBeInTheDocument()
+    expect(playMoveSound).toHaveBeenCalledTimes(1)
+  })
+
+  test("the caption and arrow go once the human's move lands", async () => {
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(chaosGame(2)))
+      .on('POST /api/games/current/moves', Response.json(chaosGame(3)))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    renderApp()
+    await waitFor(() => expect(caption()).toBeInTheDocument())
+
+    await drop('c2', 'c3')
+
+    await waitFor(() => expect(caption()).not.toBeInTheDocument())
+    await waitFor(() => expect(theBoard().arrows).toEqual([]))
+  })
+
+  test('a spawn pops in with a purple marker and its caption, in purple in the move list', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(chaosGame(8)))
+    renderApp()
+    const board = await waitFor(theBoard)
+
+    await waitFor(() => expect(caption()).toHaveTextContent('Qd5: no queen on the board; one appears on d5'))
+    expect(caption()).toHaveClass('spawn')
+    await waitFor(() => expect(board.marked('spawn')).toEqual(['d5']))
+    expect(board.arrows).toEqual([])
+    expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'Qd5' })).toHaveClass('spawn')
+  })
+
+  test("an illegal castle moves the rook too, the arrow on the king's move", async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(chaosGame(10)))
+    renderApp()
+    const board = await waitFor(theBoard)
+
+    await waitFor(() => expect(caption()).toHaveTextContent('O-O: illegal O-O: king e8→g8, rook h8→f8'))
+    await waitFor(() => expect(board.arrows).toEqual([{ class: 'chaos-arrow', from: 'e8', to: 'g8' }]))
+    expect(board.position).toBe('rnb2rk1/pppp1ppp/8/3qp1B1/1b1PP3/2P2N2/PP3PPP/RN1QKB1R')
+    expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'O-O' })).toHaveClass('chaos')
+  })
+
+  test('stepping onto a chaos move or spawn in the history replays it, with its arrow or marker and caption', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(chaosGame(10)))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(caption()).toBeInTheDocument())
+
+    await userEvent.keyboard('{ArrowLeft}') // 5. Nf3
+    await waitFor(() => expect(caption()).not.toBeInTheDocument())
+    await waitFor(() => expect(board.arrows).toEqual([]))
+
+    await userEvent.keyboard('{ArrowLeft}') // 4… Qd5, the spawn
+    await waitFor(() => expect(caption()).toHaveTextContent('Qd5: no queen on the board; one appears on d5'))
+    await waitFor(() => expect(board.marked('spawn')).toEqual(['d5']))
+
+    await userEvent.click(within(screen.getByTestId('moves')).getByRole('button', { name: 'Bb4' }))
+    expect(status()).toHaveTextContent('Viewing 1… Bb4')
+    await waitFor(() => expect(caption()).toHaveTextContent('Bf8→b4: the bishop on f8 moves'))
+    await waitFor(() => expect(board.arrows).toEqual([{ class: 'chaos-arrow', from: 'f8', to: 'b4' }]))
+    expect(board.marked('spawn')).toEqual([])
+    // Animated in from the position before it.
+    expect(board.positionsSet.slice(-2)).toEqual([
+      { position: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR', animated: false },
+      { position: 'rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR', animated: true },
+    ])
+  })
+
+  test('the totals add the chaos moves and spawns', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(chaosGame(8)))
+    renderApp()
+
+    expect(await screen.findByTestId('totals')).toHaveTextContent(
+      '✗ 3 illegal tries · ⚑ 0 notation slips · ↯ 3 chaos moves (1 spawn)',
+    )
+  })
+
+  test('the banner names a King capture: the human took the king the LLM left hanging', async () => {
+    fakeBackend().on(
+      'GET /api/games/current',
+      Response.json(chaosGame(13, { status: 'over', result: '1-0', end_reason: 'king_capture', human_legal_moves: [] })),
+    )
+    renderApp()
+
+    const banner = await screen.findByTestId('banner')
+    expect(within(banner).getByText('White wins')).toBeInTheDocument()
+    expect(within(banner).getByText('by King capture: qwen3.5:9b left its king hanging')).toBeInTheDocument()
   })
 })

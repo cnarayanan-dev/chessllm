@@ -9,6 +9,7 @@ import {
   type MarkerType,
   type MoveInputEvent,
 } from 'cm-chessboard/src/Chessboard.js'
+import { Arrows } from 'cm-chessboard/src/extensions/arrows/Arrows.js'
 import { Markers } from 'cm-chessboard/src/extensions/markers/Markers.js'
 import {
   PROMOTION_DIALOG_RESULT_TYPE,
@@ -18,6 +19,7 @@ import 'cm-chessboard/assets/chessboard.css'
 import 'cm-chessboard/assets/extensions/markers/markers.css'
 import 'cm-chessboard/assets/extensions/promotion-dialog/promotion-dialog.css'
 import markersSprite from 'cm-chessboard/assets/extensions/markers/markers.svg?no-inline'
+import arrowsSprite from 'cm-chessboard/assets/extensions/arrows/arrows.svg?no-inline'
 import { useEffect, useRef, type ReactNode } from 'react'
 import './board.css'
 
@@ -46,6 +48,10 @@ type BoardProps = {
    * next position or legal moves arrive; giving the same position again snaps the piece back.
    */
   onMove?: (uci: string) => void
+  /** Red arrows drawn once the position is set, from→to: a chaos move's. */
+  arrows?: readonly (readonly [string, string])[]
+  /** The square a Spawn popped in on, marked in purple. */
+  spawn?: string | null
   /** Laid over the board, such as the board flashes. */
   children?: ReactNode
 }
@@ -56,10 +62,14 @@ const MARKER = {
   targetDot: { class: 'target-dot', slice: 'markerDot', position: 'above' },
   targetRing: { class: 'target-ring', slice: 'markerCircle' },
   check: { class: 'check', slice: 'markerSquare' },
+  spawn: { class: 'spawn', slice: 'markerCircle', position: 'above' },
 } satisfies Record<string, MarkerType>
+
+const CHAOS_ARROW = { class: 'chaos-arrow' }
 
 const SQUARES = [...'abcdefgh'].flatMap((file) => [...'12345678'].map((rank) => file + rank))
 const NO_MOVES: readonly string[] = []
+const NO_ARROWS: readonly (readonly [string, string])[] = []
 
 // The side to move's king, the side being the FEN's second field.
 function showCheck(board: Chessboard, fen: string) {
@@ -88,6 +98,8 @@ export function Board({
   check = false,
   input = null,
   legalMoves = NO_MOVES,
+  arrows = NO_ARROWS,
+  spawn = null,
   onMove,
   children,
 }: BoardProps) {
@@ -109,7 +121,11 @@ export function Board({
       position: first.current.fen,
       orientation: COLOR[first.current.orientation],
       style: { cssClass: 'lichess', pieces: { file: '/static/pieces/merida.svg' } },
-      extensions: [{ class: Markers, props: { autoMarkers: null, sprite: markersSprite } }, { class: PromotionDialog }],
+      extensions: [
+        { class: Markers, props: { autoMarkers: null, sprite: markersSprite } },
+        { class: Arrows, props: { sprite: arrowsSprite } },
+        { class: PromotionDialog },
+      ],
     })
     board.current = created
     return () => {
@@ -159,6 +175,8 @@ export function Board({
         clearTargets(current)
         current.removeMarkers(MARKER.lastMove)
         current.removeMarkers(MARKER.check) // at once, not after the pieces have moved
+        current.removeMarkers(MARKER.spawn)
+        current.removeArrows(CHAOS_ARROW)
         if (lastMove) {
           // A drop (Q@d5) has a target square only, in the same place as a move's.
           if (!lastMove.includes('@')) current.addMarker(MARKER.lastMove, lastMove.slice(0, 2))
@@ -172,12 +190,15 @@ export function Board({
         drawn.current = fen
         if (turn) await current.setOrientation(COLOR[orientation])
         if (check) showCheck(current, fen) // once the position is set, so the king is found where it now stands
+        // Once the pieces have moved, so the arrows point at where they landed and the spawn pops in on its piece.
+        for (const [from, to] of arrows) current.addArrow(CHAOS_ARROW, from, to)
+        if (spawn) current.addMarker(MARKER.spawn, spawn)
         current.disableMoveInput()
         if (input && legalMoves.length) current.enableMoveInput(onMoveInput, COLOR[input])
       })
     }
     sync.current()
-  }, [fen, orientation, lastMove, animateFrom, check, input, legalMoves, onMove])
+  }, [fen, orientation, lastMove, animateFrom, check, input, legalMoves, arrows, spawn, onMove])
 
   return (
     <div className="board-wrap">

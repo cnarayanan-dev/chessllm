@@ -5,6 +5,7 @@
 */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { LlmTurn } from '@/api/types'
+import { played } from '@/game/chaos'
 import type { Flash } from '@/game/gameLoop'
 import './flashes.css'
 
@@ -13,10 +14,11 @@ const SHOWN_MS = 7400
 
 type Box = { x: number; y: number; width: number; height: number }
 
+// A chaos move was played, so it is shown on the board with its arrow and caption, not as an illegal try here.
 function CenterFlash({ turn }: { turn: LlmTurn }) {
-  const illegal = turn.attempts.filter((attempt) => attempt.result !== 'legal' && !attempt.error)
+  const illegal = turn.attempts.filter((attempt) => !played(attempt) && !attempt.error)
   const error = turn.attempts.find((attempt) => attempt.error)?.error // a forfeit with no answer
-  const forfeit = !turn.attempts.some((attempt) => attempt.result === 'legal')
+  const forfeit = !turn.attempts.some(played)
   if (!illegal.length && !forfeit) return null
   const head = !forfeit
     ? `✗ LLM move illegal${illegal.length > 1 ? ` ×${illegal.length}` : ''}`

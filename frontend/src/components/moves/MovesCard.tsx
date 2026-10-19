@@ -1,20 +1,22 @@
 /*
   The moves card: the move history, one row per move number. It runs no chess logic (ADR 0001): the moves are the
-  game's PGN as the backend wrote it.
+  game's plies as the backend wrote them, a chaos move in the LLM's own spelling, in red, and a spawn in purple.
 */
 import { useState, type ReactNode } from 'react'
 import type { GameState, LlmTurn } from '@/api/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { chaosResolution, played } from '@/game/chaos'
 import { faceoff, ICON, llmColors } from '@/game/wording'
 import './moves.css'
 
-// A chip per failed attempt, in order, then an amber chip if the move it played was a notation slip.
+// A chip per failed attempt, in order, then an amber chip if the move it played was a notation slip. A chaos move
+// is the move itself, so it has no chip.
 function mistakeChips(turn: LlmTurn | undefined): ReactNode[] {
   return (turn?.attempts ?? []).flatMap((attempt, index) => {
     const key = `${turn!.ply}-${index}`
     if (attempt.notation_slip) return [<span key={key} className="mistake slip">{`⚑ written "${attempt.move}"`}</span>]
-    if (attempt.result === 'legal') return []
+    if (played(attempt)) return []
     if (attempt.error) return [<span key={key} className="mistake error">{`⚠ ${attempt.error}`}</span>]
     return [
       <span key={key} className="mistake illegal">
@@ -30,28 +32,33 @@ function mistakeChips(turn: LlmTurn | undefined): ReactNode[] {
 // show under the ply the LLM failed to play. With the switch off, only the moves.
 // Each move is a button that views the position after it in the move history; the one viewed is marked.
 function MoveList({ game, mistakes: shown, viewed, onView }: { game: GameState; mistakes: boolean } & Viewing) {
-  const sans = game.pgn.split(' ').filter((token) => token && !token.endsWith('.')) // drop the move numbers
   const turns = new Map(game.llm_turns.map((turn) => [turn.ply, turn]))
-  const plies = Math.max(sans.length, ...game.llm_turns.map((turn) => turn.ply))
+  const plies = Math.max(game.plies.length, ...game.llm_turns.map((turn) => turn.ply))
   const rows = []
   for (let white = 1; white <= plies; white += 2) {
     const mistakes: ReactNode[] = []
     rows.push(<span key={`no${white}`} className="no">{`${(white + 1) / 2}.`}</span>)
     for (const ply of [white, white + 1]) {
       const slip = shown && turns.get(ply)?.attempts.at(-1)?.notation_slip
+      const move = game.plies[ply - 1]
+      const chaos = chaosResolution(move)?.kind
       const className =
-        'ply' + (ply === sans.length ? ' last' : '') + (slip ? ' slip' : '') + (ply === viewed ? ' viewed' : '')
-      const san = sans[ply - 1]
+        'ply' +
+        (ply === game.plies.length ? ' last' : '') +
+        (slip ? ' slip' : '') +
+        (chaos ? ` ${chaos}` : '') +
+        (ply === viewed ? ' viewed' : '')
       rows.push(
-        san ? (
+        move ? (
           <button
             type="button"
             key={ply}
             className={className}
             aria-current={ply === viewed ? 'step' : undefined}
+            title={chaos === 'spawn' ? 'Spawn' : chaos ? 'Chaos move' : undefined}
             onClick={() => onView?.(ply)}
           >
-            {san}
+            {move.written}
           </button>
         ) : (
           <span key={ply} className={className} />
@@ -88,7 +95,14 @@ function totalsText(game: GameState): string {
         stats?.illegal_moves === null && illegal === 0
           ? '✗ illegal tries n/a'
           : `✗ ${illegal} illegal ${illegal === 1 ? 'try' : 'tries'}`
-      const total = `${tries} · ⚑ ${slips} notation ${slips === 1 ? 'slip' : 'slips'}`
+      // Under Chaos rules, the chaos moves too, spawns included.
+      const chaosMoves = stats?.chaos_moves
+      const spawns = stats?.spawns ?? 0
+      const chaos =
+        chaosMoves == null
+          ? ''
+          : ` · ↯ ${chaosMoves} chaos ${chaosMoves === 1 ? 'move' : 'moves'} (${spawns} ${spawns === 1 ? 'spawn' : 'spawns'})`
+      const total = `${tries} · ⚑ ${slips} notation ${slips === 1 ? 'slip' : 'slips'}${chaos}`
       const side = game.settings[color]
       return faceoff(game) && side.player === 'llm' ? `${ICON[color]} ${side.model} ${total}` : total
     })
