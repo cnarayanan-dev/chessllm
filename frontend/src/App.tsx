@@ -12,54 +12,16 @@ import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
 import { ReasoningPanel } from '@/components/reasoning/ReasoningPanel'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, type ChaosShown } from '@/game/chaos'
-import {
-  boardInput,
-  orientation,
-  shownPosition,
-  waitingForLlm,
-  type History,
-  type Shown,
-} from '@/game/gameLoop'
+import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { useGameLoop } from '@/game/useGameLoop'
-import { historyStatusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsModal } from '@/settings/SettingsModal'
 
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
-
-type StatusProps = {
-  game: GameState
-  /** The past position viewed in the move history, which the status names, with Back to live. */
-  viewing: { shown: Shown; history: History; onLive: () => void }
-}
-
-/**
- * The status line, only while the move history shows the past: it says so, with Back to live, marked once the game
- * has moved on. Whose move it is and the LLM's move timer are in the player strips.
- */
-function Status({ game, viewing }: StatusProps) {
-  return (
-    <Card size="sm">
-      <CardContent className="flex items-center gap-3 text-muted-foreground">
-        <span data-testid="status">{historyStatusText(viewing.shown)}</span>
-        <span className="flex-1" />
-        <Button size="sm" variant={viewing.history.news ? 'default' : 'outline'} onClick={viewing.onLive}>
-          {!viewing.history.news
-            ? 'Back to live'
-            : game.status === 'over'
-              ? 'Back to live · game over'
-              : 'Back to live · new move'}
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
 
 /** Whether a key press belongs to a field or a dialog rather than to the move history. */
 const keyTakenElsewhere = (event: KeyboardEvent) =>
@@ -82,7 +44,7 @@ function ChaosCaption({ chaos }: { chaos: ChaosShown }) {
 }
 
 export default function App() {
-  const { state, newGame, humanMove, changeNext, viewPly, step, backToLive } = useGameLoop()
+  const { state, newGame, humanMove, changeNext, viewPly, step } = useGameLoop()
   const { game, error, request, next, history } = state
   const shown = shownPosition(state)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -161,6 +123,7 @@ export default function App() {
           ) : (
             error !== null && (
               <Alert variant="destructive">
+                <AlertTitle>Could not start a game</AlertTitle>
                 <AlertDescription className="text-destructive">{error}</AlertDescription>
               </Alert>
             )
@@ -194,12 +157,7 @@ export default function App() {
             <div className="aspect-square w-full" />
           )
         }
-        moves={
-          <>
-            {game && history && shown && <Status game={game} viewing={{ shown, history, onLive: backToLive }} />}
-            {game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
-          </>
-        }
+        moves={game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
       />
       <footer className="px-5 pb-6 text-center text-xs text-muted-foreground">
         Pieces: Merida by Armando Hernandez Marroquin, GPLv2+ · Move sound: Kenney, CC0 · Model logos: LobeHub Icons, MIT

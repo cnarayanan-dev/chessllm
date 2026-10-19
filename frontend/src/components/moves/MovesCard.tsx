@@ -1,13 +1,17 @@
 /*
   The moves card: the move history, one row per move number. It runs no chess logic (ADR 0001): the moves are the
   game's plies as the backend wrote them, a chaos move in the LLM's own spelling, in red, and a spawn in purple.
+  The list has a set height, about 8 rows, and scrolls: to the latest move, or while a past position is viewed, just
+  enough to keep the move viewed in view.
 */
-import { useState, type ReactNode } from 'react'
-import type { GameState, LlmTurn } from '@/api/types'
-import { Card, CardContent } from '@/components/ui/card'
+import { PenLine, TriangleAlert, X, Zap, type LucideIcon } from 'lucide-react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import type { Color, GameState, LlmTurn } from '@/api/types'
+import { Card, CardContent, CardTitle } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { chaosResolution, played } from '@/game/chaos'
-import { faceoff, ICON, llmColors } from '@/game/wording'
+import { COLOR_NAMES, faceoff, llmColors } from '@/game/wording'
 import './moves.css'
 
 // A chip per failed attempt, in order, then an amber chip if the move it played was a notation slip. A chaos move
@@ -15,12 +19,26 @@ import './moves.css'
 function mistakeChips(turn: LlmTurn | undefined): ReactNode[] {
   return (turn?.attempts ?? []).flatMap((attempt, index) => {
     const key = `${turn!.ply}-${index}`
-    if (attempt.notation_slip) return [<span key={key} className="mistake slip">{`⚑ written "${attempt.move}"`}</span>]
+    if (attempt.notation_slip) {
+      return [
+        <span key={key} className="mistake slip">
+          <PenLine aria-hidden="true" />
+          {`written "${attempt.move}"`}
+        </span>,
+      ]
+    }
     if (played(attempt)) return []
-    if (attempt.error) return [<span key={key} className="mistake error">{`⚠ ${attempt.error}`}</span>]
+    if (attempt.error) {
+      return [
+        <span key={key} className="mistake error">
+          <TriangleAlert aria-hidden="true" />
+          {attempt.error}
+        </span>,
+      ]
+    }
     return [
       <span key={key} className="mistake illegal">
-        {'✗ '}
+        <X aria-hidden="true" />
         <s>{attempt.move}</s>
         {` ${attempt.result} · try ${index + 1}`}
       </span>,
@@ -30,8 +48,15 @@ function mistakeChips(turn: LlmTurn | undefined): ReactNode[] {
 
 // One row per move number, and under each LLM move its mistakes. A forfeited turn has no move, but its chips still
 // show under the ply the LLM failed to play. With the switch off, only the moves.
-// Each move is a button that views the position after it in the move history; the one viewed is marked.
-function MoveList({ game, mistakes: shown, viewed, onView }: { game: GameState; mistakes: boolean } & Viewing) {
+// Each move is a button that views the position after it in the move history; the one viewed is marked, and the
+// ply that `arrived` while a past position was viewed pulses.
+function MoveList({
+  game,
+  mistakes: shown,
+  viewed,
+  onView,
+  arrived,
+}: { game: GameState; mistakes: boolean; arrived: number | null } & Viewing) {
   const turns = new Map(game.llm_turns.map((turn) => [turn.ply, turn]))
   const plies = Math.max(game.plies.length, ...game.llm_turns.map((turn) => turn.ply))
   const rows = []
@@ -47,7 +72,8 @@ function MoveList({ game, mistakes: shown, viewed, onView }: { game: GameState; 
         (ply === game.plies.length ? ' last' : '') +
         (slip ? ' slip' : '') +
         (chaos ? ` ${chaos}` : '') +
-        (ply === viewed ? ' viewed' : '')
+        (ply === viewed ? ' viewed' : '') +
+        (ply === arrived ? ' arrived' : '')
       rows.push(
         move ? (
           <button
@@ -81,33 +107,58 @@ function MoveList({ game, mistakes: shown, viewed, onView }: { game: GameState; 
   )
 }
 
-// One total per LLM side, named by its model in a faceoff.
-function totalsText(game: GameState): string {
-  return llmColors(game)
-    .map((color) => {
-      // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
-      const attempts = game.llm_turns.filter((turn) => turn.color === color).flatMap((turn) => turn.attempts)
-      const illegal = attempts.filter((attempt) => attempt.result !== 'legal' && !attempt.error).length
-      const stats = game.stats[color]
-      const slips = stats?.notation_slips ?? 0
-      // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
-      const tries =
-        stats?.illegal_moves === null && illegal === 0
-          ? '✗ illegal tries n/a'
-          : `✗ ${illegal} illegal ${illegal === 1 ? 'try' : 'tries'}`
-      // Under Chaos rules, the chaos moves too, spawns included.
-      const chaosMoves = stats?.chaos_moves
-      const spawns = stats?.spawns ?? 0
-      const chaos =
-        chaosMoves == null
-          ? ''
-          : ` · ↯ ${chaosMoves} chaos ${chaosMoves === 1 ? 'move' : 'moves'} (${spawns} ${spawns === 1 ? 'spawn' : 'spawns'})`
-      const total = `${tries} · ⚑ ${slips} notation ${slips === 1 ? 'slip' : 'slips'}${chaos}`
-      const side = game.settings[color]
-      return faceoff(game) && side.player === 'llm' ? `${ICON[color]} ${side.model} ${total}` : total
-    })
-    .join('  ·  ')
+// An LLM side's totals: its illegal tries and notation slips, and under Chaos rules its chaos moves, spawns included.
+function sideTotals(game: GameState, color: Color): [LucideIcon, string][] {
+  // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
+  const attempts = game.llm_turns.filter((turn) => turn.color === color).flatMap((turn) => turn.attempts)
+  const illegal = attempts.filter((attempt) => attempt.result !== 'legal' && !attempt.error).length
+  const stats = game.stats[color]
+  const slips = stats?.notation_slips ?? 0
+  // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
+  const tries =
+    stats?.illegal_moves === null && illegal === 0 ? 'illegal tries n/a' : `${illegal} illegal ${illegal === 1 ? 'try' : 'tries'}`
+  const totals: [LucideIcon, string][] = [
+    [X, tries],
+    [PenLine, `${slips} notation ${slips === 1 ? 'slip' : 'slips'}`],
+  ]
+  const chaosMoves = stats?.chaos_moves
+  const spawns = stats?.spawns ?? 0
+  if (chaosMoves != null) {
+    totals.push([
+      Zap,
+      `${chaosMoves} chaos ${chaosMoves === 1 ? 'move' : 'moves'} (${spawns} ${spawns === 1 ? 'spawn' : 'spawns'})`,
+    ])
+  }
+  return totals
 }
+
+// A line per LLM side, named by its side and model in a faceoff.
+function Totals({ game }: { game: GameState }) {
+  return (
+    <div className="totals" data-testid="totals">
+      {llmColors(game).map((color) => {
+        const side = game.settings[color]
+        return (
+          <div key={color}>
+            {faceoff(game) && side.player === 'llm' && `${COLOR_NAMES[color]} · ${side.model} `}
+            {sideTotals(game, color).map(([Icon, total], index) => (
+              <Fragment key={total}>
+                {index > 0 && ' · '}
+                <span className="total">
+                  <Icon aria-hidden="true" />
+                  {total}
+                </span>
+              </Fragment>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// How long a move that arrives while a past position is viewed pulses: the animation's two beats (moves.css).
+const PULSE_MS = 1600
 
 // The switch is a page setting, kept in the browser across games and reloads.
 const MISTAKES_KEY = 'chessllm.showMistakes'
@@ -125,23 +176,59 @@ export function MovesCard({ game, viewed = null, onView }: { game: GameState } &
     setShow(on)
     localStorage.setItem(MISTAKES_KEY, on ? 'on' : 'off')
   }
+  // A move that arrives while a past position is viewed pulses, since the view stays where it is: briefly, and not
+  // once the view is back at live.
+  const [plies, setPlies] = useState(game.plies.length)
+  const [arrived, setArrived] = useState<number | null>(null)
+  if (plies !== game.plies.length) {
+    setPlies(game.plies.length)
+    setArrived(viewed !== null && game.plies.length > plies ? game.plies.length : null)
+  } else if (arrived !== null && viewed === null) {
+    setArrived(null)
+  }
+  useEffect(() => {
+    if (arrived === null) return
+    const timer = setTimeout(() => setArrived(null), PULSE_MS)
+    return () => clearTimeout(timer)
+  }, [arrived])
+  // The list scrolls when a move or a try lands, or the view or the switch changes; not at every state the game
+  // sends, so it leaves alone a user who scrolled up to read.
+  const latest = game.llm_turns.at(-1)
+  const landed = `${game.game_id} ${game.plies.length} ${game.llm_turns.length} ${latest?.attempts.length ?? 0}`
+  const list = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const viewport = list.current?.querySelector<HTMLElement>('[data-slot=scroll-area-viewport]')
+    if (!viewport) return
+    if (viewed === null) {
+      viewport.scrollTop = viewport.scrollHeight
+      return
+    }
+    // The start position has no move: the list's top.
+    const move = viewport.querySelector<HTMLElement>('[aria-current=step]')
+    if (!move) {
+      viewport.scrollTop = 0
+      return
+    }
+    const shown = viewport.getBoundingClientRect()
+    const row = move.getBoundingClientRect()
+    if (row.top < shown.top) viewport.scrollTop -= shown.top - row.top
+    else if (row.bottom > shown.bottom) viewport.scrollTop += row.bottom - shown.bottom
+  }, [landed, viewed, show])
   return (
     <Card size="sm" className="moves-card">
       <CardContent>
-        <div className="mb-1.5 flex items-center">
-          <span className="text-[11px] tracking-[.06em] text-muted-foreground uppercase">Moves</span>
+        <div className="mb-2.5 flex items-center">
+          <CardTitle className="font-semibold text-card-foreground">Moves</CardTitle>
           <span className="flex-1" />
           <label className="flex cursor-pointer items-center gap-[7px] text-xs text-muted-foreground select-none">
             <Switch size="sm" checked={show} onCheckedChange={toggle} />
             Show LLM mistakes
           </label>
         </div>
-        <MoveList game={game} mistakes={show} viewed={viewed} onView={onView} />
-        {show && (
-          <div className="mt-2.5 border-t pt-2 text-xs text-muted-foreground" data-testid="totals">
-            {totalsText(game)}
-          </div>
-        )}
+        <ScrollArea ref={list} className="move-scroll">
+          <MoveList game={game} mistakes={show} viewed={viewed} onView={onView} arrived={arrived} />
+        </ScrollArea>
+        {show && <Totals game={game} />}
       </CardContent>
     </Card>
   )

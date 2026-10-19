@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, test, vi } from 'vitest'
 import type { Attempt, GameState } from '@/api/types'
@@ -49,6 +49,85 @@ test('the move viewed in the history is marked, and the last move still is', () 
   expect(within(moveList()).getByText('Nf3')).not.toHaveClass('viewed')
 })
 
+test('a new move arriving while a past position is viewed makes the latest move pulse', () => {
+  const before = aGame({ plies: plies(E4, E5), llm_turns: [aTurn('e5')] })
+  const { rerender } = render(<MovesCard game={before} viewed={1} onView={vi.fn()} />)
+  expect(moveList().querySelector('.arrived')).toBeNull()
+
+  rerender(<MovesCard game={aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })} viewed={1} onView={vi.fn()} />)
+
+  expect(within(moveList()).getByText('Nf3')).toHaveClass('last', 'arrived')
+  expect(within(moveList()).getByText('e4')).toHaveClass('viewed')
+})
+
+test('a new move arriving at the live position does not pulse, nor does stepping back', () => {
+  const before = aGame({ plies: plies(E4, E5), llm_turns: [aTurn('e5')] })
+  const after = aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })
+  const { rerender } = render(<MovesCard game={before} viewed={null} onView={vi.fn()} />)
+
+  rerender(<MovesCard game={after} viewed={null} onView={vi.fn()} />)
+  rerender(<MovesCard game={after} viewed={2} onView={vi.fn()} />)
+
+  expect(moveList().querySelector('.arrived')).toBeNull()
+})
+
+test('the pulse is brief: it ends after a moment, or as soon as the view returns to live', () => {
+  vi.useFakeTimers()
+  try {
+    const before = aGame({ plies: plies(E4, E5), llm_turns: [aTurn('e5')] })
+    const after = aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })
+    const { rerender } = render(<MovesCard game={before} viewed={1} onView={vi.fn()} />)
+    rerender(<MovesCard game={after} viewed={1} onView={vi.fn()} />)
+    expect(within(moveList()).getByText('Nf3')).toHaveClass('arrived')
+
+    act(() => vi.advanceTimersByTime(2000))
+    expect(within(moveList()).getByText('Nf3')).not.toHaveClass('arrived')
+
+    rerender(<MovesCard game={before} viewed={1} onView={vi.fn()} />)
+    rerender(<MovesCard game={after} viewed={1} onView={vi.fn()} />)
+    expect(within(moveList()).getByText('Nf3')).toHaveClass('arrived')
+    rerender(<MovesCard game={after} viewed={null} onView={vi.fn()} />)
+    expect(within(moveList()).getByText('Nf3')).not.toHaveClass('arrived')
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+/** The list's scroll position, which jsdom doesn't lay out: the list is 1000px high, and scrolls to its bottom. */
+function scrollable() {
+  const viewport = document.querySelector<HTMLElement>('[data-slot=scroll-area-viewport]')!
+  let top = 0
+  Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 })
+  Object.defineProperty(viewport, 'scrollTop', { configurable: true, get: () => top, set: (value: number) => (top = value) })
+  return viewport
+}
+
+test('a new move scrolls the live list to it, but a game state with no new move leaves where the user scrolled', () => {
+  const game = aGame({ plies: plies(E4, E5), llm_turns: [aTurn('e5')] })
+  const { rerender } = render(<MovesCard game={game} />)
+  const list = scrollable()
+  list.scrollTop = 100 // the user scrolled up to read
+
+  rerender(<MovesCard game={{ ...game }} />)
+  expect(list.scrollTop).toBe(100)
+
+  rerender(<MovesCard game={aGame({ plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })} />)
+  expect(list.scrollTop).toBe(1000)
+})
+
+test("a further try in the latest LLM turn scrolls the live list to its chip", () => {
+  const turn = aTurn('', { attempts: [anAttempt('Nf9', 'invalid')] })
+  const game = aGame({ plies: plies(E4), llm_turn: turn, llm_turns: [turn] })
+  const { rerender } = render(<MovesCard game={game} />)
+  const list = scrollable()
+  list.scrollTop = 100
+
+  const further = { ...turn, attempts: [...turn.attempts, anAttempt('Ke7', 'illegal')] }
+  rerender(<MovesCard game={{ ...game, llm_turn: further, llm_turns: [further] }} />)
+
+  expect(list.scrollTop).toBe(1000)
+})
+
 function anAttempt(move: string | null, result: Attempt['result'], overrides: Partial<Attempt> = {}): Attempt {
   return { ...aTurn(move ?? '').attempts[0], move, san: result === 'legal' ? move : null, result, ...overrides }
 }
@@ -66,15 +145,19 @@ const withMistakes = (): GameState => {
 }
 
 const chips = () => [...moveList().querySelectorAll('.mistake')].map((chip) => chip.textContent)
+/** The Lucide icons in an element, by name: the text carries no glyphs. */
+const icons = (element: Element) =>
+  [...element.querySelectorAll('svg.lucide')].map((icon) => [...icon.classList].find((name) => name.startsWith('lucide-'))!)
 
 test("lists each LLM turn's illegal tries by kind and its notation slip under its move", () => {
   render(<MovesCard game={withMistakes()} />)
 
-  expect(chips()).toEqual(['✗ Nf9 invalid · try 1', '✗ Ke7 illegal · try 2', '⚑ written "g8f6"'])
+  expect(chips()).toEqual(['Nf9 invalid · try 1', 'Ke7 illegal · try 2', 'written "g8f6"'])
+  expect([...moveList().querySelectorAll('.mistake')].map(icons)).toEqual([['lucide-x'], ['lucide-x'], ['lucide-pen-line']])
   // The illegal move struck through; the slip shown as a slip, not as an illegal move.
   expect(within(moveList()).getByText('Nf9').tagName).toBe('S')
-  expect(within(moveList()).getByText('⚑ written "g8f6"')).toHaveClass('mistake', 'slip')
-  expect(within(moveList()).getByText('⚑ written "g8f6"')).not.toHaveClass('illegal')
+  expect(within(moveList()).getByText('written "g8f6"')).toHaveClass('mistake', 'slip')
+  expect(within(moveList()).getByText('written "g8f6"')).not.toHaveClass('illegal')
   // The move it played, in standard SAN, outlined in amber.
   expect(within(moveList()).getByText('Nf6')).toHaveClass('ply', 'slip')
 })
@@ -92,10 +175,10 @@ test('a forfeited turn has no move, but its illegal tries show under the ply the
 
   expect(rows()).toEqual([['1.', 'e4', '']])
   expect(chips()).toEqual([
-    '✗ Nf9 invalid · try 1',
-    '✗ Ke7 illegal · try 2',
-    '✗ Nc6 illegal · try 3',
-    '✗ Bb4 ambiguous · try 4',
+    'Nf9 invalid · try 1',
+    'Ke7 illegal · try 2',
+    'Nc6 illegal · try 3',
+    'Bb4 ambiguous · try 4',
   ])
 })
 
@@ -103,8 +186,9 @@ test('a forfeit with no answer shows why', () => {
   const turn = aTurn('', { attempts: [anAttempt(null, 'timeout', { error: 'no answer within 300s' })] })
   render(<MovesCard game={aGame({ plies: plies(E4), llm_turn: turn, llm_turns: [turn], status: 'over' })} />)
 
-  expect(chips()).toEqual(['⚠ no answer within 300s'])
-  expect(within(moveList()).getByText('⚠ no answer within 300s')).toHaveClass('mistake', 'error')
+  expect(chips()).toEqual(['no answer within 300s'])
+  expect(within(moveList()).getByText('no answer within 300s')).toHaveClass('mistake', 'error')
+  expect(icons(within(moveList()).getByText('no answer within 300s'))).toEqual(['lucide-triangle-alert'])
 })
 
 test("under Chaos rules a chaos move is listed as the LLM wrote it, in red, a spawn in purple, with no chip", () => {
@@ -128,25 +212,27 @@ test('an invalid try before a chaos move stays struck through under it', () => {
   const turn = aTurn('Bb4', { attempts: [anAttempt('Bb9', 'invalid'), chaosAttempt('Bb4', { kind: 'chaos', from: 'f8', to: 'b4', piece: 'b', rook: null, reason: 'the bishop on f8 moves' } as const)] })
   render(<MovesCard game={chaosGame(2, { llm_turn: turn, llm_turns: [turn] })} />)
 
-  expect(chips()).toEqual(['✗ Bb9 invalid · try 1'])
+  expect(chips()).toEqual(['Bb9 invalid · try 1'])
   expect(within(moveList()).getByText('Bb4')).toHaveClass('chaos')
 })
 
-const totals = () => screen.getByTestId('totals').textContent
+/** The totals, a line per LLM side. */
+const totals = () => [...screen.getByTestId('totals').children].map((line) => line.textContent)
 
 test("the totals line counts the LLM's illegal tries and notation slips", () => {
   const game = withMistakes()
   const stats = { ...game.stats.black!, illegal_moves: { invalid: 1, illegal: 1, ambiguous: 0 }, notation_slips: 1 }
   render(<MovesCard game={{ ...game, stats: { white: null, black: stats } }} />)
 
-  expect(totals()).toBe('✗ 2 illegal tries · ⚑ 1 notation slip')
+  expect(totals()).toEqual(['2 illegal tries · 1 notation slip'])
+  expect(icons(screen.getByTestId('totals'))).toEqual(['lucide-x', 'lucide-pen-line'])
 })
 
 test('the totals say one illegal try, and no notation slips', () => {
   const turn = aTurn('e5', { attempts: [anAttempt('Ke7', 'illegal'), anAttempt('e5', 'legal')] })
   render(<MovesCard game={aGame({ pgn: '1. e4 e5', llm_turn: turn, llm_turns: [turn] })} />)
 
-  expect(totals()).toBe('✗ 1 illegal try · ⚑ 0 notation slips')
+  expect(totals()).toEqual(['1 illegal try · 0 notation slips'])
 })
 
 test('under Enforced decoding illegal tries are not applicable, unless one gets through anyway', () => {
@@ -154,14 +240,13 @@ test('under Enforced decoding illegal tries are not applicable, unless one gets 
   enforced.stats.black = { ...enforced.stats.black!, legal_move_streak: null, illegal_moves: null, recovered_turns: null }
   const { unmount } = render(<MovesCard game={enforced} />)
 
-  expect(totals()).toBe('✗ illegal tries n/a · ⚑ 0 notation slips')
-  expect(totals()).not.toMatch(/streak/)
+  expect(totals()).toEqual(['illegal tries n/a · 0 notation slips'])
   unmount()
 
   const turn = aTurn('e5', { attempts: [anAttempt('Ke7', 'illegal'), anAttempt('e5', 'legal')] })
   render(<MovesCard game={{ ...enforced, llm_turn: turn, llm_turns: [turn] }} />)
 
-  expect(totals()).toBe('✗ 1 illegal try · ⚑ 0 notation slips')
+  expect(totals()).toEqual(['1 illegal try · 0 notation slips'])
 })
 
 test('in a faceoff there is a total per LLM side, named by its model', () => {
@@ -175,9 +260,10 @@ test('in a faceoff there is a total per LLM side, named by its model', () => {
   game.stats.white = game.stats.black
   render(<MovesCard game={game} />)
 
-  expect(totals()).toBe(
-    '♔ gemma3:4b ✗ 1 illegal try · ⚑ 0 notation slips  ·  ♚ qwen3.5:9b ✗ 0 illegal tries · ⚑ 0 notation slips',
-  )
+  expect(totals()).toEqual([
+    'White · gemma3:4b 1 illegal try · 0 notation slips',
+    'Black · qwen3.5:9b 0 illegal tries · 0 notation slips',
+  ])
 })
 
 test('"Show LLM mistakes" hides the mistakes and the totals, and is kept in the browser', async () => {

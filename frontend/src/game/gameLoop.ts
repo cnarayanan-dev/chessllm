@@ -10,7 +10,7 @@
 
   The move history lets the user look back through the game without changing it: the board shows a past position
   from the plies the backend sent, and takes no move until it is back at live. A state that lands meanwhile doesn't
-  pull the view; it only marks that there is news.
+  pull the view.
 */
 import type { Color, GameState, LlmTurn, NewGame, Ply } from '@/api/types'
 import { played } from '@/game/chaos'
@@ -50,9 +50,9 @@ export type Flash = { id: number; turn: LlmTurn; landedOn: string | null }
 
 /**
  * A past position viewed in the move history: the position after ply `ply` (0: the start position, never the last
- * ply, which is live). `news`: the game has moved on since the view left live (a move landed, or the game ended).
+ * ply, which is live).
  */
-export type History = { ply: number; news: boolean }
+export type History = { ply: number }
 
 export type GameLoopAction =
   | { type: 'new-game'; newGame: NewGame | null }
@@ -60,10 +60,9 @@ export type GameLoopAction =
   | { type: 'next-game'; next: NextGame }
   | { type: 'received'; requestId: number; game: GameState }
   | { type: 'failed'; requestId: number; message: string }
-  // The move history: view the position after a ply (0: the start), step back or forward a ply, or go back to live.
+  // The move history: view the position after a ply (0: the start; the last ply: live), or step back or forward a ply.
   | { type: 'view'; ply: number }
   | { type: 'step'; by: -1 | 1 }
-  | { type: 'live' }
 
 /** idle: no game yet. human: the human to move. llm: waiting for an LLM. over: the game has ended. */
 export type Phase = 'idle' | 'human' | 'llm' | 'over'
@@ -130,14 +129,10 @@ export const boardInput = (state: GameLoop): Color | null =>
 function view(state: GameLoop, ply: number): GameLoop {
   const plies = state.game?.plies.length ?? 0
   const target = Math.max(ply, 0)
-  const history = target >= plies ? null : { ply: target, news: state.history?.news ?? false }
+  const history = target >= plies ? null : { ply: target }
   if (history?.ply === state.history?.ply) return state
   return { ...state, history }
 }
-
-/** Whether the game has moved on in `next`: a ply was played, or it ended (a forfeit plays none). */
-const movedOn = (game: GameState, next: GameState) =>
-  next.plies.length !== game.plies.length || next.status !== game.status
 
 /** Whether the LLM's turn is running: asked for and not yet answered. */
 export const waitingForLlm = (state: GameLoop): boolean => state.request?.kind === 'llm-turn'
@@ -182,10 +177,8 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       const flash = turn
         ? { id: request.id, turn, landedOn: action.game.last_move?.slice(2, 4) ?? null }
         : state.flash
-      // The view stays where it is in the same game, marked if the game moved on; another game is shown live.
-      const past = state.history
-      const sameGame = state.game?.game_id === action.game.game_id
-      const history = past && sameGame ? { ...past, news: past.news || movedOn(state.game!, action.game) } : null
+      // The view stays where it is in the same game; another game is shown live.
+      const history = state.game?.game_id === action.game.game_id ? state.history : null
       return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history }, action.game)
     }
     case 'failed': {
@@ -202,7 +195,5 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       return view(state, action.ply)
     case 'step':
       return view(state, (state.history?.ply ?? state.game?.plies.length ?? 0) + action.by)
-    case 'live':
-      return state.history ? { ...state, history: null } : state
   }
 }

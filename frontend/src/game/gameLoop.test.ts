@@ -475,7 +475,7 @@ describe('the move history', () => {
   test('← shows the position after the ply before, its move animated from the position before it', () => {
     const state = step(live, -1)
 
-    expect(state.history).toEqual({ ply: 2, news: false })
+    expect(state.history).toEqual({ ply: 2 })
     expect(shownPosition(state)).toEqual({
       ply: 2, fen: AFTER_E5, lastMove: 'e7e5', check: false, animateFrom: AFTER_E4, move: afterNf3.plies[1],
     })
@@ -484,7 +484,7 @@ describe('the move history', () => {
   test('← goes back as far as the start position, and no further', () => {
     const state = step(live, -1, 5)
 
-    expect(state.history).toEqual({ ply: 0, news: false })
+    expect(state.history).toEqual({ ply: 0 })
     expect(shownPosition(state)).toEqual({ ply: 0, fen: START, lastMove: null, check: false, animateFrom: null, move: null })
   })
 
@@ -513,20 +513,13 @@ describe('the move history', () => {
     expect(gameLoop(state, { type: 'view', ply: 3 }).history).toBeNull()
   })
 
-  test('Back to live returns to the game as it is', () => {
-    const state = gameLoop(step(live, -1, 2), { type: 'live' })
-
-    expect(state.history).toBeNull()
-    expect(shownPosition(state)).toMatchObject({ ply: 3, fen: AFTER_NF3, animateFrom: null })
-  })
-
   test('a game with no plies yet has no past to step into', () => {
     const fresh = run(received(initialGameLoop, aGame()))
 
     expect(step(fresh, -1)).toBe(fresh)
   })
 
-  test("an LLM move that lands while viewing the past doesn't pull the view, but says something new happened", () => {
+  test("an LLM move that lands while viewing the past doesn't pull the view; the view goes on to it", () => {
     const viewing = step(live, -1, 2)
     const nc6 = aTurn('Nc6', { ply: 4 })
     const landed = afterE5({
@@ -541,16 +534,18 @@ describe('the move history', () => {
     const state = gameLoop(viewing, received(viewing, landed))
 
     expect(state.game).toBe(landed)
-    expect(state.history).toEqual({ ply: 1, news: true })
+    expect(state.history).toEqual({ ply: 1 })
     expect(shownPosition(state)).toMatchObject({ ply: 1, fen: AFTER_E4 })
-    expect(shownPosition(gameLoop(state, { type: 'live' }))).toMatchObject({ ply: 4, fen: AFTER_NC6, lastMove: 'b8c6' })
+    expect(shownPosition(step(state, 1, 2))).toMatchObject({ ply: 3, fen: AFTER_NF3 })
+    expect(step(state, 1, 3).history).toBeNull()
+    expect(shownPosition(step(state, 1, 3))).toMatchObject({ ply: 4, fen: AFTER_NC6, lastMove: 'b8c6' })
   })
 
-  test('a forfeit while viewing the past adds no ply, but is news too', () => {
+  test("a forfeit while viewing the past doesn't pull the view either", () => {
     const viewing = step(live, -1)
     const over: GameState = { ...afterNf3, status: 'over', result: '1-0', end_reason: 'forfeit' }
 
-    expect(gameLoop(viewing, received(viewing, over)).history).toEqual({ ply: 2, news: true })
+    expect(gameLoop(viewing, received(viewing, over)).history).toEqual({ ply: 2 })
   })
 
   test('the board takes no move while viewing the past, and does again back at live', () => {
@@ -559,7 +554,7 @@ describe('the move history', () => {
 
     expect(boardInput(viewing)).toBeNull()
     expect(gameLoop(viewing, { type: 'human-move', uci: 'g1f3' })).toBe(viewing)
-    expect(boardInput(gameLoop(viewing, { type: 'live' }))).toBe('white')
+    expect(boardInput(step(viewing, 1))).toBe('white')
     expect(boardInput(humanToMove)).toBe('white')
     expect(boardInput(live)).toBeNull() // the LLM is to move
   })

@@ -7,7 +7,7 @@ async function yourMove(page: Page) {
   await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
   await expect(page.getByTestId('strip-white')).toContainText('You')
   await expect(page.getByRole('timer')).toHaveCount(0)
-  await expect(page.getByTestId('status')).toHaveCount(0)
+  await expect(page.locator('[data-testid="moves"] [aria-current=step]')).toHaveCount(0)
 }
 
 /** Opens the game page on a new Play LLM game in which the human plays White. */

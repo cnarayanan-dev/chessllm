@@ -24,7 +24,6 @@ function renderApp() {
   )
 }
 
-const status = () => screen.getByTestId('status')
 const strip = (color: 'white' | 'black') => screen.getByTestId(`strip-${color}`)
 /** The strips above and below the board, top first, by their side. */
 const strips = () =>
@@ -163,7 +162,9 @@ test('says so when no game can be started', async () => {
 
   renderApp()
 
-  expect(await screen.findByRole('alert')).toHaveTextContent('Ollama is not running')
+  const alert = await screen.findByRole('alert')
+  expect(within(alert).getByText('Could not start a game')).toBeInTheDocument()
+  expect(alert).toHaveTextContent('Ollama is not running')
   expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
 })
 
@@ -499,7 +500,7 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   const moves = screen.getByTestId('moves')
   expect(within(moves).getByText('e4')).toBeInTheDocument()
   expect(within(moves).getByText('illegal · try 1', { exact: false })).toHaveClass('mistake', 'illegal')
-  expect(screen.getByTestId('totals')).toHaveTextContent('✗ 1 illegal try · ⚑ 0 notation slips')
+  expect(screen.getByTestId('totals')).toHaveTextContent('1 illegal try · 0 notation slips')
 
   // The flashes go at the click, before the new game has arrived.
   await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
@@ -511,38 +512,33 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
 })
 
 describe('the move history', () => {
-  const backToLive = () => screen.queryByRole('button', { name: /Back to live/ })
+  /** The move marked in the move list as the past position the board shows. */
+  const viewedMove = () => within(screen.getByTestId('moves')).queryByRole('button', { current: 'step' })
 
-  test('← and → step through the game with the board locked, and Back to live gives the move back', async () => {
+  test('← and → step through the game with the board locked, → up to the latest move gives the move back', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
     renderApp()
     const board = await waitFor(theBoard)
     await waitFor(() => expect(board.input?.color).toBe('w'))
-    expect(backToLive()).not.toBeInTheDocument()
+    expect(viewedMove()).not.toBeInTheDocument()
 
     await userEvent.keyboard('{ArrowLeft}')
 
-    expect(status()).toHaveTextContent('Viewing 1. e4 · → or Back to live')
+    expect(viewedMove()).toHaveTextContent('e4')
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR'))
     expect(board.marked('last-move')).toEqual(['e2', 'e4'])
     expect(board.input).toBeNull()
 
     await userEvent.keyboard('{ArrowLeft}')
-    expect(status()).toHaveTextContent('Viewing the start position · → or Back to live')
+    expect(viewedMove()).not.toBeInTheDocument()
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
+    expect(board.input).toBeNull()
 
     await userEvent.keyboard('{ArrowRight}{ArrowRight}')
-    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
     await yourMove()
     await waitFor(() => expect(board.input?.color).toBe('w'))
     expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR')
-
-    await userEvent.keyboard('{ArrowLeft}')
-    await userEvent.click(backToLive()!)
-    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
-    await yourMove()
-    expect(backToLive()).not.toBeInTheDocument()
-    await waitFor(() => expect(board.input?.color).toBe('w'))
+    expect(viewedMove()).not.toBeInTheDocument()
   })
 
   test('the Reasoning panel under the Game card follows the position stepped to', async () => {
@@ -563,19 +559,39 @@ describe('the move history', () => {
     expect(within(reasoning()).getByText('Reasoning for e5.')).toBeVisible()
   })
 
-  test('clicking a move in the move list views the position after it', async () => {
+  test('there is no Back to live button, and no status line', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
+    renderApp()
+    await yourMove()
+
+    await userEvent.keyboard('{ArrowLeft}')
+
+    expect(viewedMove()).toHaveTextContent('e4')
+    expect(screen.queryByRole('button', { name: /live/i })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
+  })
+
+  test('clicking a move views the position after it, and clicking the latest move returns to live', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
     renderApp()
     const board = await waitFor(theBoard)
+    await yourMove()
 
-    await userEvent.click(within(await screen.findByTestId('moves')).getByRole('button', { name: 'e4' }))
+    await userEvent.click(within(screen.getByTestId('moves')).getByRole('button', { name: 'e4' }))
 
-    expect(status()).toHaveTextContent('Viewing 1. e4')
+    expect(viewedMove()).toHaveTextContent('e4')
+    expect(viewedMove()).toHaveClass('viewed')
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR'))
-    expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'e4' })).toHaveClass('viewed')
+    expect(board.input).toBeNull()
+
+    await userEvent.click(within(screen.getByTestId('moves')).getByRole('button', { name: 'e5' }))
+
+    expect(viewedMove()).not.toBeInTheDocument()
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+    expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR')
   })
 
-  test("an LLM move landing while viewing the past doesn't pull the view, though the ring and timer follow the live game", async () => {
+  test("an LLM move landing while viewing the past doesn't pull the view, the latest move pulses, and the ring and timer follow the live game", async () => {
     const turn = later()
     fakeBackend()
       .on('GET /api/games/current', Response.json(afterE4()))
@@ -585,21 +601,18 @@ describe('the move history', () => {
     await llmMoving('black')
 
     await userEvent.keyboard('{ArrowLeft}')
-    expect(status()).toHaveTextContent('Viewing the start position')
-    expect(backToLive()).toHaveAccessibleName('Back to live')
+    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
     await llmMoving('black')
 
     await act(async () => turn.resolve(Response.json(afterE5())))
 
-    expect(await screen.findByRole('button', { name: 'Back to live · new move' })).toBeInTheDocument()
-    expect(status()).toHaveTextContent('Viewing the start position')
+    expect(await within(screen.getByTestId('moves')).findByRole('button', { name: 'e5' })).toHaveClass('last', 'arrived')
     await yourMove()
-    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
+    expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
     expect(board.input).toBeNull()
 
-    await userEvent.click(backToLive()!)
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}')
 
-    await yourMove()
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
     await waitFor(() => expect(board.input?.color).toBe('w'))
   })
@@ -613,7 +626,7 @@ describe('the move history', () => {
     await screen.findByRole('dialog', { name: 'Settings' })
     await userEvent.keyboard('{ArrowLeft}')
 
-    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
+    expect(viewedMove()).not.toBeInTheDocument()
     expect(theBoard().position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR')
   })
 })
@@ -649,7 +662,7 @@ describe('Chaos rules', () => {
     expect(board.position).toBe('rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR')
     expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'Bb4' })).toHaveClass('chaos')
     expect(screen.queryByText(/LLM move illegal|LLM forfeits/)).not.toBeInTheDocument()
-    expect(within(screen.getByTestId('moves')).queryByText(/✗/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('moves').querySelector('.mistake')).toBeNull()
     expect(playMoveSound).toHaveBeenCalledTimes(1)
   })
 
@@ -705,7 +718,7 @@ describe('Chaos rules', () => {
     await waitFor(() => expect(board.marked('spawn')).toEqual(['d5']))
 
     await userEvent.click(within(screen.getByTestId('moves')).getByRole('button', { name: 'Bb4' }))
-    expect(status()).toHaveTextContent('Viewing 1… Bb4')
+    expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'Bb4' })).toHaveAttribute('aria-current', 'step')
     await waitFor(() => expect(caption()).toHaveTextContent('Bf8→b4: the bishop on f8 moves'))
     await waitFor(() => expect(board.arrows).toEqual([{ class: 'chaos-arrow', from: 'f8', to: 'b4' }]))
     expect(board.marked('spawn')).toEqual([])
@@ -737,7 +750,7 @@ describe('Chaos rules', () => {
     renderApp()
 
     expect(await screen.findByTestId('totals')).toHaveTextContent(
-      '✗ 3 illegal tries · ⚑ 0 notation slips · ↯ 3 chaos moves (1 spawn)',
+      '3 illegal tries · 0 notation slips · 3 chaos moves (1 spawn)',
     )
   })
 

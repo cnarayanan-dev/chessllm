@@ -7,14 +7,14 @@ async function yourMove(page: Page) {
   await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
   await expect(page.getByTestId('strip-white')).toContainText('You')
   await expect(page.getByRole('timer')).toHaveCount(0)
-  await expect(page.getByTestId('status')).toHaveCount(0)
+  await expect(viewedMove(page)).toHaveCount(0)
 }
 
 /** Expects the game over at the live position: no side has the turn ring, and no move timer runs. */
 async function expectOver(page: Page) {
   await expect(page.locator('[data-to-move]')).toHaveCount(0)
   await expect(page.getByRole('timer')).toHaveCount(0)
-  await expect(page.getByTestId('status')).toHaveCount(0)
+  await expect(viewedMove(page)).toHaveCount(0)
 }
 
 type Script = { white?: string[]; black?: string[] }
@@ -39,6 +39,9 @@ async function expectPiece(page: Page, name: string, piece: string) {
 }
 
 const lastMove = (page: Page) => page.locator('[data-testid="moves"] .ply.last')
+/** The move viewed in the move history. */
+const viewedMove = (page: Page) => page.locator('[data-testid="moves"] [aria-current=step]')
+const boardTakesMoves = (page: Page) => page.locator('.chessboard .board.input-enabled')
 
 /**
  * The human's move, as UCI (e2e4), by clicking its two squares. Waits until the move list ends with `then`, in SAN:
@@ -53,7 +56,7 @@ async function move(page: Page, uci: string, then: string) {
 async function clickMove(page: Page, uci: string) {
   await yourMove(page)
   // The board takes input once the LLM's move has been drawn.
-  await expect(page.locator('.chessboard .board.input-enabled')).toBeAttached()
+  await expect(boardTakesMoves(page)).toBeAttached()
   await square(page, uci.slice(0, 2)).click()
   await square(page, uci.slice(2, 4)).click()
 }
@@ -84,7 +87,7 @@ test('an illegal LLM try flashes on the board, then its legal retry is played', 
   await expect(flash).toContainText('✗ LLM move illegal')
   await expect(flash).toContainText('Qh4')
   await expect(flash).toContainText('illegal · try 1 of 5')
-  await expect(page.getByTestId('moves')).toContainText('✗ Qh4 illegal · try 1')
+  await expect(page.getByTestId('moves').locator('.mistake.illegal')).toHaveText('Qh4 illegal · try 1')
   await expectPiece(page, 'e5', 'bp')
   await yourMove(page)
 })
@@ -99,8 +102,8 @@ test('the LLM forfeits after its retries', async ({ page }) => {
   await expect(result).toContainText('by forfeit')
   await expect(page.locator('.center-flash')).toContainText('✗ LLM forfeits: 5 illegal moves')
   await expectOver(page)
-  await expect(page.getByTestId('moves')).toContainText('✗ Bb4 illegal · try 5')
-  await expect(page.locator('.chessboard .board.input-enabled')).toHaveCount(0)
+  await expect(page.getByTestId('moves').locator('.mistake.illegal').last()).toHaveText('Bb4 illegal · try 5')
+  await expect(boardTakesMoves(page)).toHaveCount(0)
 })
 
 test('the human promotes a pawn through the promotion dialog', async ({ page }) => {
@@ -142,40 +145,78 @@ test('stepping back through the move history and returning to live', async ({ pa
   await playLlm(page, { black: ['e5', 'Nc6'] })
   await move(page, 'e2e4', 'e5')
   await move(page, 'g1f3', 'Nc6')
-  const status = page.getByTestId('status')
-  const backToLive = page.getByRole('button', { name: /Back to live/ })
-  await expect(backToLive).toHaveCount(0)
+  await expect(viewedMove(page)).toHaveCount(0)
 
   await page.keyboard.press('ArrowLeft')
-  await expect(status).toHaveText('Viewing 2. Nf3 · → or Back to live')
+  await expect(viewedMove(page)).toHaveText('Nf3')
   await expectPiece(page, 'f3', 'wn')
   await expect(page.locator('.chessboard g[data-piece][data-square="c6"]')).toHaveCount(0)
-  await expect(page.locator('.chessboard .board.input-enabled')).toHaveCount(0)
+  await expect(boardTakesMoves(page)).toHaveCount(0)
+  // No Back to live button, and no status line.
+  await expect(page.getByRole('button', { name: /live/i })).toHaveCount(0)
+  await expect(page.getByTestId('status')).toHaveCount(0)
 
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
-  await expect(status).toHaveText('Viewing the start position · → or Back to live')
+  await expect(viewedMove(page)).toHaveCount(0)
   await expectPiece(page, 'e2', 'wp')
   await page.keyboard.press('ArrowLeft') // no further back than the start
-  await expect(status).toHaveText('Viewing the start position · → or Back to live')
+  await expectPiece(page, 'e2', 'wp')
+  await expect(boardTakesMoves(page)).toHaveCount(0)
 
   await page.keyboard.press('ArrowRight')
-  await expect(status).toHaveText('Viewing 1. e4 · → or Back to live')
+  await expect(viewedMove(page)).toHaveText('e4')
   await expectPiece(page, 'e4', 'wp')
 
   await page.getByTestId('moves').getByRole('button', { name: 'e5' }).click()
-  await expect(status).toHaveText('Viewing 1… e5 · → or Back to live')
+  await expect(viewedMove(page)).toHaveText('e5')
   await expectPiece(page, 'e5', 'bp')
   await expect(page.locator('.chessboard g[data-piece][data-square="f3"]')).toHaveCount(0)
 
-  await backToLive.click()
+  // Clicking the latest move returns to live.
+  await lastMove(page).click()
+  await expect(viewedMove(page)).toHaveCount(0)
   await yourMove(page)
   await expectPiece(page, 'c6', 'bn')
-  await expect(backToLive).toHaveCount(0)
   // The board takes the human's move again.
   await clickMove(page, 'f1c4')
   await expect(page.getByTestId('moves')).toContainText('Bc4')
+})
+
+test("an LLM move arriving while a past position is viewed leaves the board there, and the latest move pulses", async ({ page }) => {
+  await playLlm(page, { black: ['e5', 'Nc6'] })
+  await move(page, 'e2e4', 'e5')
+  // The LLM's next move is held back until a past position is viewed.
+  let release!: () => void
+  const released = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/games/current/llm-turn', async (route) => {
+    await released
+    await route.continue()
+  })
+
+  await clickMove(page, 'g1f3')
+  await expect(lastMove(page)).toHaveText('Nf3')
+  await page.keyboard.press('ArrowLeft')
+  await expect(viewedMove(page)).toHaveText('e5')
+  // The LLM's move runs on its strip meanwhile.
+  await expect(page.getByTestId('strip-black').getByRole('timer')).toBeVisible()
+  release()
+
+  await expect(lastMove(page)).toHaveText('Nc6')
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(lastMove(page)).toHaveClass(/arrived/)
+  await expect(viewedMove(page)).toHaveText('e5')
+  await expect(page.locator('.chessboard g[data-piece][data-square="c6"]')).toHaveCount(0)
+  await expect(page.locator('.chessboard g[data-piece][data-square="f3"]')).toHaveCount(0)
+
+  // → up to the latest move returns to live.
+  await page.keyboard.press('ArrowRight')
+  await expect(viewedMove(page)).toHaveText('Nf3')
+  await page.keyboard.press('ArrowRight')
+  await yourMove(page)
+  await expectPiece(page, 'c6', 'bn')
+  await expect(boardTakesMoves(page)).toBeAttached()
 })
 
 test('the move history of an LLM faceoff, stepped through after its end', async ({ page }) => {
@@ -187,13 +228,57 @@ test('the move history of an LLM faceoff, stepped through after its end', async 
   await expect(page.getByTestId('result')).toContainText('by checkmate')
 
   await page.keyboard.press('ArrowLeft')
-  await expect(page.getByTestId('status')).toHaveText('Viewing 2. g4 · → or Back to live')
+  await expect(viewedMove(page)).toHaveText('g4')
   await expect(page.locator('.chessboard g[data-piece][data-square="h4"]')).toHaveCount(0)
   await expectPiece(page, 'd8', 'bq')
 
   await page.keyboard.press('ArrowRight')
   await expectOver(page)
   await expectPiece(page, 'h4', 'bq')
+})
+
+/** The Opera game, Morphy's 17 moves, as an LLM faceoff. */
+const OPERA = {
+  white: ['e4', 'Nf3', 'd4', 'dxe5', 'Qxf3', 'Bc4', 'Qb3', 'Nc3', 'Bg5', 'Nxb5', 'Bxb5+', 'O-O-O', 'Rxd7', 'Rd1', 'Bxd7+', 'Qb8+', 'Rd8#'],
+  black: ['e5', 'd6', 'Bg4', 'Bxf3', 'dxe5', 'Nf6', 'Qe7', 'c6', 'b5', 'cxb5', 'Nbd7', 'Rd8', 'Rxd7', 'Qe6', 'Nxd7', 'Nxb8'],
+}
+
+test('on a laptop the moves list keeps its height in a long game, about 8 rows, and follows the latest move or the one viewed', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await playLlm(page, {})
+  const list = page.locator('.moves-card [data-slot=scroll-area-viewport]')
+  const empty = (await list.boundingBox())!.height
+
+  await page.request.post('/e2e/script', { data: OPERA })
+  await page.request.post('/api/games', { data: { mode: 'llm_faceoff', white: { player: 'llm' }, black: { player: 'llm' } } })
+  await page.reload()
+  await expect(page.getByTestId('result')).toContainText('by checkmate')
+
+  const box = (await list.boundingBox())!
+  expect(box.height).toBe(empty)
+  /** The move numbers whose row shows in full in the list. */
+  const rowsInView = () =>
+    list.locator('.no').evaluateAll((numbers, [top, bottom]) =>
+      numbers
+        .filter((number) => {
+          const { top: rowTop, bottom: rowBottom } = number.getBoundingClientRect()
+          return rowTop >= top - 0.5 && rowBottom <= bottom + 0.5
+        })
+        .map((number) => number.textContent),
+    [box.y, box.y + box.height])
+  // Scrolled to the latest move.
+  await expect.poll(rowsInView).toEqual(['10', '11', '12', '13', '14', '15', '16', '17'].map((n) => `${n}.`))
+  await expect(page.getByTestId('moves').getByRole('button', { name: 'Rd8#' })).toBeInViewport()
+
+  // Stepping back keeps the move viewed in view.
+  for (let i = 0; i < 27; i++) await page.keyboard.press('ArrowLeft')
+  await expect(viewedMove(page)).toHaveText('Bg4')
+  await expect.poll(rowsInView).toContain('3.')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(viewedMove(page)).toHaveText('Nf3')
+  await expect.poll(rowsInView).toContain('2.')
 })
 
 test('the page at / credits the Merida pieces, the move sound and the model logos', async ({ page }) => {

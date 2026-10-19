@@ -7,7 +7,7 @@ type GameLayoutProps = {
   game: ReactNode
   /** The board column's stack, at the board's width: the board, with what goes directly above and below it. */
   board: ReactNode
-  /** The right column: the moves, for now with the status line above them. */
+  /** The right column: the moves. */
   moves: ReactNode
 }
 

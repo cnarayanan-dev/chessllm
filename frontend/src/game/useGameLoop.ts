@@ -93,7 +93,6 @@ export function useGameLoop() {
   const changeNext = useCallback((next: NextGame) => dispatch({ type: 'next-game', next }), [])
   const viewPly = useCallback((ply: number) => dispatch({ type: 'view', ply }), [])
   const step = useCallback((by: -1 | 1) => dispatch({ type: 'step', by }), [])
-  const backToLive = useCallback(() => dispatch({ type: 'live' }), [])
 
-  return { state, newGame, humanMove, changeNext, viewPly, step, backToLive }
+  return { state, newGame, humanMove, changeNext, viewPly, step }
 }

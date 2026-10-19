@@ -1,11 +1,10 @@
-// The words around the board: the Game card's settings line and result, and the status line in the move history.
+// The words around the board: the Game card's settings line and result.
 import type { Color, GameSettings, GameState } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
-import { humanColor, type Shown } from '@/game/gameLoop'
+import { humanColor } from '@/game/gameLoop'
 
 export const COLORS: readonly Color[] = ['white', 'black']
 export const COLOR_NAMES: Record<Color, string> = { white: 'White', black: 'Black' }
-export const ICON: Record<Color, string> = { white: '♔', black: '♚' }
 const other = (color: Color): Color => (color === 'white' ? 'black' : 'white')
 
 export const LLM_CONSTRAINTS_NAMES = {
@@ -33,22 +32,6 @@ type LlmSide = Extract<GameSettings['white'], { player: 'llm' }>
 export const faceoff = (game: GameState) => game.settings.mode === 'llm_faceoff'
 export const llmColors = (game: GameState) => COLORS.filter((color) => game.settings[color].player === 'llm')
 const llmSide = (game: GameState, color: Color) => game.settings[color] as LlmSide
-
-/** The LLM as Show thinking names it: the model, and in a faceoff its side too, as two LLMs can share a model. */
-export function llmName(game: GameState, color: Color): string {
-  const model = llmSide(game, color).model
-  return faceoff(game) ? `${ICON[color]} ${COLOR_NAMES[color]} · ${model}` : model
-}
-
-/** The status line while viewing a past position in the move history, e.g. "Viewing 12… Nf6 · → or Back to live". */
-export function historyStatusText(shown: Shown): string {
-  const move = shown.move
-  const viewed = move
-    ? `${Math.ceil(move.ply / 2)}${move.color === 'white' ? '.' : '…'} ${move.written}`
-    : 'the start position'
-  return `Viewing ${viewed} · → or Back to live`
-}
-
 /**
  * Who took whose king. A king taken by a legal move was left hanging by its side; one taken by a chaos move was
  * taken by the mover, which may even have taken its own king.

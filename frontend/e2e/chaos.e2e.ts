@@ -7,7 +7,7 @@ async function yourMove(page: Page) {
   await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
   await expect(page.getByTestId('strip-white')).toContainText('You')
   await expect(page.getByRole('timer')).toHaveCount(0)
-  await expect(page.getByTestId('status')).toHaveCount(0)
+  await expect(page.locator('[data-testid="moves"] [aria-current=step]')).toHaveCount(0)
 }
 
 type Script = { white?: string[]; black?: string[] }
@@ -23,6 +23,8 @@ const spawnMarker = (page: Page) => page.locator('.chessboard .marker.spawn')
 const caption = (page: Page) => page.getByTestId('chaos-caption')
 const moves = (page: Page) => page.getByTestId('moves')
 const lastMove = (page: Page) => moves(page).locator('.ply.last')
+/** The move viewed in the move history. */
+const viewedMove = (page: Page) => moves(page).locator('[aria-current=step]')
 
 /** The human's move, as UCI, by clicking its two squares; waits until the move list ends with `then`. */
 async function move(page: Page, uci: string, then: string) {
@@ -99,17 +101,17 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   const result = page.getByTestId('result')
   await expect(result).toContainText('White wins by King capture')
   await expect(result).toContainText(/.+ left its king hanging/)
-  await expect(page.getByTestId('totals')).toHaveText('✗ 5 illegal tries · ⚑ 0 notation slips · ↯ 5 chaos moves (1 spawn)')
+  await expect(page.getByTestId('totals')).toHaveText('5 illegal tries · 0 notation slips · 5 chaos moves (1 spawn)')
 
   // The history replays the spawn and the chaos move, with their marker, arrow and caption.
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
-  await expect(page.getByTestId('status')).toHaveText('Viewing 4… Qd5 · → or Back to live')
+  await expect(viewedMove(page)).toHaveText('Qd5')
   await expect(caption(page)).toContainText('Qd5: no queen on the board; one appears on d5')
   await expect(spawnMarker(page)).toHaveCount(1)
   await expectPiece(page, 'd5', 'bq')
 
   await moves(page).getByRole('button', { name: 'Bb4' }).click()
-  await expect(page.getByTestId('status')).toHaveText('Viewing 1… Bb4 · → or Back to live')
+  await expect(viewedMove(page)).toHaveText('Bb4')
   await expect(caption(page)).toContainText('Bf8→b4: the bishop on f8 moves')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'f8b4')
   await expect(spawnMarker(page)).toHaveCount(0)
@@ -136,12 +138,12 @@ test('an LLM faceoff under Chaos rules, started from the Settings modal, ends in
   await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Qxe8' })).not.toHaveClass(/chaos/)
-  await expect(page.getByTestId('totals')).toContainText('↯ 1 chaos move (0 spawns)')
+  await expect(page.getByTestId('totals')).toContainText('1 chaos move (0 spawns)')
   await expectPiece(page, 'e8', 'wq')
 
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
-  await expect(page.getByTestId('status')).toHaveText(/Viewing 1\. Qxf7/)
+  await expect(viewedMove(page)).toHaveText('Qxf7')
   await expect(caption(page)).toContainText('Qd1→f7: no queen can reach f7 by its movement; d1 is nearest')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'd1f7')
 })
