@@ -15,7 +15,8 @@ TIMEOUT_S = 300.0
 class OllamaPlayer:
     """Asks a local Ollama model for a move, with the answer shaped by the move schema.
 
-    With thinking off, the schema asks for the reasoning before the move instead.
+    With thinking off, the schema asks for the reasoning before the move instead. Under Enforced decoding the move
+    is an enum of the allowed moves, so Ollama can only produce one of them; the reasoning stays free.
 
     A call that takes longer than timeout_s is cancelled: closing the connection also stops Ollama generating."""
 
@@ -33,14 +34,17 @@ class OllamaPlayer:
         self._chat = chat or ollama.Client(timeout=timeout_s).chat
         self.timeout_s = timeout_s
 
-    def reply(self, messages: list[Message]) -> LlmReply:
+    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+        schema = (MoveAnswer if self._thinking else ReasonedMoveAnswer).model_json_schema()
+        if allowed_moves is not None:
+            schema["properties"]["move"] = schema["properties"]["move"] | {"enum": allowed_moves}
         started = time.perf_counter()
         try:
             response = self._chat(
                 model=self._model,
                 messages=[{"role": message.role, "content": message.content} for message in messages],
                 think=self._thinking,
-                format=(MoveAnswer if self._thinking else ReasonedMoveAnswer).model_json_schema(),
+                format=schema,
                 options=self._sampling,
             )
         except httpx.TimeoutException:

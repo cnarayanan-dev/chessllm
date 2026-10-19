@@ -20,7 +20,8 @@ class LlmReply:
 
 
 class MoveAnswer(BaseModel):
-    """The answer schema with thinking on. The move is a free string, never limited to the legal moves."""
+    """The answer schema with thinking on. The move is a free string, unless Enforced decoding limits it to the
+    legal moves."""
 
     move: str
 
@@ -41,7 +42,10 @@ class LlmTimeout(Exception):
 
 
 class LlmPlayer(Protocol):
-    def reply(self, messages: list[Message]) -> LlmReply:
-        """Ask the model for its answer. Raises LlmTimeout if it takes longer than the time limit."""
+    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+        """Ask the model for its answer. Raises LlmTimeout if it takes longer than the time limit.
+
+        Under Enforced decoding allowed_moves are the legal moves in standard SAN, and the move must be one of
+        them; None leaves the move free."""
         ...
 

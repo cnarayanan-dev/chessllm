@@ -86,3 +86,25 @@ def test_the_adapter_sends_the_sampling_options():
     OllamaPlayer("qwen3.5:9b", chat=chat).reply([Message("user", "PGN: 1. e4")])
 
     assert [request["options"] for request in calls] == [{"temperature": 0.2}, None]
+
+
+@pytest.mark.parametrize("thinking", [True, False])
+def test_enforced_decoding_puts_the_allowed_moves_as_an_enum_on_the_move_only(thinking):
+    calls = []
+
+    def chat(**request):
+        calls.append(request)
+        return ChatResponse(message=OllamaMessage(role="assistant", content='{"move": "e5"}'))
+
+    player = OllamaPlayer("qwen3.5:9b", thinking=thinking, chat=chat)
+
+    player.reply([Message("user", "PGN: 1. e4")], allowed_moves=["e5", "Nf6", "O-O"])
+
+    [request] = calls
+    properties = request["format"]["properties"]
+    assert properties["move"] == {"title": "Move", "type": "string", "enum": ["e5", "Nf6", "O-O"]}
+    if thinking:
+        assert list(properties) == ["move"]
+    else:
+        assert properties["reasoning"] == {"title": "Reasoning", "type": "string"}
+        assert list(properties) == ["reasoning", "move"]

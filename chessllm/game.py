@@ -10,7 +10,15 @@ from pydantic import ValidationError
 
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
-from chessllm.prompt import SYSTEM_PROMPT_FILES, LlmConstraints, RetryFeedback, retry_feedback, turn_messages
+from chessllm.prompt import (
+    ENFORCED,
+    LISTED,
+    SYSTEM_PROMPT_FILES,
+    LlmConstraints,
+    RetryFeedback,
+    retry_feedback,
+    turn_messages,
+)
 
 Color = Literal["white", "black"]
 
@@ -175,8 +183,10 @@ class GameSession:
         model = self._settings.model
         pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
         legal_moves = [board.san(legal) for legal in board.legal_moves]
+        # Enforced decoding holds the move to exactly the legal moves, rebuilt from the position every turn.
+        allowed_moves = list(legal_moves) if self._settings.llm_constraints in ENFORCED else None
         # Listed shows the legal moves in a new random order every turn; the log keeps each list as shown.
-        listed = self._settings.llm_constraints == "listed"
+        listed = self._settings.llm_constraints in LISTED
         if listed:
             random.shuffle(legal_moves)
         listed_moves = " ".join(legal_moves) if listed else None
@@ -194,7 +204,7 @@ class GameSession:
             }
             attempts.append(attempt)
             try:
-                reply = self._player.reply(messages)
+                reply = self._player.reply(messages, allowed_moves)
             except LlmTimeout as timeout:
                 minutes = timeout.timeout_s / 60
                 error_text = f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
@@ -247,6 +257,11 @@ class GameSession:
         }
 
     def _stats(self) -> dict[str, Any]:
+        """The game's totals. Under Enforced decoding the illegal-move metrics are None, not applicable: they would be
+        true by construction (ADR 0003). Notation slips can't happen there, so they need no special case."""
+        if self._settings.llm_constraints in ENFORCED:
+            not_applicable = {"legal_move_streak": None, "illegal_moves": None, "recovered_turns": None}
+            return not_applicable | {"notation_slips": self._notation_slips}
         return {
             "legal_move_streak": self._legal_move_streak,
             "illegal_moves": dict(self._illegal_moves),

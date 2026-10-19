@@ -14,7 +14,8 @@ class Raw(str):
 
 class ScriptedPlayer:
     """Test fake for the LLM player port: answers with the scripted SAN moves in order, as the JSON
-    {"move": "<san>"}, and records every prompt. A scripted exception is raised instead of answering.
+    {"move": "<san>"}, and records every prompt and the allowed moves it came with. A scripted exception is
+    raised instead of answering.
     Thinking texts, if given, go with the replies in order. It serves every game, recording the settings
     of each game it is built for."""
 
@@ -22,14 +23,16 @@ class ScriptedPlayer:
         self.replies = list(replies)
         self.thinking = list(thinking) if thinking is not None else None
         self.prompts: list[list[Message]] = []
+        self.allowed_moves: list[list[str] | None] = []
         self.built_for: list[Settings] = []
 
     def for_settings(self, settings: Settings) -> "ScriptedPlayer":
         self.built_for.append(settings)
         return self
 
-    def reply(self, messages: list[Message]) -> LlmReply:
+    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
         self.prompts.append(messages)
+        self.allowed_moves.append(allowed_moves)
         move = self.replies.pop(0)
         if isinstance(move, Exception):
             raise move

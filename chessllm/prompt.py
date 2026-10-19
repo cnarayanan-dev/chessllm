@@ -11,12 +11,20 @@ from chessllm.players import Message
 
 # What the LLM is told after an illegal move: explained (the default), bare or hinted.
 RetryFeedback = Literal["explained", "bare", "hinted"]
-# Whether the LLM is shown the legal-move list: free (no list, the default) or listed.
-LlmConstraints = Literal["free", "listed"]
+# Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
+# free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
+LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
+LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
+ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system.txt"
 LISTED_SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_listed.txt"
-SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {"free": SYSTEM_PROMPT_FILE, "listed": LISTED_SYSTEM_PROMPT_FILE}
+SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {
+    "free": SYSTEM_PROMPT_FILE,
+    "listed": LISTED_SYSTEM_PROMPT_FILE,
+    "blind_enforced": SYSTEM_PROMPT_FILE,
+    "listed_enforced": LISTED_SYSTEM_PROMPT_FILE,
+}
 
 # The example move shown in the system prompt for each colour the LLM can play: the first move of each side.
 EXAMPLE_MOVES = {"white": [], "black": ["e4"]}

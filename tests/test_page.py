@@ -38,3 +38,11 @@ def test_the_settings_modal_offers_the_llm_constraints(client):
 
     assert 'id="llmConstraints"' in page
     assert "LLM constraints" in page
+
+
+def test_the_settings_modal_offers_the_enforced_constraints_and_greys_out_retry_feedback_for_them(client):
+    page = client.get("/").text
+
+    assert "blind_enforced: {name: \"Blind enforced\"" in page
+    assert "listed_enforced: {name: \"Listed enforced\"" in page
+    assert ".radio:disabled" in page

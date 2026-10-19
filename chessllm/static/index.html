@@ -108,6 +108,7 @@
   .radio { position: relative; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; text-align: center; background: transparent; }
   .radio:hover { background: var(--hover); }
   .radio.on { border-color: var(--accent); background: var(--accent-soft); }
+  .radio:disabled { opacity: .4; cursor: default; } .radio:disabled:hover { background: transparent; }
   .radio .t { font-weight: 500; } .radio .default { color: var(--faint); font-size: 11px; margin-left: 4px; }
   /* The description shows only on hover, as a tooltip under the card. */
   .radio .d { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 1; width: max-content; max-width: 220px;
@@ -176,9 +177,9 @@
       <h2>Game</h2>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Your colour</div><div class="d">The LLM plays the other colour. White moves first.</div></div></div>
       <div class="radios" id="colors" style="grid-template-columns:repeat(2, 1fr)"></div>
-      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">LLM constraints</div><div class="d">Whether the LLM is shown the legal moves in each turn's prompt.</div></div></div>
+      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">LLM constraints</div><div class="d">Whether the LLM is shown the legal moves in each turn's prompt, and whether it is held to them.</div></div></div>
       <div class="radios" id="llmConstraints" style="grid-template-columns:repeat(2, 1fr)"></div>
-      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
+      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d" id="feedbackHint">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
       <div class="radios" id="feedbackLevels"></div>
     </section>
     <section data-section="model">
@@ -262,10 +263,13 @@ function showMoves() {
     cells.push(mistakes)
   }
   $("moves").replaceChildren(...cells)
-  const illegal = Object.values(state.stats.illegal_moves).reduce((sum, count) => sum + count, 0)
+  // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
+  const illegal = state.llm_turns.flatMap(turn => turn.attempts).filter(a => a.result !== "legal" && !a.error).length
   const slips = state.stats.notation_slips
-  $("totals").textContent =
-    `✗ ${illegal} illegal ${illegal === 1 ? "try" : "tries"} · ⚑ ${slips} notation ${slips === 1 ? "slip" : "slips"}`
+  // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
+  const tries = state.stats.illegal_moves === null && illegal === 0
+    ? "✗ illegal tries n/a" : `✗ ${illegal} illegal ${illegal === 1 ? "try" : "tries"}`
+  $("totals").textContent = `${tries} · ⚑ ${slips} notation ${slips === 1 ? "slip" : "slips"}`
 }
 
 // The switch is a page setting, kept in the browser across games and reloads.
@@ -380,7 +384,11 @@ const FEEDBACK_LEVELS = {
 const LLM_CONSTRAINTS = {
   free: {name: "Free", description: "No legal-move list: the LLM finds its own moves"},
   listed: {name: "Listed", description: "Shown every legal move, but can still play an illegal one"},
+  blind_enforced: {name: "Blind enforced", description: "Held to the legal moves without being shown them"},
+  listed_enforced: {name: "Listed enforced", description: "Shown every legal move and held to them"},
 }
+// Under Enforced decoding the LLM can't play an illegal move, so Retry feedback has no effect (ADR 0003).
+const ENFORCED = ["blind_enforced", "listed_enforced"]
 const COLOR_NAMES = {white: "White", black: "Black"}
 const other = color => color === "white" ? "black" : "white"
 let next = null // {model, thinking, retry_feedback, human_color, llm_constraints} for the next game
@@ -438,9 +446,14 @@ function showSettings() {
     card.onclick = () => { next.llm_constraints = choice; showSettings() }
     return card
   }))
+  const enforced = ENFORCED.includes(next.llm_constraints)
+  $("feedbackHint").textContent = enforced
+    ? "No effect: under Enforced decoding the LLM can't play an illegal move."
+    : "What the LLM is told after an illegal move. It gets 3 retries, then forfeits."
   $("feedbackLevels").replaceChildren(...Object.entries(FEEDBACK_LEVELS).map(([level, {name, description}]) => {
     const card = document.createElement("button")
     card.className = "radio" + (next.retry_feedback === level ? " on" : "")
+    card.disabled = enforced
     card.setAttribute("role", "radio")
     card.setAttribute("aria-checked", next.retry_feedback === level)
     card.append(chip(name, "t"), ...(level === "explained" ? [chip("default", "default")] : []), chip(description, "d"))
