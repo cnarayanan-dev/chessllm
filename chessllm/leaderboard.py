@@ -12,7 +12,16 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from chessllm.analysis import analysis_path
 from chessllm.game import COLORS, Color, Rules
+from chessllm.move_quality import (
+    VALIDATION_FILE,
+    ConfigurationMoves,
+    MoveQuality,
+    move_quality,
+    read_analysed_moves,
+    read_validation,
+)
 from chessllm.prompt import ENFORCED, LlmConstraints, RetryFeedback
 
 
@@ -57,6 +66,8 @@ class LeaderboardEntry(BaseModel):
     attempts: int | None  # every attempt, legal or not; None under Enforced decoding (ADR 0003)
     average_legal_move_streak: float | None  # None under Enforced decoding (ADR 0003)
     opponents: list[OpponentResults]  # sorted by opponent
+    # Pooled from the analysis files of all its games, Play LLM included; None without an analysed move (ADR 0005)
+    move_quality: MoveQuality | None
 
 
 class Leaderboard(BaseModel):
@@ -90,7 +101,7 @@ class ConfigurationTally:
     streaks: list[int] = field(default_factory=list)
     opponents: dict[str, Tally] = field(default_factory=lambda: defaultdict(Tally))
 
-    def entry(self) -> LeaderboardEntry:
+    def entry(self, move_quality: MoveQuality | None) -> LeaderboardEntry:
         results = self.results
         enforced = self.configuration.llm_constraints in ENFORCED
         return LeaderboardEntry(
@@ -110,16 +121,20 @@ class ConfigurationTally:
             opponents=[
                 OpponentResults(opponent=opponent, **vars(tally)) for opponent, tally in sorted(self.opponents.items())
             ],
+            move_quality=move_quality,
         )
 
 
-def leaderboard(games_dir: Path) -> Leaderboard:
+def leaderboard(games_dir: Path, move_quality_validation: Path = VALIDATION_FILE) -> Leaderboard:
     tallies: dict[str, ConfigurationTally] = {}
+    analysed: dict[str, ConfigurationMoves] = defaultdict(ConfigurationMoves)
     for path in sorted(games_dir.glob("*.jsonl")):
         events = finished_game(path)
         if events is not None:
             add_game(tallies, events)
-    entries = [tally.entry() for tally in tallies.values()]
+            add_analysed_moves(analysed, path, events)
+    validated_for = read_validation(move_quality_validation)
+    entries = [tally.entry(move_quality(analysed[key], validated_for)) for key, tally in tallies.items()]
     return Leaderboard(configurations=sorted(entries, key=lambda entry: (entry.configuration.model, entry.id)))
 
 
@@ -161,6 +176,18 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
         streak = (stats.get(color) or {}).get("legal_move_streak")
         if streak is not None:
             tally.streaks.append(streak)
+
+
+def add_analysed_moves(analysed: dict[str, ConfigurationMoves], log: Path, events: list[dict[str, Any]]) -> None:
+    """Pool each LLM side's scored moves from the game's analysis file, if it has one, into its configuration's."""
+    start, end = events[0], events[-1]
+    sides, _ = read_sides(start, end)
+    analysed_sides = read_analysed_moves(analysis_path(log))
+    for colour in COLORS:
+        side = sides[colour]
+        if colour in analysed_sides and side["player"] == "llm":
+            key, moves = analysed_sides[colour]
+            analysed[llm_configuration(start, colour, side).id()].add(key, moves)
 
 
 def read_sides(start: dict[str, Any], end: dict[str, Any]) -> tuple[dict[Color, dict[str, Any]], dict[str, Any]]:

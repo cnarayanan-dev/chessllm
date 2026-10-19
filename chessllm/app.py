@@ -25,6 +25,7 @@ from chessllm.game import (
 )
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.leaderboard import Leaderboard, leaderboard
+from chessllm.move_quality import VALIDATION_FILE
 from chessllm.move_model import MoveModel
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
@@ -164,6 +165,7 @@ def create_app(
     sampling_file: Path = SAMPLING_FILE,
     dist_dir: Path = DIST_DIR,
     move_model: MoveModel | None = None,
+    move_quality_validation: Path = VALIDATION_FILE,
 ) -> FastAPI:
     """player_for builds the LLM player of each LLM side of a game, from that game's settings and the side's colour.
 
@@ -275,6 +277,6 @@ def create_app(
     @app.get("/api/leaderboard")
     def get_leaderboard() -> Leaderboard:
         """Every finished game's results, grouped by Player configuration, read from the game logs."""
-        return leaderboard(games_dir)
+        return leaderboard(games_dir, move_quality_validation)
 
     return app
