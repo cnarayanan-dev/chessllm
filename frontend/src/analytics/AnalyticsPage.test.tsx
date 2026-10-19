@@ -54,7 +54,8 @@ test('lists every configuration ranked by Rating, with the default columns', asy
   showPage()
 
   expect(await screen.findByText('qwen3.5:9b')).toBeInTheDocument()
-  expect(headers()).toEqual(['#', 'Player configuration', 'Rating↓', 'Games', 'W · D · L'])
+  expect(headers()).toEqual(['#', 'Player configuration', 'Rating', 'Games', 'W · D · L'])
+  expect(screen.getByRole('columnheader', { name: 'Rating' })).toHaveAttribute('aria-sort', 'descending')
   expect(rows().map((cells) => [cells[0], cells[2], cells[3], cells[4]])).toEqual([
     ['1', '410', '24', '9 · 3 · 12'],
     ['2', '< 70', '10', '0 · 0 · 10'],
@@ -91,6 +92,43 @@ test('sorts by a column, and turns the order round on a second click', async () 
   expect(rows().map((cells) => cells[0])).toEqual(['3', '2', '1'])
 })
 
+test('marks the sorted column with an arrow icon, not a text glyph', async () => {
+  const user = userEvent.setup()
+  showPage()
+  await screen.findByText('qwen3.5:9b')
+
+  const rating = screen.getByRole('columnheader', { name: 'Rating' })
+  expect(rating.querySelector('svg.lucide-arrow-down')).not.toBeNull()
+  expect(screen.getByRole('columnheader', { name: 'Games' }).querySelector('svg')).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Rating' }))
+  expect(rating).toHaveAttribute('aria-sort', 'ascending')
+  expect(rating.querySelector('svg.lucide-arrow-up')).not.toBeNull()
+})
+
+test('sits in a card: the switch, the legend, the table and the note under it; the chips are badges', async () => {
+  showPage()
+
+  const card = (await screen.findByRole('table')).closest('[data-slot=card]')!
+  expect(card).not.toBeNull()
+  expect(within(card as HTMLElement).getByRole('switch', { name: 'All columns' })).toBeInTheDocument()
+  expect(within(card as HTMLElement).getByTestId('legend')).toBeInTheDocument()
+  expect(within(card as HTMLElement).getByText(/The Rating comes only from/)).toBeInTheDocument()
+  for (const chip of [...within(screen.getByTestId('legend')).getAllByText(/./), screen.getByText('feedback bare')]) {
+    expect(chip).toHaveAttribute('data-slot', 'badge')
+  }
+})
+
+test('the unvalidated mark explains itself in a tooltip', async () => {
+  const user = userEvent.setup()
+  showPage()
+  await screen.findByText('qwen3.5:9b')
+  await user.click(screen.getByRole('switch', { name: 'All columns' }))
+
+  await user.hover(screen.getByText('unvalidated'))
+  expect(await screen.findByText(/has not passed its validation/)).toBeInTheDocument()
+})
+
 test('the Player configuration column does not sort', async () => {
   showPage()
   await screen.findByText('qwen3.5:9b')
@@ -108,7 +146,7 @@ test('"All columns" adds the rest, with n/a under Enforced decoding and an unval
   expect(headers()).toEqual([
     '#',
     'Player configuration',
-    'Rating↓',
+    'Rating',
     'Games',
     'W · D · L',
     'Rating 95%',
@@ -130,7 +168,7 @@ test('"All columns" adds the rest, with n/a under Enforced decoding and an unval
 test('says so when there are no finished games yet', async () => {
   showPage([])
 
-  expect(await screen.findByText(/No finished games yet/)).toBeInTheDocument()
+  expect((await screen.findByText(/No finished games yet/)).closest('[data-slot=card]')).not.toBeNull()
 })
 
 test('says so when the leaderboard cannot be loaded', async () => {

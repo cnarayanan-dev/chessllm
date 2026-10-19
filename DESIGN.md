@@ -35,3 +35,7 @@ Dark mode is out of scope; `.dark` keeps shadcn's neutral values.
 ## Top bar
 
 `frontend/src/components/top-bar/TopBar.tsx`, on every page: the **ChessLLM** mark (the Merida rook on a light square, `frontend/src/assets/chessllm-rook.svg`, also the browser tab's icon) linking to the game, then **Analytics**, **New game** and **Settings** on the left. The ⌘K shortcut shows only in the Settings button's tooltip. On a page without the game, New game and Settings (and ⌘K) are links to the game page (`/?then=new-game`, `/?then=settings`), which does it once the game is shown.
+
+## Analytics page
+
+`frontend/src/analytics/AnalyticsPage.tsx`: the page's title on the Stone page, then the leaderboard in one Card: the legend and the "All columns" Switch, the Table and its note. The table's header row is a filled `muted` strip with rounded ends, its rows are split by faint lines only, and the sorted column carries a Lucide arrow. The chips are `secondary` Badges, tinted by their hue (`analytics.css`); the unvalidated Move-quality estimate is marked by a dashed `outline` Badge. Loading, no games and errors show in a Card in the table's place. `frontend/e2e/analytics.e2e.ts` checks every text on the built page against WCAG AA, on the surface it sits on.
