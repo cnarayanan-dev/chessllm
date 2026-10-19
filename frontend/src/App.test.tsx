@@ -179,6 +179,17 @@ test('a forfeit with no answer says why in the banner', async () => {
   expect(screen.getByText('by forfeit: no answer in 300 s')).toBeInTheDocument()
 })
 
+test('a draw at the Move cap names the cap in the banner', async () => {
+  const over = afterE5({ status: 'over', result: '1/2-1/2', end_reason: 'move_cap', human_legal_moves: [] })
+  fakeBackend().on('GET /api/games/current', Response.json(over))
+
+  renderApp()
+
+  const banner = await screen.findByTestId('banner')
+  expect(within(banner).getByText('Draw')).toBeInTheDocument()
+  expect(within(banner).getByText('at the move cap of 150 moves each')).toBeInTheDocument()
+})
+
 test('an end reason the page has no wording for is spelled out', async () => {
   const over = afterE4({ status: 'over', result: '1-0', end_reason: 'king_capture' })
   fakeBackend().on('GET /api/games/current', Response.json(over))

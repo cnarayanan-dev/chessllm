@@ -28,6 +28,9 @@ COLORS: tuple[Color, Color] = ("white", "black")
 # Play LLM: a human plays one side and an LLM the other. LLM faceoff: an LLM plays each side.
 Mode = Literal["play_llm", "llm_faceoff"]
 MODE_NAMES: dict[Mode, str] = {"play_llm": "Play LLM", "llm_faceoff": "LLM faceoff"}
+# Unattended games, with no human to stop them, end as a draw after MOVE_CAP moves per side (the Move cap, ADR 0005).
+UNATTENDED_MODES: tuple[Mode, ...] = ("llm_faceoff",)
+MOVE_CAP = 150
 # Standard rules never play an illegal move; Chaos rules play an LLM's rule-breaking or ambiguous move (ADR 0006).
 Rules = Literal["standard", "chaos"]
 
@@ -109,7 +112,8 @@ class RefusedLlmTurn(Exception):
 @dataclass(frozen=True)
 class GameEnd:
     result: str  # "1-0", "0-1" or "1/2-1/2"
-    reason: str  # "checkmate", "stalemate", "threefold_repetition", "fifty_moves", "insufficient_material", "forfeit", ...
+    # "checkmate", "stalemate", "threefold_repetition", "fifty_moves", "insufficient_material", "forfeit", "move_cap", ...
+    reason: str
 
 
 # One attempt and three retries per turn; after the fourth illegal move the LLM forfeits.
@@ -301,7 +305,8 @@ class GameSession:
         return side.name() if side else "Human"
 
     def _check_end(self) -> None:
-        """End the game if the position is over, counting claimable draws (threefold repetition, fifty moves).
+        """End the game if the position is over, counting claimable draws (threefold repetition, fifty moves), or
+        an unattended game at the Move cap, which gives way to an end by the rules on the same move.
 
         A draw counts once the position has happened, not when the side to move could claim it with its next
         move (as outcome(claim_draw=True) would), so the LLM is never denied a move it could still play.
@@ -322,6 +327,8 @@ class GameSession:
             self._end = GameEnd("1/2-1/2", "threefold_repetition")
         elif board.halfmove_clock >= 100:
             self._end = GameEnd("1/2-1/2", "fifty_moves")
+        elif self._settings.mode in UNATTENDED_MODES and len(self._moves) >= 2 * MOVE_CAP:
+            self._end = GameEnd("1/2-1/2", "move_cap")
 
     def _play_llm_turn(self) -> None:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after MAX_ATTEMPTS

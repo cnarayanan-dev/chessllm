@@ -23,6 +23,7 @@ const END_REASONS: Record<string, string> = {
   fifty_moves: 'by the fifty-move rule',
   insufficient_material: 'by insufficient material',
   forfeit: 'by forfeit',
+  move_cap: 'at the move cap of 150 moves each',
 }
 
 type LlmSide = Extract<GameSettings['white'], { player: 'llm' }>
