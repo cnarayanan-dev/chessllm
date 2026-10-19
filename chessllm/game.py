@@ -276,7 +276,8 @@ class GameSession:
             max_retries=MAX_ATTEMPTS - 1,
             **logged_prompts,
             **({"rules": settings.rules} if self._chaos else {}),  # absent means Standard rules, as in older logs
-            started_at=now(),
+            # To the microsecond, so games started within the same second still sort in the order they started.
+            started_at=now("microseconds"),
         )
 
     def play_human_move(self, uci: str) -> None:

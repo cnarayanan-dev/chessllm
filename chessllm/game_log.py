@@ -12,8 +12,8 @@ import chess.pgn
 GAMES_DIR = Path("games")
 
 
-def now() -> str:
-    return datetime.now().astimezone().isoformat(timespec="seconds")
+def now(timespec: str = "seconds") -> str:
+    return datetime.now().astimezone().isoformat(timespec=timespec)
 
 
 def file_name_part(player: str) -> str:

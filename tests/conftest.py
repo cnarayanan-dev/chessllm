@@ -42,7 +42,7 @@ class ScriptedPlayer:
     Thinking texts, if given, go with the replies in order. It serves every game, recording the settings
     of each game it is built for."""
 
-    def __init__(self, replies: list[str | Exception], thinking: list[str] | None = None) -> None:
+    def __init__(self, replies: list[str | BaseException], thinking: list[str] | None = None) -> None:
         self.replies = list(replies)
         self.thinking = list(thinking) if thinking is not None else None
         self.prompts: list[list[Message]] = []
@@ -59,7 +59,7 @@ class ScriptedPlayer:
         self.prompts.append(messages)
         self.allowed_moves.append(allowed_moves)
         move = self.replies.pop(0)
-        if isinstance(move, Exception):
+        if isinstance(move, BaseException):
             raise move
         raw = move if isinstance(move, Raw) else json.dumps({"move": move})
         thinking = self.thinking.pop(0) if self.thinking is not None else None

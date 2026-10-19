@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from chessllm.analysis import analysis_path
-from chessllm.game import COLORS, Color, Rules
+from chessllm.game import COLORS, Color, Rules, Settings
 from chessllm.move_quality import (
     VALIDATION_FILE,
     ConfigurationMoves,
@@ -22,7 +22,7 @@ from chessllm.move_quality import (
     read_analysed_moves,
     read_validation,
 )
-from chessllm.prompt import ENFORCED, LlmConstraints, RetryFeedback
+from chessllm.prompt import ENFORCED, SYSTEM_PROMPT_FILES, LlmConstraints, RetryFeedback
 
 
 class PlayerConfiguration(BaseModel):
@@ -252,6 +252,20 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         retry_feedback=side["retry_feedback"],
         sampling=sampling if isinstance(sampling, dict) else {},
         prompt=PurePath(prompt_file).name,
+    )
+
+
+def settings_configuration(settings: Settings, color: Color) -> PlayerConfiguration:
+    """The Player configuration the LLM at color plays a game with these settings in, as its log will record it."""
+    side = settings.llm_sides()[color]
+    return PlayerConfiguration(
+        model=side.model,
+        thinking=side.thinking,
+        llm_constraints=side.llm_constraints,
+        rules=settings.rules,
+        retry_feedback=side.retry_feedback,
+        sampling=dict(settings.sampling),
+        prompt=SYSTEM_PROMPT_FILES[side.llm_constraints].name,
     )
 
 
