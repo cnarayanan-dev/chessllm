@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -46,6 +46,87 @@ class NewGame(BaseModel):
     black: SideIn = Settings.black
 
 
+# Sampling options keep the type they were given in: an int stays an int in the JSON (top_k 40, not 40.0).
+Sampling = dict[str, int | float]
+
+
+class ModelInfo(BaseModel):
+    """A model the game can be played against, with the sampling it would play at."""
+
+    name: str
+    thinking: bool
+    sampling: Sampling | None  # None when Ollama can't show the model
+
+
+class Attempt(BaseModel):
+    """One try of an LLM turn, as the game log has it. Most fields are None until the LLM has answered."""
+
+    move: str | None  # the move as written, or the raw reply if it isn't the move schema
+    san: str | None  # the move's standard SAN, when it is legal
+    notation_slip: bool
+    result: Literal["legal", "invalid", "illegal", "ambiguous", "timeout", "error"] | None
+    feedback_sent: str | None  # the retry feedback this try answers, None on the first
+    raw_reply: str | None
+    thinking: str | None
+    error: str | None  # why the call failed or timed out
+    latency_s: float | None
+
+
+class LlmTurn(BaseModel):
+    ply: int
+    color: Color
+    attempts: list[Attempt]
+    thinking: str | None  # the thinking of the last try that answered
+
+
+class IllegalMoves(BaseModel):
+    invalid: int
+    illegal: int
+    ambiguous: int
+
+
+class LlmSideStats(BaseModel):
+    """The totals of one LLM side. Under Enforced decoding the illegal-move metrics are None (ADR 0003)."""
+
+    legal_move_streak: int | None
+    illegal_moves: IllegalMoves | None
+    recovered_turns: int | None
+    notation_slips: int
+
+
+class Stats(BaseModel):
+    """The totals of each side; a human's side has none (ADR 0004)."""
+
+    white: LlmSideStats | None
+    black: LlmSideStats | None
+
+
+class GameSettings(BaseModel):
+    mode: Mode
+    white: SideIn
+    black: SideIn
+    sampling: Sampling  # from the config file; empty means the models' defaults
+
+
+class GameState(BaseModel):
+    """What GameSession.state() returns: the game as the page shows it."""
+
+    game_id: str
+    fen: str
+    pgn: str
+    turn: Color
+    human_legal_moves: list[str]
+    last_move: str | None  # in UCI
+    check: bool
+    llm_turn: LlmTurn | None  # the last LLM turn
+    llm_turns: list[LlmTurn]
+    settings: GameSettings
+    status: Literal["playing", "over"]
+    result: Literal["1-0", "0-1", "1/2-1/2"] | None
+    end_reason: str | None
+    stats: Stats
+
+
 def create_app(
     player_for: Callable[[Settings, Color], LlmPlayer],
     games_dir: Path = GAMES_DIR,
@@ -78,19 +159,19 @@ def create_app(
         return FileResponse(index)
 
     @app.get("/api/models")
-    def list_models() -> list[dict[str, Any]]:
+    def list_models() -> list[ModelInfo]:
         """Each model with the sampling it would play at: its own defaults, overridden by the config file.
 
         The sampling is None when Ollama can't show the model, e.g. when it isn't installed."""
         config = sampling_config()
 
-        def sampling(model: LlmModel) -> dict[str, float] | None:
+        def sampling(model: LlmModel) -> Sampling | None:
             try:
                 return sampling_defaults(model.name) | config
             except Exception:
                 return None
 
-        return [{"name": model.name, "thinking": model.thinking, "sampling": sampling(model)} for model in models]
+        return [ModelInfo(name=model.name, thinking=model.thinking, sampling=sampling(model)) for model in models]
 
     def sampling_config() -> dict[str, float]:
         try:
@@ -99,7 +180,7 @@ def create_app(
             raise HTTPException(500, str(error)) from None
 
     @app.post("/api/games")
-    def start_game(new_game: NewGame | None = None) -> dict[str, Any]:
+    def start_game(new_game: NewGame | None = None) -> GameState:
         nonlocal game
         new_game = new_game or NewGame()
         settings = Settings(new_game.mode, new_game.white, new_game.black, sampling=sampling_config())
@@ -108,7 +189,7 @@ def create_app(
             raise HTTPException(400, problem)
         players = {color: player_for(settings, color) for color in settings.llm_sides()}
         game = GameSession(players, settings, GameLog(games_dir, *settings.side_names()))
-        return game.state()
+        return GameState.model_validate(game.state())
 
     def current_game() -> GameSession:
         if game is None:
@@ -116,20 +197,20 @@ def create_app(
         return game
 
     @app.get("/api/games/current")
-    def get_game() -> dict[str, Any]:
-        return current_game().state()
+    def get_game() -> GameState:
+        return GameState.model_validate(current_game().state())
 
     @app.post("/api/games/current/moves")
-    def play_move(move: HumanMove) -> dict[str, Any]:
+    def play_move(move: HumanMove) -> GameState:
         session = current_game()
         try:
             session.play_human_move(move.uci)
         except RejectedHumanMove as error:
             raise HTTPException(400, str(error)) from None
-        return session.state()
+        return GameState.model_validate(session.state())
 
     @app.post("/api/games/current/llm-turn")
-    def play_llm_turn() -> dict[str, Any]:
+    def play_llm_turn() -> GameState:
         """The only way an LLM turn starts. The page asks for one whenever a state says it is an LLM's turn, which
         in an LLM faceoff is every turn until the game ends.
 
@@ -139,6 +220,6 @@ def create_app(
             session.play_llm_turn()
         except RefusedLlmTurn as error:
             raise HTTPException(409, str(error)) from None
-        return session.state()
+        return GameState.model_validate(session.state())
 
     return app
