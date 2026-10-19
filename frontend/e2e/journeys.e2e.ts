@@ -1,4 +1,4 @@
-// The journeys through the page: the built app at /next against FastAPI with scripted LLM players
+// The journeys through the page: the built app at / against FastAPI with scripted LLM players
 // (tests/e2e_server.py). Each sets the LLMs' replies, as SAN, before its game starts.
 import { expect, test, type Page } from '@playwright/test'
 
@@ -11,7 +11,7 @@ async function playLlm(page: Page, script: Script) {
     data: { mode: 'play_llm', white: { player: 'human' }, black: { player: 'llm' } },
   })
   expect(started.ok()).toBe(true)
-  await page.goto('/next')
+  await page.goto('/')
   await expect(page.getByTestId('status')).toHaveText('Your move (White)')
 }
 
@@ -121,4 +121,12 @@ test('an LLM faceoff started from the settings modal plays to its end', async ({
   await expect(page.getByTestId('moves')).toContainText(/1\.\s*f3\s*e5\s*2\.\s*g4\s*Qh4#/)
   await expect(page.getByTestId('status')).toHaveText('Game over')
   await expectPiece(page, 'h4', 'bq')
+})
+
+test('the page at / credits the Merida pieces and the move sound', async ({ page }) => {
+  await playLlm(page, {})
+
+  await expect(page.getByText('Pieces: Merida by Armando Hernandez Marroquin, GPLv2+', { exact: false })).toBeVisible()
+  await expect(page.getByText('Move sound: Kenney, CC0', { exact: false })).toBeVisible()
+  await expect(page.locator('.chessboard g[data-piece="wk"]')).toHaveCount(1)
 })

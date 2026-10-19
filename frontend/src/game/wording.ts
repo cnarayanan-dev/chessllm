@@ -1,4 +1,4 @@
-// The words around the board, as the old page has them: the chips, the status line and the end-of-game banner.
+// The words around the board, as the old page had them: the chips, the status line and the end-of-game banner.
 import type { Color, GameSettings, GameState } from '@/api/types'
 import { humanColor } from '@/game/gameLoop'
 

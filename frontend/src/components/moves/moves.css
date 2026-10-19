@@ -1,4 +1,4 @@
-/* The move list, ported from the old page (chessllm/static/index.html), with its red and amber. */
+/* The move list, ported from the old plain-HTML page, with its red and amber. */
 .moves-card { --red: #e03e3e; --red-soft: #fbe4e4; --amber: #c77d00; --amber-soft: #fbf0d9; --hover: #efefed; --faint: #9b9a97; }
 /* Move list: one row per move number, with the LLM's mistakes under its move */
 .moves { font-family: ui-monospace, monospace; font-size: 13px; min-height: 1.5em; display: grid; grid-template-columns: 28px 1fr 1fr; row-gap: 2px; }

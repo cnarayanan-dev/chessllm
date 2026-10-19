@@ -56,6 +56,15 @@ test('shows the current game: who plays whom, the status and the board', async (
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
+test('credits the Merida pieces and the move sound', async () => {
+  fakeBackend().on('GET /api/games/current', Response.json(aGame()))
+
+  renderApp()
+
+  expect(await screen.findByText(/Pieces: Merida by Armando Hernandez Marroquin, GPLv2\+/)).toBeVisible()
+  expect(screen.getByText(/Move sound: Kenney, CC0/)).toBeVisible()
+})
+
 test('starts a game with the default settings when there is none', async () => {
   const backend = fakeBackend()
     .on('GET /api/games/current', Response.json({ detail: 'no game started' }, { status: 404 }))

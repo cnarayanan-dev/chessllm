@@ -1,4 +1,4 @@
-// The Playwright journeys (`pnpm e2e`): the built app at /next against FastAPI with scripted LLM players
+// The Playwright journeys (`pnpm e2e`): the built app at / against FastAPI with scripted LLM players
 // (tests/e2e_server.py), so they run without Ollama. Build first: `pnpm build`.
 import { createServer } from 'node:net'
 import { defineConfig, devices } from '@playwright/test'

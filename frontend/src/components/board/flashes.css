@@ -1,4 +1,4 @@
-/* Board flashes, ported as they are from the old page (chessllm/static/index.html): an LLM turn's mistakes, shown when
+/* Board flashes, ported as they are from the old plain-HTML page: an LLM turn's mistakes, shown when
    the turn comes back whatever the "Show LLM mistakes" switch says. No close button: each fades out after 7 s and is
    then removed. */
 .flash { --bg: #ffffff; --muted: #787774; --red: #e03e3e; --amber: #c77d00; }

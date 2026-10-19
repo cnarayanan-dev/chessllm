@@ -1,4 +1,4 @@
-/* The board's look, ported as it is from the old page (chessllm/static/index.html). */
+/* The board's look, ported as it is from the old plain-HTML page. */
 
 /* The old page's font, which the coordinates inherit. */
 .board-wrap { position: relative; font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Helvetica, sans-serif; }

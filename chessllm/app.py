@@ -197,13 +197,9 @@ def create_app(
             background.add_task(analyse, game_logs[session])
         return state
 
-    @app.get("/", include_in_schema=False)
-    def page() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
-
-    @app.get("/next", include_in_schema=False, response_model=None)
-    def next_page() -> FileResponse | PlainTextResponse:
-        """The React app, served here while the old page stays at /."""
+    @app.get("/", include_in_schema=False, response_model=None)
+    def page() -> FileResponse | PlainTextResponse:
+        """The React app, from its build."""
         index = dist_dir / "index.html"
         if not index.is_file():
             return PlainTextResponse(

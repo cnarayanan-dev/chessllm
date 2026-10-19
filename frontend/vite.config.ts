@@ -11,7 +11,7 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'src') },
   },
-  // The build goes into FastAPI's static files: it serves index.html at /next and the rest under /static/dist/.
+  // The build goes into FastAPI's static files: it serves index.html at / and the rest under /static/dist/.
   // The dev server serves the app at / instead.
   base: command === 'build' ? '/static/dist/' : '/',
   build: {

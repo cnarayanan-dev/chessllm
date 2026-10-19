@@ -30,7 +30,7 @@ test('switched off, the move sound stays silent, and the browser remembers it', 
   playMoveSound()
 
   expect(played).toEqual([])
-  expect(localStorage.getItem('chessllm.moveSound')).toBe('off') // the key the old page uses
+  expect(localStorage.getItem('chessllm.moveSound')).toBe('off') // the key the old page used
   expect(isMoveSoundOn()).toBe(false)
 })
 
