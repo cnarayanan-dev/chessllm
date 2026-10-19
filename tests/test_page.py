@@ -52,3 +52,14 @@ def test_the_page_starts_the_llm_turn_with_its_own_request(client):
     page = client.get("/").text
 
     assert '"/api/games/current/llm-turn"' in page
+
+
+def test_the_board_flashes_an_llm_turns_illegal_tries_forfeit_and_notation_slip_for_7_seconds(client):
+    page = client.get("/").text
+
+    assert 'id="boardWrap"' in page
+    assert "LLM move illegal" in page
+    assert "LLM forfeits: ${illegal.length} illegal moves" in page
+    assert "of 4" in page
+    assert "square-ring" in page and "bubble" in page
+    assert "flash-out .4s ease-in 7s forwards" in page

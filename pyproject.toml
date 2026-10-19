@@ -20,6 +20,9 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+# Live tests against a real Ollama model are left out unless asked for with `pytest -m ollama`.
+addopts = "-m 'not ollama'"
+markers = ["ollama: live test against a real Ollama model"]
 
 [tool.mypy]
 strict = true

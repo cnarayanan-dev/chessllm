@@ -42,6 +42,24 @@
   .layout { display: grid; grid-template-columns: minmax(320px, 560px) 340px; gap: 32px; justify-content: center; padding: 28px 20px 40px; }
   @media (max-width: 960px) { .layout { grid-template-columns: minmax(280px, 560px); } }
   #board { width: 100%; aspect-ratio: 1 / 1; }
+  .board-wrap { position: relative; }
+  /* Board flashes: an LLM turn's mistakes, shown when the turn comes back whatever the switch says.
+     No close button: each fades out after 7 s and is then removed. */
+  .flash { animation: flash-in .2s ease-out, flash-out .4s ease-in 7s forwards; pointer-events: none; z-index: 5; }
+  @keyframes flash-in { from { opacity: 0; } }
+  @keyframes flash-out { to { opacity: 0; visibility: hidden; } }
+  .center-flash { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 230px;
+    background: var(--bg); border: 1px solid var(--red); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.22); overflow: hidden; }
+  .center-flash .head { background: var(--red); color: #fff; font-weight: 600; font-size: 13px; padding: 6px 12px; }
+  .center-flash .line { font-family: ui-monospace, monospace; font-size: 13px; padding: 4px 12px; }
+  .center-flash .line:first-of-type { padding-top: 8px; }
+  .center-flash .line:last-of-type { padding-bottom: 8px; }
+  .center-flash .kind { color: var(--muted); }
+  .bubble { position: absolute; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; padding: 5px 9px;
+    background: var(--amber); color: #fff; border-radius: 6px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+  .bubble code { font-family: ui-monospace, monospace; }
+  .bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: var(--amber); }
+  .square-ring { position: absolute; border: 3px solid var(--amber); border-radius: 3px; }
   .side { display: flex; flex-direction: column; gap: 14px; }
   .card { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
@@ -136,7 +154,7 @@
 </div>
 
 <div class="layout">
-  <div id="board"></div>
+  <div class="board-wrap" id="boardWrap"><div id="board"></div></div>
   <div class="side">
     <div class="banner" id="banner" hidden>
       <div><div class="title" id="bannerTitle"></div><div class="reason" id="bannerReason"></div></div>
@@ -322,6 +340,50 @@ async function show(next) {
   if (state.status === "playing" && state.human_legal_moves.length) board.enableMoveInput(onMoveInput, COLOR[human])
 }
 
+// Board flashes: a turn's result arrives at once, so its flashes appear together. The illegal tries are listed in a
+// card in the middle of the board, and a Notation slip rings the square the move landed on.
+function flashNode(tag, className, ...children) {
+  const node = document.createElement(tag)
+  node.className = className
+  node.append(...children)
+  return node
+}
+
+function clearFlashes() {
+  document.querySelectorAll(".flash").forEach(flash => flash.remove())
+}
+
+function flashTurn(turn, landedOn) {
+  clearFlashes()
+  const illegal = turn.attempts.filter(a => a.result !== "legal" && !a.error)
+  const error = turn.attempts.find(a => a.error)?.error // a forfeit with no answer
+  const forfeit = !turn.attempts.some(a => a.result === "legal")
+  if (illegal.length || forfeit) {
+    const head = !forfeit ? `✗ LLM move illegal${illegal.length > 1 ? ` ×${illegal.length}` : ""}`
+      : error ? "✗ LLM forfeits: no answer" : `✗ LLM forfeits: ${illegal.length} illegal moves`
+    const card = flashNode("div", "flash center-flash", flashNode("div", "head", head))
+    for (const attempt of illegal) {
+      const kind = flashNode("span", "kind", `${attempt.result} · try ${turn.attempts.indexOf(attempt) + 1} of 4`)
+      card.append(flashNode("div", "line", flashNode("s", "", attempt.move), " ", kind))
+    }
+    if (error) card.append(flashNode("div", "line", flashNode("span", "kind", `⚠ ${error}`)))
+    $("boardWrap").append(card)
+  }
+  const slip = turn.attempts.find(a => a.notation_slip)
+  const square = slip && $("board").querySelector(`rect.square[data-square="${landedOn}"]`)
+  if (square) {
+    const wrap = $("boardWrap").getBoundingClientRect()
+    const box = square.getBoundingClientRect()
+    const [x, y] = [box.left - wrap.left, box.top - wrap.top]
+    const ring = flashNode("div", "flash square-ring")
+    Object.assign(ring.style, {left: `${x}px`, top: `${y}px`, width: `${box.width}px`, height: `${box.height}px`})
+    const bubble = flashNode("div", "flash bubble", "⚑ written ", flashNode("code", "", `"${slip.move}"`), ` → ${slip.san}`)
+    Object.assign(bubble.style, {left: `${x + box.width / 2}px`, top: `${y}px`})
+    $("boardWrap").append(ring, bubble)
+  }
+}
+addEventListener("animationend", event => { if (event.animationName === "flash-out") event.target.remove() })
+
 // The board stays locked while the LLM thinks, and a running timer shows the app has not frozen.
 // settings are those of the game the LLM is moving in. Returns the next state, or null on an error.
 async function whileLlmMoves(settings, request) {
@@ -364,6 +426,7 @@ async function receive(received) {
 // running (another tab, or this page before a reload). The page can't attach to that turn, so it checks the game
 // every 2s until the turn has landed. A stale state also gets a 409, and the first check settles it.
 async function llmTurn() {
+  const turnsBefore = state.llm_turns.length
   const next = await whileLlmMoves(state.settings, async () => {
     try {
       return await api("POST", "/api/games/current/llm-turn")
@@ -377,6 +440,7 @@ async function llmTurn() {
     }
   })
   await show(next ?? state)
+  if (next && next.llm_turns.length > turnsBefore) flashTurn(next.llm_turn, next.last_move?.slice(2, 4)) // only a turn that has just landed
 }
 
 // The human's move comes back at once, so the castling rook, an en passant capture or a promotion shows before the
@@ -577,6 +641,7 @@ async function newGame() {
   if (waiting) return
   $("error").hidden = true
   closeSettings()
+  clearFlashes()
   let started
   try {
     started = await api("POST", "/api/games", next)
