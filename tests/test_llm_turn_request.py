@@ -1,5 +1,7 @@
 """The human's move and the LLM's turn are separate requests: POST /moves never waits for the LLM."""
 
+from conftest import play_llm
+
 import threading
 
 import chess
@@ -41,7 +43,7 @@ def test_castling_shows_the_rook_moved_before_the_llm_replies(scripted):
 def test_a_new_game_as_black_starts_with_the_llm_to_move_and_no_llm_turn_played(scripted):
     client, player = scripted([])
 
-    state = client.post("/api/games", json={"human_color": "black"}).json()
+    state = client.post("/api/games", json=play_llm("black")).json()
 
     assert (state["fen"], state["turn"], state["status"]) == (START_FEN, "white", "playing")
     assert state["human_legal_moves"] == []
@@ -65,7 +67,7 @@ def test_the_llm_turn_plays_the_llms_move_and_returns_the_state(scripted):
 
 def test_the_llm_turn_opens_a_game_the_llm_plays_as_white(scripted):
     client, _ = scripted(["e4"])
-    client.post("/api/games", json={"human_color": "black"})
+    client.post("/api/games", json=play_llm("black"))
 
     state = client.post("/api/games/current/llm-turn").json()
 
@@ -124,7 +126,7 @@ class BlockingPlayer:
 def test_a_second_llm_turn_is_refused_while_one_is_running(tmp_path):
     player = BlockingPlayer()
     client = TestClient(
-        create_app(lambda settings: player, games_dir=tmp_path / "games", sampling_file=tmp_path / "no-sampling.toml")
+        create_app(lambda settings, color: player, games_dir=tmp_path / "games", sampling_file=tmp_path / "no-sampling.toml")
     )
     client.post("/api/games")
     client.post("/api/games/current/moves", json={"uci": "e2e4"})

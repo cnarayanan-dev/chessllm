@@ -1,4 +1,4 @@
-from conftest import play_move
+from conftest import play_llm, play_move
 
 from chessllm.game import Settings
 from chessllm.models import LlmModel
@@ -43,7 +43,7 @@ def test_a_model_ollama_cannot_show_is_still_offered_without_sampling(scripted):
 def test_a_game_cannot_start_with_a_model_that_isnt_in_the_list(scripted):
     client, player = scripted([])
 
-    response = client.post("/api/games", json={"model": "gemma3:4b"})
+    response = client.post("/api/games", json=play_llm(model="gemma3:4b"))
 
     assert response.status_code == 400
     assert "gemma3:4b" in response.json()["detail"]
@@ -53,7 +53,7 @@ def test_a_game_cannot_start_with_a_model_that_isnt_in_the_list(scripted):
 def test_a_game_cannot_start_with_thinking_on_for_a_model_that_cannot_think(scripted):
     client, player = scripted([])
 
-    response = client.post("/api/games", json={"model": "llama3:8b", "thinking": True})
+    response = client.post("/api/games", json=play_llm(model="llama3:8b", thinking=True))
 
     assert response.status_code == 400
     assert "llama3:8b" in response.json()["detail"]
@@ -89,11 +89,12 @@ def test_the_sampling_config_is_copied_into_the_next_game_only(scripted, tmp_pat
 def test_sampling_cannot_be_set_through_the_api(scripted, tmp_path):
     config = tmp_path / "sampling.toml"
     config.write_text("")
-    client, _ = scripted([], sampling_file=config)
+    client, player = scripted([], sampling_file=config)
 
-    state = client.post("/api/games", json={"sampling": {"temperature": 2}}).json()
+    response = client.post("/api/games", json={"sampling": {"temperature": 2}})
 
-    assert state["settings"]["sampling"] == {}
+    assert response.status_code == 422
+    assert player.built_for == []
 
 
 def test_an_unknown_sampling_option_is_refused(scripted, tmp_path):

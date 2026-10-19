@@ -2,18 +2,26 @@
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
-from chessllm.game import Color, GameSession, RefusedLlmTurn, RejectedHumanMove, Settings
+from chessllm.game import (
+    Color,
+    GameSession,
+    HumanSide,
+    LlmSide,
+    Mode,
+    RefusedLlmTurn,
+    RejectedHumanMove,
+    Settings,
+)
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
-from chessllm.prompt import LlmConstraints, RetryFeedback
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -22,24 +30,28 @@ class HumanMove(BaseModel):
     uci: str
 
 
-class NewGame(BaseModel):
-    """The settings chosen in the settings modal. Sampling isn't one of them: it comes from the config file."""
+SideIn = Annotated[HumanSide | LlmSide, Field(discriminator="player")]
 
-    model: str = Settings.model
-    thinking: bool = Settings.thinking
-    retry_feedback: RetryFeedback = Settings.retry_feedback
-    human_color: Color = Settings.human_color
-    llm_constraints: LlmConstraints = Settings.llm_constraints
+
+class NewGame(BaseModel):
+    """The settings chosen in the settings modal: the Mode and who plays each side, with the settings of each LLM
+    side. Sampling isn't one of them: it comes from the config file."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Mode = Settings.mode
+    white: SideIn = Settings.white
+    black: SideIn = Settings.black
 
 
 def create_app(
-    player_for: Callable[[Settings], LlmPlayer],
+    player_for: Callable[[Settings, Color], LlmPlayer],
     games_dir: Path = GAMES_DIR,
     models: list[LlmModel] = LLM_MODELS,
     sampling_defaults: Callable[[str], dict[str, float]] = lambda model: {},
     sampling_file: Path = SAMPLING_FILE,
 ) -> FastAPI:
-    """player_for builds the LLM player of each game from that game's settings.
+    """player_for builds the LLM player of each LLM side of a game, from that game's settings and the side's colour.
 
     models are the models the game can be played against, and sampling_defaults gives a model's own sampling."""
     app = FastAPI(title="ChessLLM")
@@ -74,14 +86,13 @@ def create_app(
     @app.post("/api/games")
     def start_game(new_game: NewGame | None = None) -> dict[str, Any]:
         nonlocal game
-        settings = Settings(**(new_game or NewGame()).model_dump(), sampling=sampling_config())
-        model = next((model for model in models if model.name == settings.model), None)
-        if model is None:
-            raise HTTPException(400, f"{settings.model} is not in the model list")
-        if settings.thinking and not model.thinking:
-            raise HTTPException(400, f"{settings.model} cannot think, so thinking must be off")
-        white, black = settings.side_names()
-        game = GameSession(player_for(settings), settings, GameLog(games_dir, white, black))
+        new_game = new_game or NewGame()
+        settings = Settings(new_game.mode, new_game.white, new_game.black, sampling=sampling_config())
+        problem = settings.problem(models)
+        if problem is not None:
+            raise HTTPException(400, problem)
+        players = {color: player_for(settings, color) for color in settings.llm_sides()}
+        game = GameSession(players, settings, GameLog(games_dir, *settings.side_names()))
         return game.state()
 
     def current_game() -> GameSession:
@@ -104,7 +115,10 @@ def create_app(
 
     @app.post("/api/games/current/llm-turn")
     def play_llm_turn() -> dict[str, Any]:
-        """The only way an LLM turn starts. The page asks for one whenever a state says it is the LLM's turn."""
+        """The only way an LLM turn starts. The page asks for one whenever a state says it is an LLM's turn, which
+        in an LLM faceoff is every turn until the game ends.
+
+        The state returned is that of the game the turn was played in, even if a new game has started since."""
         session = current_game()
         try:
             session.play_llm_turn()

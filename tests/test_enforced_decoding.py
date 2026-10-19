@@ -1,4 +1,4 @@
-from conftest import play_move
+from conftest import play_llm, play_move
 
 import json
 
@@ -15,7 +15,7 @@ NOT_APPLICABLE = {"legal_move_streak": None, "illegal_moves": None, "recovered_t
 
 def start_game(scripted, llm_constraints, replies):
     client, player = scripted(replies)
-    client.post("/api/games", json={"llm_constraints": llm_constraints})
+    client.post("/api/games", json=play_llm(llm_constraints=llm_constraints))
     return client, player
 
 
@@ -30,8 +30,8 @@ def test_the_enforced_constraints_are_accepted_and_copied_into_the_game(scripted
 
     state = client.get("/api/games/current").json()
 
-    assert state["settings"]["llm_constraints"] == llm_constraints
-    assert [settings.llm_constraints for settings in player.built_for] == [llm_constraints]
+    assert state["settings"]["black"]["llm_constraints"] == llm_constraints
+    assert [settings.black.llm_constraints for settings in player.built_for] == [llm_constraints]
 
 
 @pytest.mark.parametrize("llm_constraints", ["blind_enforced", "listed_enforced"])
@@ -91,7 +91,7 @@ def test_the_illegal_move_metrics_are_not_applicable_in_the_state_under_enforced
 
     state = play_move(client, "e2e4").json()
 
-    assert state["stats"] == NOT_APPLICABLE | {"notation_slips": 0}
+    assert state["stats"]["black"] == NOT_APPLICABLE | {"notation_slips": 0}
 
 
 @pytest.mark.parametrize("llm_constraints", ["blind_enforced", "listed_enforced"])
@@ -105,7 +105,7 @@ def test_an_illegal_move_that_gets_through_is_retried_and_logged_but_the_totals_
     assert [attempt["result"] for attempt in state["llm_turn"]["attempts"]] == ["illegal", "legal"]
     assert state["llm_turn"]["attempts"][1]["feedback_sent"] is not None
     assert len(player.allowed_moves) == 2 and player.allowed_moves[0] == player.allowed_moves[1]
-    assert state["stats"] == NOT_APPLICABLE | {"notation_slips": 0}
+    assert state["stats"]["black"] == NOT_APPLICABLE | {"notation_slips": 0}
     attempts = [event for event in log_events(tmp_path / "games") if event["type"] == "llm_attempt"]
     assert [attempt["result"] for attempt in attempts] == ["illegal", "legal"]
 
@@ -137,7 +137,7 @@ def test_free_and_listed_keep_counting_the_illegal_move_metrics(scripted):
 
     state = play_move(client, "e2e4").json()
 
-    assert state["stats"] == {
+    assert state["stats"]["black"] == {
         "legal_move_streak": 0,
         "illegal_moves": {"invalid": 0, "illegal": 1, "ambiguous": 0},
         "recovered_turns": 1,

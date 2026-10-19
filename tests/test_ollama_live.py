@@ -4,7 +4,7 @@ Excluded from the default run; run them with `pytest -m ollama`. Skipped when no
 llama3:8b isn't installed. llama3:8b can't think, so only the thinking-off path is covered here; the thinking-on
 path is covered by the adapter tests with a fake chat."""
 
-from conftest import play_move
+from conftest import play_llm, play_move
 
 import json
 
@@ -90,7 +90,7 @@ def test_the_reasoning_stays_free_text_under_the_enum(player):
 def test_a_listed_enforced_turn_through_the_app_plays_a_legal_move_without_a_slip(tmp_path):
     games_dir = tmp_path / "games"
     client = TestClient(create_app(player_for, games_dir=games_dir, sampling_file=tmp_path / "no-sampling.toml"))
-    started = client.post("/api/games", json={"model": MODEL, "thinking": False, "llm_constraints": "listed_enforced"})
+    started = client.post("/api/games", json=play_llm(model=MODEL, thinking=False, llm_constraints="listed_enforced"))
     assert started.status_code == 200
 
     state = play_move(client, "e2e4").json()

@@ -3,12 +3,12 @@ import json
 
 import chess.pgn
 import pytest
-from conftest import play_move
+from conftest import play_llm, play_move
 
 
 def start(scripted, replies, **settings):
     client, player = scripted(replies)
-    client.post("/api/games", json=settings)
+    client.post("/api/games", json=play_llm(**settings))
     if settings.get("human_color") == "black":
         client.post("/api/games/current/llm-turn")  # the LLM plays White, so it opens the game
     return client, player
@@ -38,7 +38,7 @@ def test_a_legal_move_not_in_standard_san_is_played_and_flagged_as_a_notation_sl
 
     assert attempts(state) == [(written, "legal", True, "Nf6")]
     assert state["pgn"] == "1. e4 Nf6"
-    assert state["stats"]["notation_slips"] == 1
+    assert state["stats"]["black"]["notation_slips"] == 1
 
 
 def test_exact_standard_san_is_not_a_notation_slip(scripted):
@@ -47,7 +47,7 @@ def test_exact_standard_san_is_not_a_notation_slip(scripted):
     state = play_move(client, "e2e4").json()
 
     assert attempts(state) == [("Nf6", "legal", False, "Nf6")]
-    assert state["stats"]["notation_slips"] == 0
+    assert state["stats"]["black"]["notation_slips"] == 0
 
 
 def test_a_missing_check_sign_is_a_notation_slip(scripted):
@@ -80,10 +80,10 @@ def test_a_notation_slip_keeps_the_legal_move_streak_and_uses_no_retry(scripted)
     state = play_move(client, "g1f3").json()
 
     assert len(player.prompts) == 2  # one attempt per turn
-    assert state["stats"]["legal_move_streak"] == 2
-    assert state["stats"]["illegal_moves"] == {"invalid": 0, "illegal": 0, "ambiguous": 0}
-    assert state["stats"]["recovered_turns"] == 0
-    assert state["stats"]["notation_slips"] == 1
+    assert state["stats"]["black"]["legal_move_streak"] == 2
+    assert state["stats"]["black"]["illegal_moves"] == {"invalid": 0, "illegal": 0, "ambiguous": 0}
+    assert state["stats"]["black"]["recovered_turns"] == 0
+    assert state["stats"]["black"]["notation_slips"] == 1
 
 
 def test_an_illegal_move_has_no_standard_san_and_is_not_a_notation_slip(scripted):

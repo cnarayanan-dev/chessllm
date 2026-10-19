@@ -1,6 +1,6 @@
-from conftest import Raw, play_move
+from conftest import Raw, play_llm, play_move
 
-from chessllm.game import Settings
+from chessllm.game import LlmSide, Settings
 from chessllm.players import Message
 
 DEFAULT_SYSTEM_PROMPT = """You are playing chess as Black against a human playing White.
@@ -44,7 +44,7 @@ def test_there_is_no_llm_turn_before_the_llm_has_moved(scripted):
 
 def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
     client, _ = scripted(["e5", "Nc6"], thinking=["Mirror the centre pawn.", "Defend e5."])
-    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
+    client.post("/api/games", json=play_llm(model="qwen3.5:9b", thinking=True))
     play_move(client, "e2e4")
 
     state = play_move(client, "g1f3").json()
@@ -53,6 +53,7 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
     assert state["last_move"] == "b8c6"
     assert state["llm_turn"] == {
         "ply": 4,
+        "color": "black",
         "attempts": [
             {
                 "move": "Nc6",
@@ -74,11 +75,15 @@ def test_the_default_opponent_is_llama_with_thinking_off(scripted):
     client, _ = scripted([])
 
     assert client.post("/api/games").json()["settings"] == {
-        "model": "llama3:8b",
-        "thinking": False,
-        "retry_feedback": "explained",
-        "human_color": "white",
-        "llm_constraints": "free",
+        "mode": "play_llm",
+        "white": {"player": "human"},
+        "black": {
+            "player": "llm",
+            "model": "llama3:8b",
+            "thinking": False,
+            "llm_constraints": "free",
+            "retry_feedback": "explained",
+        },
         "sampling": {},
     }
 
@@ -86,48 +91,56 @@ def test_the_default_opponent_is_llama_with_thinking_off(scripted):
 def test_the_game_reports_the_settings_it_was_started_with(scripted):
     client, _ = scripted([])
 
-    state = client.post("/api/games", json={"model": "llama3:8b", "thinking": False, "retry_feedback": "bare"}).json()
+    state = client.post("/api/games", json=play_llm(model="llama3:8b", thinking=False, retry_feedback="bare")).json()
 
     assert state["settings"] == {
-        "model": "llama3:8b",
-        "thinking": False,
-        "retry_feedback": "bare",
-        "human_color": "white",
-        "llm_constraints": "free",
+        "mode": "play_llm",
+        "white": {"player": "human"},
+        "black": {
+            "player": "llm",
+            "model": "llama3:8b",
+            "thinking": False,
+            "llm_constraints": "free",
+            "retry_feedback": "bare",
+        },
         "sampling": {},
     }
 
 
 def test_the_player_for_a_game_is_built_once_from_that_games_settings(scripted):
     client, player = scripted(["e5", "Nc6", "d5"])
-    client.post("/api/games", json={"model": "llama3:8b", "thinking": False})
+    client.post("/api/games", json=play_llm(model="llama3:8b", thinking=False))
     play_move(client, "e2e4")
 
     state = play_move(client, "g1f3").json()
 
-    assert player.built_for == [Settings(model="llama3:8b", thinking=False)]
-    assert (state["settings"]["model"], state["settings"]["thinking"]) == ("llama3:8b", False)
+    assert player.built_for == [Settings(black=LlmSide(model="llama3:8b", thinking=False))]
+    assert (state["settings"]["black"]["model"], state["settings"]["black"]["thinking"]) == ("llama3:8b", False)
 
 
 def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
     client, player = scripted(["Qh4", "e5", "d5"])
-    client.post("/api/games", json={"model": "llama3:8b", "thinking": False, "retry_feedback": "bare"})
+    client.post("/api/games", json=play_llm(model="llama3:8b", thinking=False, retry_feedback="bare"))
     playing = play_move(client, "e2e4").json()
 
-    state = client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True}).json()
+    state = client.post("/api/games", json=play_llm(model="qwen3.5:9b", thinking=True)).json()
     play_move(client, "d2d4")
 
     assert playing["llm_turn"]["attempts"][1]["feedback_sent"].endswith("Try again.")  # bare
     assert player.built_for == [
-        Settings(model="llama3:8b", thinking=False, retry_feedback="bare"),
-        Settings(model="qwen3.5:9b", thinking=True),
+        Settings(black=LlmSide(model="llama3:8b", thinking=False, retry_feedback="bare")),
+        Settings(black=LlmSide(model="qwen3.5:9b", thinking=True)),
     ]
     assert state["settings"] == {
-        "model": "qwen3.5:9b",
-        "thinking": True,
-        "retry_feedback": "explained",
-        "human_color": "white",
-        "llm_constraints": "free",
+        "mode": "play_llm",
+        "white": {"player": "human"},
+        "black": {
+            "player": "llm",
+            "model": "qwen3.5:9b",
+            "thinking": True,
+            "llm_constraints": "free",
+            "retry_feedback": "explained",
+        },
         "sampling": {},
     }
 
@@ -135,7 +148,7 @@ def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
 def test_with_thinking_off_a_legal_reply_is_applied_and_its_reasoning_shown_as_the_thinking(scripted):
     reply = '{"reasoning": "Mirror the centre pawn.", "move": "e5"}'
     client, _ = scripted([Raw(reply)])
-    client.post("/api/games", json={"thinking": False})
+    client.post("/api/games", json=play_llm(thinking=False))
 
     state = play_move(client, "e2e4").json()
 

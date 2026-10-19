@@ -1,4 +1,4 @@
-"""One game between the human and the LLM player, each playing the colour the settings give them."""
+"""One game, each side played by a human or an LLM player as the settings' Mode says."""
 
 import random
 import threading
@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
+from chessllm.models import LlmModel
 from chessllm.prompt import (
     ENFORCED,
     LISTED,
@@ -22,24 +23,68 @@ from chessllm.prompt import (
 )
 
 Color = Literal["white", "black"]
+COLORS: tuple[Color, Color] = ("white", "black")
+# Play LLM: a human plays one side and an LLM the other. LLM faceoff: an LLM plays each side.
+Mode = Literal["play_llm", "llm_faceoff"]
+MODE_NAMES: dict[Mode, str] = {"play_llm": "Play LLM", "llm_faceoff": "LLM faceoff"}
+
+
+@dataclass(frozen=True)
+class HumanSide:
+    player: Literal["human"] = "human"
+
+
+@dataclass(frozen=True)
+class LlmSide:
+    """An LLM side with the settings it plays under, in the game log's shape (ADR 0004)."""
+
+    player: Literal["llm"] = "llm"
+    model: str = "llama3:8b"
+    thinking: bool = False
+    llm_constraints: LlmConstraints = "free"
+    retry_feedback: RetryFeedback = "explained"
+
+    def name(self) -> str:
+        """The side's name in the PGN, e.g. "llama3:8b (no thinking)"."""
+        return f"{self.model} ({'thinking' if self.thinking else 'no thinking'})"
+
+
+Side = HumanSide | LlmSide
 
 
 @dataclass(frozen=True)
 class Settings:
-    """The setup of one game, copied into it when it starts."""
+    """The setup of one game, copied into it when it starts. Sampling is shared by every LLM side."""
 
-    model: str = "llama3:8b"
-    thinking: bool = False
-    retry_feedback: RetryFeedback = "explained"
-    human_color: Color = "white"  # the LLM plays the other colour
-    llm_constraints: LlmConstraints = "free"
+    mode: Mode = "play_llm"
+    white: Side = HumanSide()
+    black: Side = LlmSide()
     sampling: dict[str, float] = field(default_factory=dict)  # from the config file; empty means the model's defaults
+
+    def side(self, color: Color) -> Side:
+        return self.white if color == "white" else self.black
+
+    def llm_sides(self) -> dict[Color, LlmSide]:
+        return {color: side for color in COLORS if isinstance(side := self.side(color), LlmSide)}
 
     def side_names(self) -> tuple[str, str]:
         """Who plays White and who plays Black: "human" or the model."""
-        if self.human_color == "white":
-            return "human", self.model
-        return self.model, "human"
+        white, black = (side.model if isinstance(side, LlmSide) else "human" for side in (self.white, self.black))
+        return white, black
+
+    def problem(self, models: list[LlmModel]) -> str | None:
+        """Why a game can't be played with these settings, or None if it can."""
+        humans = sum(isinstance(self.side(color), HumanSide) for color in COLORS)
+        if humans != {"play_llm": 1, "llm_faceoff": 0}[self.mode]:
+            wanted = "one human side" if self.mode == "play_llm" else "no human side"
+            return f"{MODE_NAMES[self.mode]} needs {wanted}, not {humans}"
+        for color, side in self.llm_sides().items():
+            model = next((model for model in models if model.name == side.model), None)
+            if model is None:
+                return f"{side.model} ({color}) is not in the model list"
+            if side.thinking and not model.thinking:
+                return f"{side.model} ({color}) cannot think, so thinking must be off"
+        return None
 
 
 def color_name(color: chess.Color) -> Color:
@@ -51,7 +96,7 @@ class RejectedHumanMove(Exception):
 
 
 class RefusedLlmTurn(Exception):
-    """An LLM turn can't start: it isn't the LLM's turn, the game is over, or a turn is already running."""
+    """An LLM turn can't start: it isn't an LLM's turn, the game is over, or a turn is already running."""
 
 
 @dataclass(frozen=True)
@@ -95,40 +140,62 @@ def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, str]:
     return san, move, "legal"
 
 
+class SideStats:
+    """The totals of one LLM side."""
+
+    def __init__(self, llm_constraints: LlmConstraints) -> None:
+        self.enforced = llm_constraints in ENFORCED
+        self.legal_move_streak = 0
+        self.streak_broken = False
+        self.illegal_moves = dict.fromkeys(ILLEGAL_KINDS, 0)
+        self.recovered_turns = 0
+        self.notation_slips = 0
+
+    def as_dict(self) -> dict[str, Any]:
+        """Under Enforced decoding the illegal-move metrics are None, not applicable: they would be true by
+        construction (ADR 0003). Notation slips can't happen there, so they need no special case."""
+        if self.enforced:
+            not_applicable = {"legal_move_streak": None, "illegal_moves": None, "recovered_turns": None}
+            return not_applicable | {"notation_slips": self.notation_slips}
+        return {
+            "legal_move_streak": self.legal_move_streak,
+            "illegal_moves": dict(self.illegal_moves),
+            "recovered_turns": self.recovered_turns,
+            "notation_slips": self.notation_slips,
+        }
+
+
 class GameSession:
-    def __init__(self, player: LlmPlayer, settings: Settings, log: GameLog) -> None:
-        self._player = player
+    def __init__(self, players: dict[Color, LlmPlayer], settings: Settings, log: GameLog) -> None:
+        """players holds the LLM player of each LLM side."""
+        self._players = players
         self._settings = settings
+        self._llm_sides = settings.llm_sides()
         self._log = log
         self._board = chess.Board()
         self._llm_turns: list[dict[str, Any]] = []  # every LLM turn of the game, the last one included
         self._end: GameEnd | None = None
-        self._legal_move_streak = 0
-        self._streak_broken = False
-        self._illegal_moves = dict.fromkeys(ILLEGAL_KINDS, 0)
-        self._recovered_turns = 0
-        self._notation_slips = 0
-        self._human = chess.WHITE if settings.human_color == "white" else chess.BLACK
-        # Requests run in a threadpool, so two could otherwise both find it the LLM's turn and both ask it to move.
+        self._stats = {color: SideStats(side.llm_constraints) for color, side in self._llm_sides.items()}
+        # Requests run in a threadpool, so two could otherwise both find it an LLM's turn and both ask it to move.
+        # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
         self._llm_turn_running = threading.Lock()
-        llm_side = {
-            "player": "llm",
-            "model": settings.model,
-            "thinking": settings.thinking,
-            "llm_constraints": settings.llm_constraints,
-            "retry_feedback": settings.retry_feedback,
-        }
-        sides = {color_name(self._human): {"player": "human"}, color_name(not self._human): llm_side}
+        prompt_files = {color: str(SYSTEM_PROMPT_FILES[side.llm_constraints]) for color, side in self._llm_sides.items()}
+        # Play LLM has one LLM side, so one prompt file; a faceoff logs the file of each side, even when shared.
+        logged_prompts: dict[str, Any] = (
+            {"prompt_files": prompt_files}
+            if settings.mode == "llm_faceoff"
+            else {"prompt_file": next(iter(prompt_files.values()))}
+        )
         log.write(
             "game_start",
             game_id=log.game_id,
             log_version=2,
-            mode="play_llm",
-            white=sides["white"],
-            black=sides["black"],
+            mode=settings.mode,
+            white=asdict(settings.white),
+            black=asdict(settings.black),
             sampling=settings.sampling or "model_default",
             max_retries=MAX_ATTEMPTS - 1,
-            prompt_file=str(SYSTEM_PROMPT_FILES[settings.llm_constraints]),
+            **logged_prompts,
             started_at=now(),
         )
 
@@ -139,33 +206,34 @@ class GameSession:
         board = self._board
         if self._end is not None:
             raise RejectedHumanMove("the game is over")
+        if self._settings.mode == "llm_faceoff":
+            raise RejectedHumanMove("an LLM faceoff takes no human moves")
         try:
             move = chess.Move.from_uci(uci)
         except ValueError:
             raise RejectedHumanMove(f"not a UCI move: {uci!r}") from None
-        if board.turn != self._human or not board.is_legal(move):
+        color = color_name(board.turn)
+        if color in self._llm_sides or not board.is_legal(move):
             raise RejectedHumanMove(f"illegal move: {uci}")
         san = board.san(move)
         board.push(move)
-        self._log.write(
-            "human_move", color=color_name(self._human), ply=len(board.move_stack), move=san, fen_after=board.fen()
-        )
+        self._log.write("human_move", color=color, ply=len(board.move_stack), move=san, fen_after=board.fen())
         self._check_end()
         if self._end is not None:
             self._write_end(self._end)
 
     def play_llm_turn(self) -> None:
-        """Play the LLM's turn: it moves or forfeits.
+        """Play the turn of the LLM to move: it moves or forfeits.
 
-        Raises RefusedLlmTurn and leaves the game unchanged if it isn't the LLM's turn, the game is over, or
+        Raises RefusedLlmTurn and leaves the game unchanged if it isn't an LLM's turn, the game is over, or
         another LLM turn is still running."""
         if not self._llm_turn_running.acquire(blocking=False):
             raise RefusedLlmTurn("an LLM turn is already running")
         try:
             if self._end is not None:
                 raise RefusedLlmTurn("the game is over")
-            if self._board.turn == self._human:
-                raise RefusedLlmTurn("it is not the LLM's turn")
+            if color_name(self._board.turn) not in self._llm_sides:
+                raise RefusedLlmTurn("it is not an LLM's turn")
             self._play_llm_turn()
             if self._end is None:
                 self._check_end()
@@ -176,31 +244,30 @@ class GameSession:
 
     def _write_end(self, end: GameEnd) -> None:
         board = self._board
-        llm_color = color_name(not self._human)
-        stats = {"white": None, "black": None} | {llm_color: self._stats()}  # a human's side has no stats (ADR 0004)
         self._log.write(
             "game_end",
             result=end.result,
             reason=end.reason,
             plies=len(board.move_stack),
-            stats=stats,
+            stats=self._all_stats(),
             ended_at=now(),
         )
-        thinking = "thinking" if self._settings.thinking else "no thinking"
-        llm_name = f"{self._settings.model} ({thinking})"
-        self._log.write_pgn(
-            board,
-            {
-                "Event": "ChessLLM",
-                "Date": f"{date.today():%Y.%m.%d}",
-                "White": "Human" if self._human == chess.WHITE else llm_name,
-                "Black": llm_name if self._human == chess.WHITE else "Human",
-                "Result": end.result,
-                "Termination": end.reason,
-                "Mode": "Play LLM",
-                f"{llm_color.capitalize()}LLMConstraints": self._settings.llm_constraints,
-            },
-        )
+        headers = {
+            "Event": "ChessLLM",
+            "Date": f"{date.today():%Y.%m.%d}",
+            "White": self._pgn_name("white"),
+            "Black": self._pgn_name("black"),
+            "Result": end.result,
+            "Termination": end.reason,
+            "Mode": MODE_NAMES[self._settings.mode],
+        }
+        for color, side in self._llm_sides.items():
+            headers[f"{color.capitalize()}LLMConstraints"] = side.llm_constraints
+        self._log.write_pgn(board, headers)
+
+    def _pgn_name(self, color: Color) -> str:
+        side = self._llm_sides.get(color)
+        return side.name() if side else "Human"
 
     def _check_end(self) -> None:
         """End the game if the position is over, counting claimable draws (threefold repetition, fifty moves).
@@ -218,25 +285,26 @@ class GameSession:
             self._end = GameEnd("1/2-1/2", "fifty_moves")
 
     def _play_llm_turn(self) -> None:
-        """Ask the LLM for a move, with a retry after each illegal move. It forfeits after MAX_ATTEMPTS illegal
-        moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
+        """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after MAX_ATTEMPTS
+        illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
         board = self._board
-        model = self._settings.model
         color = color_name(board.turn)
+        side, player, stats = self._llm_sides[color], self._players[color], self._stats[color]
+        model = side.model
         pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
         legal_moves = [board.san(legal) for legal in board.legal_moves]
         # Enforced decoding holds the move to exactly the legal moves, rebuilt from the position every turn.
-        allowed_moves = list(legal_moves) if self._settings.llm_constraints in ENFORCED else None
+        allowed_moves = list(legal_moves) if side.llm_constraints in ENFORCED else None
         # Listed shows the legal moves in a new random order every turn; the log keeps each list as shown.
-        listed = self._settings.llm_constraints in LISTED
+        listed = side.llm_constraints in LISTED
         if listed:
             random.shuffle(legal_moves)
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
-        prompt_file = SYSTEM_PROMPT_FILES[self._settings.llm_constraints]
+        prompt_file = SYSTEM_PROMPT_FILES[side.llm_constraints]
         messages = turn_messages(pgn, fen, color, prompt_file, listed_moves)
         attempts: list[dict[str, Any]] = []
-        turn: dict[str, Any] = {"ply": ply, "attempts": attempts, "thinking": None}
+        turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None}
         self._llm_turns.append(turn)
         feedback = None
         for number in range(1, MAX_ATTEMPTS + 1):
@@ -246,7 +314,7 @@ class GameSession:
             }
             attempts.append(attempt)
             try:
-                reply = self._player.reply(messages, allowed_moves)
+                reply = player.reply(messages, allowed_moves)
             except LlmTimeout as timeout:
                 minutes = timeout.timeout_s / 60
                 error_text = f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
@@ -260,7 +328,7 @@ class GameSession:
                 break
             written, move, result = judge(board, reply.raw)
             # With thinking off, the reasoning in the answer stands in for the thinking text.
-            thinking = reply.thinking if self._settings.thinking else reasoning(reply.raw)
+            thinking = reply.thinking if side.thinking else reasoning(reply.raw)
             attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking}
             if move is not None:  # legal as written; a slip if not written exactly as its standard SAN (ADR 0002)
                 attempt["san"] = board.san(move)
@@ -273,21 +341,22 @@ class GameSession:
             if move is not None:
                 board.push(move)
                 if number > 1:
-                    self._recovered_turns += 1
+                    stats.recovered_turns += 1
                 if attempt["notation_slip"]:
-                    self._notation_slips += 1
-                if not self._streak_broken:
-                    self._legal_move_streak += 1
+                    stats.notation_slips += 1
+                if not stats.streak_broken:
+                    stats.legal_move_streak += 1
                 return
-            self._illegal_moves[result] += 1
-            self._streak_broken = True
-            feedback = retry_feedback(self._settings.retry_feedback, written, result, number, MAX_ATTEMPTS, legal_moves)
+            stats.illegal_moves[result] += 1
+            stats.streak_broken = True
+            feedback = retry_feedback(side.retry_feedback, written, result, number, MAX_ATTEMPTS, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
-        self._end = GameEnd("1-0" if self._human == chess.WHITE else "0-1", "forfeit")
+        self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
 
     def state(self) -> dict[str, Any]:
         board = self._board
         return {
+            "game_id": self._log.game_id,
             "fen": board.fen(),
             "pgn": self._pgn(),
             "turn": color_name(board.turn),
@@ -300,25 +369,16 @@ class GameSession:
             "status": "over" if self._end else "playing",
             "result": self._end.result if self._end else None,
             "end_reason": self._end.reason if self._end else None,
-            "stats": self._stats(),
+            "stats": self._all_stats(),
         }
 
-    def _stats(self) -> dict[str, Any]:
-        """The game's totals. Under Enforced decoding the illegal-move metrics are None, not applicable: they would be
-        true by construction (ADR 0003). Notation slips can't happen there, so they need no special case."""
-        if self._settings.llm_constraints in ENFORCED:
-            not_applicable = {"legal_move_streak": None, "illegal_moves": None, "recovered_turns": None}
-            return not_applicable | {"notation_slips": self._notation_slips}
-        return {
-            "legal_move_streak": self._legal_move_streak,
-            "illegal_moves": dict(self._illegal_moves),
-            "recovered_turns": self._recovered_turns,
-            "notation_slips": self._notation_slips,
-        }
+    def _all_stats(self) -> dict[Color, dict[str, Any] | None]:
+        """The totals of each side; a human's side has none (ADR 0004)."""
+        return {color: stats.as_dict() if (stats := self._stats.get(color)) else None for color in COLORS}
 
     def _human_legal_moves(self) -> list[str]:
         board = self._board
-        if self._end is not None or board.turn != self._human:
+        if self._end is not None or color_name(board.turn) in self._llm_sides:
             return []
         return [move.uci() for move in board.legal_moves]
 

@@ -1,5 +1,5 @@
 import pytest
-from conftest import Raw, play_move
+from conftest import Raw, play_llm, play_move
 
 from chessllm.players import LlmTimeout, Message
 
@@ -15,7 +15,7 @@ def explained(move: str, kind: str, attempt: int) -> str:
 
 def start(scripted, replies, **kwargs):
     client, player = scripted(replies, **kwargs)
-    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
+    client.post("/api/games", json=play_llm(model="qwen3.5:9b", thinking=True))
     return client, player
 
 
@@ -92,8 +92,8 @@ def test_a_turn_recovered_by_a_retry_is_counted(scripted):
     state = play_move(client, "e2e4").json()
 
     assert state["status"] == "playing"
-    assert state["stats"]["recovered_turns"] == 1
-    assert state["stats"]["illegal_moves"] == {"invalid": 0, "illegal": 1, "ambiguous": 0}
+    assert state["stats"]["black"]["recovered_turns"] == 1
+    assert state["stats"]["black"]["illegal_moves"] == {"invalid": 0, "illegal": 1, "ambiguous": 0}
 
 
 def test_the_fourth_failed_attempt_forfeits_the_game(scripted):
@@ -106,8 +106,8 @@ def test_the_fourth_failed_attempt_forfeits_the_game(scripted):
     assert (state["status"], state["result"], state["end_reason"]) == ("over", "1-0", "forfeit")
     assert state["pgn"] == "1. e4"  # the human's move stays
     assert state["human_legal_moves"] == []
-    assert state["stats"]["illegal_moves"] == {"invalid": 1, "illegal": 3, "ambiguous": 0}
-    assert state["stats"]["recovered_turns"] == 0
+    assert state["stats"]["black"]["illegal_moves"] == {"invalid": 1, "illegal": 3, "ambiguous": 0}
+    assert state["stats"]["black"]["recovered_turns"] == 0
 
 
 @pytest.mark.parametrize(
@@ -143,14 +143,14 @@ def test_the_legal_move_streak_stops_at_the_first_illegal_move(scripted):
     client, _ = start(scripted, ["e5", "Nc6", "Qxf2", "Nf6", "d6"])
     play_move(client, "e2e4")
     state = play_move(client, "g1f3").json()
-    assert state["stats"]["legal_move_streak"] == 2
+    assert state["stats"]["black"]["legal_move_streak"] == 2
 
     state = play_move(client, "b1c3").json()  # Qxf2 fails, Nf6 recovers
-    assert state["stats"]["legal_move_streak"] == 2
+    assert state["stats"]["black"]["legal_move_streak"] == 2
 
     state = play_move(client, "d2d4").json()
-    assert state["stats"]["legal_move_streak"] == 2
-    assert state["stats"]["recovered_turns"] == 1
+    assert state["stats"]["black"]["legal_move_streak"] == 2
+    assert state["stats"]["black"]["recovered_turns"] == 1
 
 
 def test_a_new_game_starts_with_clean_stats(scripted):
@@ -159,7 +159,7 @@ def test_a_new_game_starts_with_clean_stats(scripted):
 
     state = client.post("/api/games").json()
 
-    assert state["stats"] == {
+    assert state["stats"]["black"] == {
         "legal_move_streak": 0,
         "illegal_moves": {"invalid": 0, "illegal": 0, "ambiguous": 0},
         "recovered_turns": 0,
@@ -170,7 +170,7 @@ def test_a_new_game_starts_with_clean_stats(scripted):
 
 def test_bare_feedback_says_only_that_the_move_was_illegal(scripted):
     client, player = scripted(["Qh4", "banana", "e5"])
-    client.post("/api/games", json={"retry_feedback": "bare"})
+    client.post("/api/games", json=play_llm(retry_feedback="bare"))
 
     state = play_move(client, "e2e4").json()
 
@@ -178,12 +178,12 @@ def test_bare_feedback_says_only_that_the_move_was_illegal(scripted):
         'Your move "Qh4" is illegal. Attempt 1 of 4. Try again.',
         'Your move "banana" is illegal. Attempt 2 of 4. Try again.',
     ]
-    assert state["settings"]["retry_feedback"] == "bare"
+    assert state["settings"]["black"]["retry_feedback"] == "bare"
 
 
 def test_hinted_feedback_adds_the_legal_moves_in_san(scripted):
     client, player = scripted(["Qh4", "e5"])
-    client.post("/api/games", json={"retry_feedback": "hinted"})
+    client.post("/api/games", json=play_llm(retry_feedback="hinted"))
 
     play_move(client, "e2e4")
 
@@ -196,4 +196,4 @@ def test_hinted_feedback_adds_the_legal_moves_in_san(scripted):
 def test_an_unknown_retry_feedback_level_is_refused(scripted):
     client, _ = scripted([])
 
-    assert client.post("/api/games", json={"retry_feedback": "loud"}).status_code == 422
+    assert client.post("/api/games", json=play_llm(retry_feedback="loud")).status_code == 422

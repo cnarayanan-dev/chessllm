@@ -4,7 +4,7 @@ import json
 import chess
 import chess.pgn
 
-from conftest import play_move
+from conftest import play_llm, play_move
 
 from chessllm.game import Settings
 from chessllm.players import Message
@@ -16,7 +16,7 @@ BLACK_MOVES_AFTER_E4 = {chess.Board(E4_FEN).san(move) for move in chess.Board(E4
 
 def listed_game(scripted, replies, **settings):
     client, player = scripted(replies)
-    client.post("/api/games", json={"llm_constraints": "listed", **settings})
+    client.post("/api/games", json=play_llm(llm_constraints="listed", **settings))
     return client, player
 
 
@@ -36,8 +36,8 @@ def test_the_llm_constraints_default_to_free(scripted):
 
     state = client.post("/api/games").json()
 
-    assert state["settings"]["llm_constraints"] == "free"
-    assert player.built_for == [Settings()]
+    assert state["settings"]["black"]["llm_constraints"] == "free"
+    assert player.built_for == [Settings()]  # Black is the LLM, with Free
 
 
 def test_listed_is_copied_into_the_game_and_applies_to_the_next_game_only(scripted):
@@ -47,8 +47,8 @@ def test_listed_is_copied_into_the_game_and_applies_to_the_next_game_only(script
     client.post("/api/games")
     state = play_move(client, "e2e4").json()
 
-    assert [settings.llm_constraints for settings in player.built_for] == ["listed", "free"]
-    assert state["settings"]["llm_constraints"] == "free"
+    assert [settings.black.llm_constraints for settings in player.built_for] == ["listed", "free"]
+    assert state["settings"]["black"]["llm_constraints"] == "free"
     assert "Legal moves:" in player.prompts[0][1].content
     assert "Legal moves:" not in player.prompts[1][1].content
 
@@ -56,7 +56,7 @@ def test_listed_is_copied_into_the_game_and_applies_to_the_next_game_only(script
 def test_unknown_llm_constraints_are_refused(scripted):
     client, _ = scripted([])
 
-    assert client.post("/api/games", json={"llm_constraints": "enforced"}).status_code == 422
+    assert client.post("/api/games", json=play_llm(llm_constraints="enforced")).status_code == 422
 
 
 def test_listed_sends_the_listed_system_prompt_and_every_legal_move_under_the_pgn_and_fen(scripted):

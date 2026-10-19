@@ -130,6 +130,12 @@
   .modal h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
   .modal .close { position: absolute; top: 12px; right: 14px; }
   .row { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .row[hidden], .players[hidden] { display: none; }
+  .players { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; padding: 14px 0; }
+  .players .who { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .players .select { width: 100%; max-width: none; }
+  .swap { border: 1px solid var(--line); background: var(--bg); border-radius: 5px; padding: 5px 9px; cursor: pointer; color: var(--muted); }
+  .swap:hover { background: var(--hover); }
   .row .txt { flex: 1; } .row .t { font-weight: 500; } .row .d { color: var(--muted); font-size: 12.5px; }
   .select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 5px; padding: 5px 8px; font: inherit; min-width: 170px; max-width: 260px; }
   .switch { width: 34px; height: 20px; border-radius: 99px; background: var(--line); border: 0; position: relative; cursor: pointer; flex: none; }
@@ -182,7 +188,7 @@
     <div class="card"><div class="status" id="status">Loading…</div></div>
     <div class="callout" id="error" hidden></div>
     <details class="card thinking" id="thinkingPanel" hidden>
-      <summary>Show thinking</summary>
+      <summary id="thinkingSummary">Show thinking</summary>
       <div class="thinking-text" id="thinking"></div>
     </details>
     <div class="card" id="movesCard">
@@ -211,8 +217,16 @@
     <button class="ghost close" id="closeSettings" aria-label="Close">✕</button>
     <section data-section="game">
       <h2>Game</h2>
-      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Your colour</div><div class="d">The LLM plays the other colour. White moves first.</div></div></div>
+      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Mode</div><div class="d">Who plays each side, fixed for the whole game.</div></div></div>
+      <div class="radios" id="modes" style="grid-template-columns:repeat(2, 1fr)"></div>
+      <div class="row" id="colorsRow" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Your colour</div><div class="d">The LLM plays the other colour. White moves first.</div></div></div>
       <div class="radios" id="colors" style="grid-template-columns:repeat(2, 1fr)"></div>
+      <div class="row" id="playersRow" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Players</div><div class="d">A model for each side. The same model can play itself. Both LLMs play under the settings below.</div></div></div>
+      <div class="players" id="players">
+        <div><div class="who">♔ White</div><select class="select" id="whiteModel"></select></div>
+        <button class="swap" id="swapSides" title="Swap colours">⇄</button>
+        <div><div class="who">♚ Black</div><select class="select" id="blackModel"></select></div>
+      </div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">LLM constraints</div><div class="d">Whether the LLM is shown the legal moves in each turn's prompt, and whether it is held to them.</div></div></div>
       <div class="radios" id="llmConstraints" style="grid-template-columns:repeat(2, 1fr)"></div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d" id="feedbackHint">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
@@ -222,7 +236,7 @@
     </section>
     <section data-section="model">
       <h2>Model</h2>
-      <div class="row"><div class="txt"><div class="t">Model</div><div class="d" id="modelHint"></div></div>
+      <div class="row" id="modelRow"><div class="txt"><div class="t">Model</div><div class="d" id="modelHint"></div></div>
         <select class="select" id="model"></select></div>
       <div class="row"><div class="txt"><div class="t">Thinking</div><div class="d" id="thinkingHint"></div></div>
         <button class="switch" id="thinkingSwitch" role="switch" aria-label="Thinking"></button></div>
@@ -255,7 +269,18 @@ const MARKER = {
   check: {class: "check", slice: "markerSquare"},
 }
 let state = null
-let waiting = false // the LLM is choosing a move, so no new game can start
+let turnTimer = null // ticks the status while an LLM turn runs
+let newGames = 0 // counts "New game" clicks, so a turn of a game being replaced knows it is abandoned
+
+// Who plays each side of a game: settings.white and settings.black are {player: "human"} or an LLM side.
+const COLORS = ["white", "black"]
+const ICON = {white: "♔", black: "♚"}
+const faceoff = game => game.settings.mode === "llm_faceoff"
+const llmColors = game => COLORS.filter(color => game.settings[color].player === "llm")
+const humanColor = game => COLORS.find(color => game.settings[color].player === "human") ?? null
+const llmToMove = game => game.status === "playing" && game.settings[game.turn].player === "llm"
+// The LLM to move as the status names it: the model, and in a faceoff its side too, as two LLMs can share a model.
+const llmName = (game, color) => faceoff(game) ? `${ICON[color]} ${COLOR_NAMES[color]} · ${game.settings[color].model}` : game.settings[color].model
 
 const RESULT_TITLES = {"1-0": "White wins", "0-1": "Black wins", "1/2-1/2": "Draw"}
 const END_REASONS = {
@@ -271,11 +296,18 @@ function showBanner() {
   const over = state.status === "over"
   $("banner").hidden = !over
   if (!over) return
-  $("bannerTitle").textContent = RESULT_TITLES[state.result] ?? state.result
+  // In a faceoff the result names the models, e.g. "qwen3.5:9b (White) wins".
+  const winner = {"1-0": "white", "0-1": "black"}[state.result]
+  $("bannerTitle").textContent = faceoff(state) && winner
+    ? `${state.settings[winner].model} (${COLOR_NAMES[winner]}) wins` : RESULT_TITLES[state.result] ?? state.result
   $("bannerReason").textContent = END_REASONS[state.end_reason] ?? `by ${state.end_reason.replaceAll("_", " ")}`
   // A forfeit with no answer says why here too, since the switch can hide the move list's chips.
   const error = state.llm_turn?.attempts.at(-1).error
   if (state.end_reason === "forfeit" && error) $("bannerReason").textContent += `: ${error}`
+  else if (state.end_reason === "forfeit" && faceoff(state) && winner) {
+    const tries = state.llm_turn.attempts.length
+    $("bannerReason").textContent += `: ${state.settings[other(winner)].model} gave no legal move in ${tries} tries`
+  }
 }
 
 // The move list: one row per move number, and under each LLM move a chip per failed attempt, in order,
@@ -308,13 +340,20 @@ function showMoves() {
     cells.push(mistakes)
   }
   $("moves").replaceChildren(...cells)
-  // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
-  const illegal = state.llm_turns.flatMap(turn => turn.attempts).filter(a => a.result !== "legal" && !a.error).length
-  const slips = state.stats.notation_slips
-  // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
-  const tries = state.stats.illegal_moves === null && illegal === 0
-    ? "✗ illegal tries n/a" : `✗ ${illegal} illegal ${illegal === 1 ? "try" : "tries"}`
-  $("totals").textContent = `${tries} · ⚑ ${slips} notation ${slips === 1 ? "slip" : "slips"}`
+  // One total per LLM side, named by its model in a faceoff.
+  const totals = llmColors(state).map(color => {
+    // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
+    const attempts = state.llm_turns.filter(turn => turn.color === color).flatMap(turn => turn.attempts)
+    const illegal = attempts.filter(a => a.result !== "legal" && !a.error).length
+    const stats = state.stats[color]
+    const slips = stats.notation_slips
+    // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
+    const tries = stats.illegal_moves === null && illegal === 0
+      ? "✗ illegal tries n/a" : `✗ ${illegal} illegal ${illegal === 1 ? "try" : "tries"}`
+    const total = `${tries} · ⚑ ${slips} notation ${slips === 1 ? "slip" : "slips"}`
+    return faceoff(state) ? `${ICON[color]} ${state.settings[color].model} ${total}` : total
+  })
+  $("totals").textContent = totals.join("  ·  ")
 }
 
 // The picked-up piece's square, and a dot on every square it can reach, a ring where it captures. They come from
@@ -388,14 +427,16 @@ async function show(next) {
   const animate = state !== null // the first position appears at once instead of fading in from an empty board
   state = next
   showMoves()
-  const human = state.settings.human_color
+  const human = humanColor(state)
   $("status").textContent = state.status === "over" ? "Game over"
-    : state.turn === human ? `Your move (${COLOR_NAMES[human]})` : `Waiting for ${COLOR_NAMES[other(human)]}…`
+    : state.turn === human ? `Your move (${COLOR_NAMES[human]})`
+    : `Waiting for ${faceoff(state) ? llmName(state, state.turn) : COLOR_NAMES[state.turn]}…`
   showBanner()
   showSettings()
   const thinking = state.llm_turn?.thinking
   $("thinkingPanel").hidden = !thinking
   $("thinking").textContent = thinking ?? ""
+  $("thinkingSummary").textContent = faceoff(state) && thinking ? `Show thinking · ${llmName(state, state.llm_turn.color)}` : "Show thinking"
   clearTargets()
   board.removeMarkers(MARKER.lastMove)
   board.removeMarkers(MARKER.check) // at once, not after the pieces have moved
@@ -403,12 +444,14 @@ async function show(next) {
     board.addMarker(MARKER.lastMove, state.last_move.slice(0, 2))
     board.addMarker(MARKER.lastMove, state.last_move.slice(2, 4))
   }
-  // The human's pieces at the bottom. The board turns after the position is set: an animated turn redraws a stale position.
-  const turn = board.getOrientation() !== COLOR[human]
+  // The human's pieces at the bottom, White's in a faceoff. The board turns after the position is set: an animated
+  // turn redraws a stale position.
+  const bottom = human ?? "white"
+  const turn = board.getOrientation() !== COLOR[bottom]
   await board.setPosition(state.fen, animate && !turn)
-  if (turn) await board.setOrientation(COLOR[human])
+  if (turn) await board.setOrientation(COLOR[bottom])
   showCheck() // once the position is set, so the king is found where it now stands
-  board.disableMoveInput() // stays locked once the game is over, until "New game"
+  board.disableMoveInput() // stays locked once the game is over, until "New game", and for a whole faceoff
   if (state.status === "playing" && state.human_legal_moves.length) board.enableMoveInput(onMoveInput, COLOR[human])
 }
 
@@ -456,65 +499,75 @@ function flashTurn(turn, landedOn) {
 }
 addEventListener("animationend", event => { if (event.animationName === "flash-out") event.target.remove() })
 
-// The board stays locked while the LLM thinks, and a running timer shows the app has not frozen.
-// settings are those of the game the LLM is moving in. Returns the next state, or null on an error.
-async function whileLlmMoves(settings, request) {
+// Every state the backend sends comes through here: shown at once, then, if it is an LLM's turn, the page starts it.
+// That one rule covers the human's move, a new game in which an LLM plays White, a faceoff, and a reload.
+// keepError leaves an error on show as the LLM turn starts.
+async function receive(received, keepError = false) {
+  await show(received)
+  if (llmToMove(state)) await llmTurn(keepError)
+}
+
+// The only place an LLM turn starts. The board stays locked while the LLM thinks, and a running timer shows the app
+// has not frozen. In a faceoff the next turn starts as soon as one lands, until the game ends. A turn of a game
+// abandoned with "New game" still lands in that game's log, but the page drops it: nothing follows it.
+async function llmTurn(keepError = false) {
+  const game = state
+  const color = game.turn
+  const side = game.settings[color]
+  const clicks = newGames
+  // Abandoned from the "New game" click on, not only once the new game has arrived, so nothing follows its turn.
+  const abandoned = () => newGames !== clicks || state.game_id !== game.game_id
   board.disableMoveInput()
-  waiting = true
-  $("newGame").disabled = $("startNext").disabled = true
-  $("error").hidden = true
-  $("thinkingPanel").hidden = true
+  if (!keepError) $("error").hidden = true
+  // In a faceoff the last turn's thinking stays up, named by its side, as the next turn starts at once.
+  if (!faceoff(game)) $("thinkingPanel").hidden = true
   const started = Date.now()
   const tick = () => {
+    if (abandoned()) return
     const seconds = Math.floor((Date.now() - started) / 1000)
-    const doing = settings.thinking ? "is thinking…" : "is choosing a move…"
-    $("status").textContent = `${settings.model} ${doing} ${seconds}s`
+    const doing = side.thinking ? "is thinking…" : "is choosing a move…"
+    $("status").textContent = `${llmName(game, color)} ${doing} ${seconds}s`
   }
+  clearInterval(turnTimer)
   tick()
-  const timer = setInterval(tick, 1000)
+  turnTimer = setInterval(tick, 1000)
+  let next = null
+  let failure = null
   try {
-    return await request()
+    next = await requestLlmTurn(game)
   } catch (error) {
-    $("error").textContent = error.message
-    $("error").hidden = false
-    return null
-  } finally {
-    clearInterval(timer)
-    waiting = false
-    $("newGame").disabled = $("startNext").disabled = false
+    failure = error
   }
-}
-
-const llmToMove = game => game.status === "playing" && game.turn !== game.settings.human_color
-
-// Every state the backend sends comes through here: shown at once, then, if it is the LLM's turn, the page starts it.
-// That one rule covers the human's move, a new game in which the LLM plays White, and a reload.
-async function receive(received) {
-  await show(received)
-  if (llmToMove(state)) await llmTurn()
-}
-
-// The only place an LLM turn starts. A 409 means the backend won't start one, most often because a turn is already
-// running (another tab, or this page before a reload). The page can't attach to that turn, so it checks the game
-// every 2s until the turn has landed. A stale state also gets a 409, and the first check settles it.
-async function llmTurn() {
-  const turnsBefore = state.llm_turns.length
-  const next = await whileLlmMoves(state.settings, async () => {
-    try {
-      return await api("POST", "/api/games/current/llm-turn")
-    } catch (error) {
-      if (error.status !== 409) throw error
-      for (;;) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        const current = await api("GET", "/api/games/current")
-        if (!llmToMove(current)) return current
-      }
-    }
-  })
-  const landed = next && next.llm_turns.length > turnsBefore // only a turn that has just landed
+  if (abandoned()) return
+  clearInterval(turnTimer)
+  if (failure) {
+    $("error").textContent = failure.message
+    $("error").hidden = false
+  }
+  const landed = next && next.game_id === game.game_id && next.llm_turns.length > game.llm_turns.length
   if (landed && next.llm_turn.attempts.some(attempt => attempt.result === "legal")) playMoveSound() // not a forfeit
   await show(next ?? state)
+  if (abandoned()) return
   if (landed) flashTurn(next.llm_turn, next.last_move?.slice(2, 4))
+  if (next && llmToMove(state)) await llmTurn()
+}
+
+// A 409 means the backend won't start the turn, most often because one is already running (another tab, or this
+// page before a reload). The page can't attach to that turn, so it checks the game every 2s until the turn has
+// landed. A stale state also gets a 409, and the first check settles it.
+async function requestLlmTurn(game) {
+  try {
+    return await api("POST", "/api/games/current/llm-turn")
+  } catch (error) {
+    if (error.status !== 409) throw error
+    for (;;) {
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      if (state.game_id !== game.game_id) return null
+      const current = await api("GET", "/api/games/current")
+      const moved = current.llm_turns.length > game.llm_turns.length
+      if (current.game_id !== game.game_id || moved || !llmToMove(current)) return current
+    }
+  }
 }
 
 // The human's move comes back at once, so the castling rook, an en passant capture or a promotion shows before the
@@ -553,7 +606,7 @@ function onMoveInput(event) {
         return true
       }
       if (legal.includes(uci + "q")) {
-        board.showPromotionDialog(event.squareTo, COLOR[state.settings.human_color], result => {
+        board.showPromotionDialog(event.squareTo, COLOR[humanColor(state)], result => {
           if (result.type === PROMOTION_DIALOG_RESULT_TYPE.pieceSelected) play(uci + result.piece.charAt(1))
           else show(state)
         })
@@ -580,12 +633,66 @@ const LLM_CONSTRAINTS = {
 const ENFORCED = ["blind_enforced", "listed_enforced"]
 const COLOR_NAMES = {white: "White", black: "Black"}
 const other = color => color === "white" ? "black" : "white"
-let next = null // {model, thinking, retry_feedback, human_color, llm_constraints} for the next game
+const MODES = {
+  play_llm: {name: "Play LLM", description: "You play one side, an LLM the other"},
+  llm_faceoff: {name: "LLM faceoff", description: "An LLM on each side, to compare models. It plays itself to the end."},
+}
+// The setup for the next game: {mode, human_color, models: {white, black}, thinking, llm_constraints, retry_feedback}.
+// Each colour keeps a model, so the LLM keeps its model when the human changes colour or the Mode changes. Thinking,
+// LLM constraints and Retry feedback are shared by every LLM side.
+let next = null
 let models = null // the model list, [{name, thinking, sampling}], or null until listed
 let modelsError = null // why they could not be listed
 let section = "game"
 
-const pending = () => ["model", "thinking", "retry_feedback", "human_color", "llm_constraints"].some(key => next[key] !== state.settings[key])
+const nextLlmColors = () => next.mode === "llm_faceoff" ? COLORS : [other(next.human_color)]
+const canThink = name => models?.find(model => model.name === name)?.thinking ?? true
+// Shared thinking only when every LLM can think, so it never means different things for the two sides.
+const thinkingAllowed = () => nextLlmColors().every(color => canThink(next.models[color]))
+
+function nextFrom(settings) {
+  const [first] = llmColors({settings}).map(color => settings[color])
+  return {
+    mode: settings.mode,
+    human_color: humanColor({settings}) ?? "white",
+    models: {white: settings.white.model ?? first.model, black: settings.black.model ?? first.model},
+    thinking: first.thinking, llm_constraints: first.llm_constraints, retry_feedback: first.retry_feedback,
+  }
+}
+
+// The new-game request: the Mode and each side, in the shape of the game's settings.
+function newGameRequest() {
+  const llm = color => ({
+    player: "llm", model: next.models[color], thinking: next.thinking && thinkingAllowed(),
+    llm_constraints: next.llm_constraints, retry_feedback: next.retry_feedback,
+  })
+  const side = color => next.mode === "play_llm" && color === next.human_color ? {player: "human"} : llm(color)
+  return {mode: next.mode, white: side("white"), black: side("black")}
+}
+
+const sameSide = (a, b) => Object.keys({...a, ...b}).every(key => a[key] === b[key])
+const pending = () => {
+  const request = newGameRequest()
+  return request.mode !== state.settings.mode || COLORS.some(color => !sameSide(request[color], state.settings[color]))
+}
+
+// The top bar: who plays whom, then each LLM setting, naming the side when the two LLMs' values differ.
+function settingsChips(game) {
+  const settings = game.settings
+  const colors = llmColors(game)
+  const perSide = format => {
+    const values = colors.map(color => format(settings[color]))
+    return new Set(values).size === 1 ? [values[0]] : [colors.map((color, index) => `${color} ${values[index]}`).join(" · ")]
+  }
+  const players = faceoff(game)
+    ? [`${colors.map(color => settings[color].model + (settings[color].thinking ? " (thinking)" : "")).join(" vs ")}`]
+    : [`you play ${COLOR_NAMES[humanColor(game)]}`, settings[colors[0]].model, `thinking ${settings[colors[0]].thinking ? "on" : "off"}`]
+  return [
+    ...players,
+    ...perSide(side => LLM_CONSTRAINTS[side.llm_constraints].name.toLowerCase()),
+    ...perSide(side => `${FEEDBACK_LEVELS[side.retry_feedback].name.toLowerCase()} feedback`),
+  ].map(text => chip(text))
+}
 
 function chip(text, className = "chip") {
   const element = document.createElement("span")
@@ -595,35 +702,39 @@ function chip(text, className = "chip") {
 }
 
 function showSettings() {
-  const settings = state.settings
-  next ??= {
-    model: settings.model, thinking: settings.thinking, retry_feedback: settings.retry_feedback,
-    human_color: settings.human_color, llm_constraints: settings.llm_constraints,
-  }
-  $("chips").replaceChildren(
-    chip(`you play ${COLOR_NAMES[settings.human_color]}`),
-    chip(settings.model),
-    chip(`thinking ${settings.thinking ? "on" : "off"}`),
-    chip(LLM_CONSTRAINTS[settings.llm_constraints].name.toLowerCase()),
-    chip(`${FEEDBACK_LEVELS[settings.retry_feedback].name.toLowerCase()} feedback`),
-    ...(pending() ? [chip("changes apply next game", "chip pending")] : []),
-  )
+  next ??= nextFrom(state.settings)
+  $("chips").replaceChildren(...settingsChips(state), ...(pending() ? [chip("changes apply next game", "chip pending")] : []))
   $("modalPending").hidden = !pending()
   $("startNext").hidden = !pending()
-  $("startNext").disabled = waiting
   if ($("settings").hidden) return
 
   document.querySelectorAll("#settings [data-section]").forEach(element => {
     if (element.tagName === "BUTTON") element.classList.toggle("on", element.dataset.section === section)
     else element.hidden = element.dataset.section !== section
   })
+  const isFaceoff = next.mode === "llm_faceoff"
+  $("modes").replaceChildren(...Object.entries(MODES).map(([mode, {name, description}]) => {
+    const card = document.createElement("button")
+    card.className = "radio" + (next.mode === mode ? " on" : "")
+    card.setAttribute("role", "radio")
+    card.setAttribute("aria-checked", next.mode === mode)
+    card.append(chip(name, "t"), ...(mode === "play_llm" ? [chip("default", "default")] : []), chip(description, "d"))
+    card.onclick = () => { next.mode = mode; showSettings() }
+    return card
+  }))
+  $("colorsRow").hidden = $("colors").hidden = isFaceoff
+  $("playersRow").hidden = $("players").hidden = !isFaceoff
   $("colors").replaceChildren(...Object.entries(COLOR_NAMES).map(([color, name]) => {
     const card = document.createElement("button")
     card.className = "radio" + (next.human_color === color ? " on" : "")
     card.setAttribute("role", "radio")
     card.setAttribute("aria-checked", next.human_color === color)
     card.append(chip(name, "t"), ...(color === "white" ? [chip("default", "default")] : []))
-    card.onclick = () => { next.human_color = color; showSettings() }
+    card.onclick = () => {
+      if (color !== next.human_color) swapModels() // the LLM keeps its model
+      next.human_color = color
+      showSettings()
+    }
     return card
   }))
   $("llmConstraints").replaceChildren(...Object.entries(LLM_CONSTRAINTS).map(([choice, {name, description}]) => {
@@ -649,35 +760,61 @@ function showSettings() {
     card.onclick = () => { next.retry_feedback = level; showSettings() }
     return card
   }))
-  // The chosen model stays listed until the list has loaded.
-  const names = (models ?? []).map(model => model.name)
-  if (!names.includes(next.model)) names.unshift(next.model)
-  $("model").replaceChildren(...names.map(name => new Option(name, name, false, name === next.model)))
-  $("modelHint").textContent = modelsError ? `Could not list the models: ${modelsError}` : "The models in chessllm/models.py"
-  const chosen = models?.find(model => model.name === next.model)
-  const canThink = chosen?.thinking ?? true
-  $("thinkingSwitch").classList.toggle("on", next.thinking)
-  $("thinkingSwitch").setAttribute("aria-checked", next.thinking)
-  $("thinkingSwitch").disabled = !canThink
-  $("thinkingHint").textContent = canThink
-    ? "The model reasons before answering. Slower, likely stronger play. The thinking text is saved to the game log."
-    : `${next.model} can't think: it reasons in its answer instead, before the move.`
-  const sampling = chosen?.sampling
-  $("samplingHint").textContent = !chosen
-    ? modelsError ? `Could not read the sampling settings: ${modelsError}` : "The sampling settings show once the models are listed."
-    : sampling === null
-      ? `Ollama could not show ${next.model}. Is it installed, and is Ollama running?`
-      : `Sampling for ${next.model}: the model's defaults, overridden by chessllm/sampling.toml. Change them in that file.`
-  $("sampling").replaceChildren(...Object.entries(sampling ?? {}).map(([name, value]) => {
-    const row = document.createElement("tr")
-    row.append(...[name, value].map(text => Object.assign(document.createElement("td"), {textContent: text})))
-    return row
-  }))
-  if (sampling && !Object.keys(sampling).length) {
-    const row = document.createElement("tr")
-    row.append(Object.assign(document.createElement("td"), {textContent: "No sampling parameters set: Ollama's built-in defaults"}))
-    $("sampling").replaceChildren(row)
+  // The chosen models stay listed until the list has loaded.
+  const modelOptions = chosen => {
+    const names = (models ?? []).map(model => model.name)
+    if (!names.includes(chosen)) names.unshift(chosen)
+    return names.map(name => new Option(name, name, false, name === chosen))
   }
+  const llmColor = other(next.human_color) // the LLM's side in Play LLM
+  $("modelRow").hidden = isFaceoff
+  $("model").replaceChildren(...modelOptions(next.models[llmColor]))
+  $("whiteModel").replaceChildren(...modelOptions(next.models.white))
+  $("blackModel").replaceChildren(...modelOptions(next.models.black))
+  $("modelHint").textContent = modelsError ? `Could not list the models: ${modelsError}` : "The models in chessllm/models.py"
+  const allowed = thinkingAllowed()
+  const thinking = next.thinking && allowed
+  $("thinkingSwitch").classList.toggle("on", thinking)
+  $("thinkingSwitch").setAttribute("aria-checked", thinking)
+  $("thinkingSwitch").disabled = !allowed
+  const cannot = [...new Set(nextLlmColors().map(color => next.models[color]).filter(name => !canThink(name)))]
+  $("thinkingHint").textContent = allowed
+    ? `The model reasons before answering${isFaceoff ? ", for both LLMs" : ""}. Slower, likely stronger play. The thinking text is saved to the game log.`
+    : isFaceoff
+      ? `Shared by both LLMs, so only on when both can think: ${cannot.join(" and ")} can't. It reasons in its answer instead, before the move.`
+      : `${cannot[0]} can't think: it reasons in its answer instead, before the move.`
+  // Sampling is shared by every LLM, from the config file, over each model's own defaults.
+  const names = [...new Set(nextLlmColors().map(color => next.models[color]))]
+  const listed = names.map(name => models?.find(model => model.name === name))
+  $("samplingHint").textContent = listed.some(model => !model)
+    ? modelsError ? `Could not read the sampling settings: ${modelsError}` : "The sampling settings show once the models are listed."
+    : listed.some(model => model.sampling === null)
+      ? `Ollama could not show ${listed.find(model => model.sampling === null).name}. Is it installed, and is Ollama running?`
+      : `Sampling for ${names.join(" and ")}: the model's defaults, overridden by chessllm/sampling.toml. Change them in that file.`
+  const cell = (text, colSpan = 1) => Object.assign(document.createElement("td"), {textContent: text, colSpan})
+  $("sampling").replaceChildren(...listed.flatMap(model => {
+    if (!model?.sampling) return []
+    const rows = Object.entries(model.sampling).map(([name, value]) => {
+      const row = document.createElement("tr")
+      row.append(cell(name), cell(value))
+      return row
+    })
+    if (!rows.length) {
+      rows.push(document.createElement("tr"))
+      rows[0].append(cell("No sampling parameters set: Ollama's built-in defaults", 2))
+    }
+    if (listed.length > 1) {
+      const head = document.createElement("tr")
+      head.append(cell(model.name, 2))
+      head.style.fontWeight = "500"
+      rows.unshift(head)
+    }
+    return rows
+  }))
+}
+
+function swapModels() {
+  next.models = {white: next.models.black, black: next.models.white}
 }
 
 async function openSettings() {
@@ -700,12 +837,11 @@ function closeSettings() {
 document.querySelectorAll("#settings nav button").forEach(button => {
   button.onclick = () => { section = button.dataset.section; showSettings() }
 })
-$("model").onchange = event => {
-  next.model = event.target.value
-  if (models?.find(model => model.name === next.model)?.thinking === false) next.thinking = false
-  showSettings()
-}
-$("thinkingSwitch").onclick = () => { next.thinking = !next.thinking; showSettings() }
+$("model").onchange = event => { next.models[other(next.human_color)] = event.target.value; showSettings() }
+$("whiteModel").onchange = event => { next.models.white = event.target.value; showSettings() }
+$("blackModel").onchange = event => { next.models.black = event.target.value; showSettings() }
+$("swapSides").onclick = () => { swapModels(); showSettings() }
+$("thinkingSwitch").onclick = () => { next.thinking = !(next.thinking && thinkingAllowed()); showSettings() }
 $("openSettings").onclick = openSettings
 $("closeSettings").onclick = closeSettings
 $("scrim").onclick = closeSettings
@@ -718,20 +854,23 @@ document.addEventListener("keydown", event => {
   }
 })
 
+// Also during an LLM turn: the abandoned game's turn still lands in its own log, and the page drops it.
 async function newGame() {
-  if (waiting) return
+  newGames++
   $("error").hidden = true
   closeSettings()
   clearFlashes()
   let started
   try {
-    started = await api("POST", "/api/games", next)
+    started = await api("POST", "/api/games", newGameRequest())
   } catch (error) {
     $("error").textContent = error.message
     $("error").hidden = false
+    await receive(state, true) // the running game goes on, its LLM turn included
     return
   }
-  await receive(started) // the LLM's first turn starts here when it plays White
+  clearInterval(turnTimer)
+  await receive(started) // an LLM's first turn starts here when it plays White
 }
 $("newGame").onclick = newGame
 $("bannerNewGame").onclick = newGame

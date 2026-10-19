@@ -4,7 +4,7 @@ import json
 import chess
 import chess.pgn
 
-from conftest import play_move
+from conftest import play_llm, play_move
 
 from chessllm.players import LlmTimeout
 
@@ -34,7 +34,7 @@ QWEN_THINKING = {
 
 
 def play(client, *ucis):
-    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
+    client.post("/api/games", json=play_llm(model="qwen3.5:9b", thinking=True))
     for uci in ucis:
         state = play_move(client, uci).json()
     return state
@@ -144,7 +144,7 @@ def test_a_game_abandoned_with_new_game_keeps_its_log_so_far(scripted, tmp_path)
     client, _ = scripted(["e5"])
     play(client, "e2e4")
 
-    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
+    client.post("/api/games", json=play_llm(model="qwen3.5:9b", thinking=True))
 
     first, second = logs(tmp_path / "games", ".jsonl")
     assert [event["type"] for event in events(first)] == ["game_start", "human_move", "llm_attempt"]
@@ -167,7 +167,7 @@ def test_the_log_records_the_retry_feedback_and_the_sampling_from_the_config(scr
     config.write_text("temperature = 0.2\n")
     client, _ = scripted([], sampling_file=config)
 
-    client.post("/api/games", json={"retry_feedback": "hinted"})
+    client.post("/api/games", json=play_llm(retry_feedback="hinted"))
 
     [log] = logs(tmp_path / "games", ".jsonl")
     [start] = events(log)
@@ -176,8 +176,7 @@ def test_the_log_records_the_retry_feedback_and_the_sampling_from_the_config(scr
 
 def test_with_the_human_as_black_the_llm_is_white_in_the_log_and_the_file_names(scripted, tmp_path):
     client, _ = scripted(["e4", "Qh5", "Bc4", "Qxf7#"])
-    new_game = {"model": "qwen3.5:9b", "thinking": True, "human_color": "black", "llm_constraints": "listed"}
-    client.post("/api/games", json=new_game)
+    client.post("/api/games", json=play_llm("black", model="qwen3.5:9b", thinking=True, llm_constraints="listed"))
     client.post("/api/games/current/llm-turn")
     for uci in ["e7e5", "b8c6", "g8f6"]:
         play_move(client, uci)

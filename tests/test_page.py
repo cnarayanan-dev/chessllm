@@ -91,3 +91,12 @@ def test_the_move_sound_is_served_switchable_and_credited(client):
     assert 'id="moveSoundSwitch"' in page
     assert '"chessllm.moveSound"' in page
     assert "Move sound: Kenney, CC0" in page
+
+
+def test_the_settings_modal_offers_the_mode_and_a_model_per_side_for_a_faceoff(client):
+    page = client.get("/").text
+
+    assert 'id="modes"' in page
+    assert 'llm_faceoff: {name: "LLM faceoff"' in page
+    assert 'id="whiteModel"' in page and 'id="blackModel"' in page
+    assert 'id="swapSides"' in page

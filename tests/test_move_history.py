@@ -1,4 +1,4 @@
-from conftest import play_move
+from conftest import play_llm, play_move
 
 
 def turns(state):
@@ -35,7 +35,7 @@ def test_a_forfeited_turn_is_kept_at_the_ply_the_llm_failed_to_play(scripted):
 
 def test_the_llm_playing_white_has_its_turns_at_odd_plies(scripted):
     client, _ = scripted(["Kd3", "e4", "Nf3"])
-    client.post("/api/games", json={"human_color": "black"})
+    client.post("/api/games", json=play_llm("black"))
     client.post("/api/games/current/llm-turn")
 
     state = play_move(client, "e7e5").json()
