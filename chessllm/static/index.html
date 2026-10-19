@@ -289,7 +289,11 @@ async function api(method, path, body) {
     headers: body ? {"Content-Type": "application/json"} : {},
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (!response.ok) throw new Error((await response.json()).detail ?? response.statusText)
+  if (!response.ok) {
+    const error = new Error((await response.json()).detail ?? response.statusText)
+    error.status = response.status
+    throw error
+  }
   return response.json()
 }
 
@@ -347,9 +351,49 @@ async function whileLlmMoves(settings, request) {
   }
 }
 
+const llmToMove = game => game.status === "playing" && game.turn !== game.settings.human_color
+
+// Every state the backend sends comes through here: shown at once, then, if it is the LLM's turn, the page starts it.
+// That one rule covers the human's move, a new game in which the LLM plays White, and a reload.
+async function receive(received) {
+  await show(received)
+  if (llmToMove(state)) await llmTurn()
+}
+
+// The only place an LLM turn starts. A 409 means the backend won't start one, most often because a turn is already
+// running (another tab, or this page before a reload). The page can't attach to that turn, so it checks the game
+// every 2s until the turn has landed. A stale state also gets a 409, and the first check settles it.
+async function llmTurn() {
+  const next = await whileLlmMoves(state.settings, async () => {
+    try {
+      return await api("POST", "/api/games/current/llm-turn")
+    } catch (error) {
+      if (error.status !== 409) throw error
+      for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const current = await api("GET", "/api/games/current")
+        if (!llmToMove(current)) return current
+      }
+    }
+  })
+  await show(next ?? state)
+}
+
+// The human's move comes back at once, so the castling rook, an en passant capture or a promotion shows before the
+// LLM's turn starts.
 async function play(uci) {
-  const next = await whileLlmMoves(state.settings, () => api("POST", "/api/games/current/moves", {uci}))
-  await show(next ?? state) // on an error, snap the piece back to the backend's position
+  board.disableMoveInput()
+  $("error").hidden = true
+  let next
+  try {
+    next = await api("POST", "/api/games/current/moves", {uci})
+  } catch (error) {
+    $("error").textContent = error.message
+    $("error").hidden = false
+    await show(state) // snap the piece back to the backend's position
+    return
+  }
+  await receive(next)
 }
 
 function onMoveInput(event) {
@@ -533,27 +577,26 @@ async function newGame() {
   if (waiting) return
   $("error").hidden = true
   closeSettings()
-  if (next.human_color === "black") { // the LLM plays White, so the new game starts with its move
-    const started = await whileLlmMoves(next, () => api("POST", "/api/games", next))
-    await show(started ?? state)
-    return
-  }
+  let started
   try {
-    await show(await api("POST", "/api/games", next))
+    started = await api("POST", "/api/games", next)
   } catch (error) {
     $("error").textContent = error.message
     $("error").hidden = false
+    return
   }
+  await receive(started) // the LLM's first turn starts here when it plays White
 }
 $("newGame").onclick = newGame
 $("bannerNewGame").onclick = newGame
 $("startNext").onclick = newGame
 
+// After a reload the current game is shown again, and its LLM turn started, or waited for if one is running.
 try {
-  await show(await api("GET", "/api/games/current"))
+  await receive(await api("GET", "/api/games/current"))
 } catch {
   try {
-    await show(await api("POST", "/api/games"))
+    await receive(await api("POST", "/api/games"))
   } catch (error) {
     $("status").textContent = "Could not start a game"
     $("error").textContent = error.message

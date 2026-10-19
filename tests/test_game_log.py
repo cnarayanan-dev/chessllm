@@ -4,6 +4,8 @@ import json
 import chess
 import chess.pgn
 
+from conftest import play_move
+
 from chessllm.players import LlmTimeout
 
 START_FEN = chess.STARTING_FEN
@@ -25,7 +27,7 @@ def without(event, *keys):
 def play(client, *ucis):
     client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
     for uci in ucis:
-        state = client.post("/api/games/current/moves", json={"uci": uci}).json()
+        state = play_move(client, uci).json()
     return state
 
 

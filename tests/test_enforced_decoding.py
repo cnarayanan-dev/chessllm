@@ -1,3 +1,5 @@
+from conftest import play_move
+
 import json
 
 import chess
@@ -36,8 +38,8 @@ def test_the_enforced_constraints_are_accepted_and_copied_into_the_game(scripted
 def test_enforced_decoding_allows_exactly_the_legal_moves_each_turn(scripted, llm_constraints):
     client, player = start_game(scripted, llm_constraints, ["e5", "Nc6"])
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
-    client.post("/api/games/current/moves", json={"uci": "g1f3"})
+    play_move(client, "e2e4")
+    play_move(client, "g1f3")
 
     after_nf3 = chess.Board()
     for san in ["e4", "e5", "Nf3"]:
@@ -51,7 +53,7 @@ def test_enforced_decoding_allows_exactly_the_legal_moves_each_turn(scripted, ll
 def test_without_enforced_decoding_no_moves_are_allowed_in_particular(scripted, llm_constraints):
     client, player = start_game(scripted, llm_constraints, ["e5"])
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     assert player.allowed_moves == [None]
 
@@ -59,7 +61,7 @@ def test_without_enforced_decoding_no_moves_are_allowed_in_particular(scripted, 
 def test_blind_enforced_sends_the_free_prompt_with_no_list(scripted, tmp_path):
     client, player = start_game(scripted, "blind_enforced", ["e5"])
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     [prompt] = player.prompts
     assert prompt == [Message("system", system_prompt("black", SYSTEM_PROMPT_FILE)), Message("user", f"PGN: 1. e4\nFEN: {E4_FEN}")]
@@ -71,7 +73,7 @@ def test_blind_enforced_sends_the_free_prompt_with_no_list(scripted, tmp_path):
 def test_listed_enforced_sends_the_listed_prompt_and_list(scripted, tmp_path):
     client, player = start_game(scripted, "listed_enforced", ["e5"])
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     [prompt] = player.prompts
     assert prompt[0] == Message("system", system_prompt("black", LISTED_SYSTEM_PROMPT_FILE))
@@ -87,7 +89,7 @@ def test_listed_enforced_sends_the_listed_prompt_and_list(scripted, tmp_path):
 def test_the_illegal_move_metrics_are_not_applicable_in_the_state_under_enforced_decoding(scripted, llm_constraints):
     client, _ = start_game(scripted, llm_constraints, ["e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert state["stats"] == NOT_APPLICABLE | {"notation_slips": 0}
 
@@ -98,7 +100,7 @@ def test_an_illegal_move_that_gets_through_is_retried_and_logged_but_the_totals_
 ):
     client, player = start_game(scripted, llm_constraints, ["Qh4", "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert [attempt["result"] for attempt in state["llm_turn"]["attempts"]] == ["illegal", "legal"]
     assert state["llm_turn"]["attempts"][1]["feedback_sent"] is not None
@@ -112,7 +114,7 @@ def test_an_illegal_move_that_gets_through_is_retried_and_logged_but_the_totals_
 def test_the_game_end_line_records_the_metrics_as_not_applicable(scripted, tmp_path, llm_constraints):
     client, _ = start_game(scripted, llm_constraints, ["Qh4"] * 4)
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()  # four illegal moves: a forfeit
+    state = play_move(client, "e2e4").json()  # four illegal moves: a forfeit
 
     assert state["end_reason"] == "forfeit"
     *_, end = log_events(tmp_path / "games")
@@ -124,7 +126,7 @@ def test_the_game_end_line_records_the_metrics_as_not_applicable(scripted, tmp_p
 def test_a_failed_call_still_forfeits_under_enforced_decoding(scripted, llm_constraints):
     client, _ = start_game(scripted, llm_constraints, [RuntimeError("Ollama is not running")])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert (state["status"], state["end_reason"]) == ("over", "forfeit")
     assert state["llm_turn"]["attempts"][0]["result"] == "error"
@@ -133,7 +135,7 @@ def test_a_failed_call_still_forfeits_under_enforced_decoding(scripted, llm_cons
 def test_free_and_listed_keep_counting_the_illegal_move_metrics(scripted):
     client, _ = start_game(scripted, "listed", ["Qh4", "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert state["stats"] == {
         "legal_move_streak": 0,

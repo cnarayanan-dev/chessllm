@@ -1,5 +1,5 @@
 import pytest
-from conftest import Raw
+from conftest import Raw, play_move
 
 from chessllm.players import LlmTimeout, Message
 
@@ -38,7 +38,7 @@ def attempts(state):
 def test_each_illegal_move_is_recorded_with_its_kind_and_the_board_stays_unchanged(scripted, reply, move, kind):
     client, _ = start(scripted, [reply, "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert attempts(state) == [(move, kind), ("e5", "legal")]
     assert state["pgn"] == "1. e4 e5"
@@ -48,9 +48,9 @@ def test_an_ambiguous_move_is_its_own_kind(scripted):
     # Both knights can reach d7, so "Nd7" doesn't say which one.
     client, _ = start(scripted, ["Nf6", "d6", "Nd7", "Nbd7"])
     for uci in ["e2e4", "g1f3"]:
-        client.post("/api/games/current/moves", json={"uci": uci})
+        play_move(client, uci)
 
-    state = client.post("/api/games/current/moves", json={"uci": "b1c3"}).json()
+    state = play_move(client, "b1c3").json()
 
     assert attempts(state) == [("Nd7", "ambiguous"), ("Nbd7", "legal")]
 
@@ -58,7 +58,7 @@ def test_an_ambiguous_move_is_its_own_kind(scripted):
 def test_a_retry_adds_the_rejected_answer_and_the_explained_feedback(scripted):
     client, player = start(scripted, ["Qh4", "banana", "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     first_prompt = player.prompts[0]
     feedback_1 = explained("Qh4", "illegal", 1)
@@ -77,7 +77,7 @@ def test_a_retry_adds_the_rejected_answer_and_the_explained_feedback(scripted):
 def test_each_attempt_records_the_raw_reply_and_its_thinking(scripted):
     client, _ = start(scripted, ["Qh4", "e5"], thinking=["The queen attacks f2.", "Take the centre."])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert [(a["raw_reply"], a["thinking"]) for a in state["llm_turn"]["attempts"]] == [
         ('{"move": "Qh4"}', "The queen attacks f2."),
@@ -89,7 +89,7 @@ def test_each_attempt_records_the_raw_reply_and_its_thinking(scripted):
 def test_a_turn_recovered_by_a_retry_is_counted(scripted):
     client, _ = start(scripted, ["Qh4", "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert state["status"] == "playing"
     assert state["stats"]["recovered_turns"] == 1
@@ -99,7 +99,7 @@ def test_a_turn_recovered_by_a_retry_is_counted(scripted):
 def test_the_fourth_failed_attempt_forfeits_the_game(scripted):
     client, player = start(scripted, ["Qh4", "banana", "O-O", "Ke7"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert len(player.prompts) == 4
     assert attempts(state) == [("Qh4", "illegal"), ("banana", "invalid"), ("O-O", "illegal"), ("Ke7", "illegal")]
@@ -120,7 +120,7 @@ def test_the_fourth_failed_attempt_forfeits_the_game(scripted):
 def test_a_timeout_or_a_failed_call_forfeits_at_once(scripted, failure, result, error):
     client, player = start(scripted, [failure, "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert len(player.prompts) == 1
     [attempt] = state["llm_turn"]["attempts"]
@@ -132,7 +132,7 @@ def test_a_timeout_or_a_failed_call_forfeits_at_once(scripted, failure, result, 
 def test_a_timeout_after_an_illegal_move_still_forfeits_at_once(scripted):
     client, player = start(scripted, ["Qh4", LlmTimeout(300), "e5"])
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert len(player.prompts) == 2
     assert attempts(state) == [("Qh4", "illegal"), (None, "timeout")]
@@ -141,21 +141,21 @@ def test_a_timeout_after_an_illegal_move_still_forfeits_at_once(scripted):
 
 def test_the_legal_move_streak_stops_at_the_first_illegal_move(scripted):
     client, _ = start(scripted, ["e5", "Nc6", "Qxf2", "Nf6", "d6"])
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
-    state = client.post("/api/games/current/moves", json={"uci": "g1f3"}).json()
+    play_move(client, "e2e4")
+    state = play_move(client, "g1f3").json()
     assert state["stats"]["legal_move_streak"] == 2
 
-    state = client.post("/api/games/current/moves", json={"uci": "b1c3"}).json()  # Qxf2 fails, Nf6 recovers
+    state = play_move(client, "b1c3").json()  # Qxf2 fails, Nf6 recovers
     assert state["stats"]["legal_move_streak"] == 2
 
-    state = client.post("/api/games/current/moves", json={"uci": "d2d4"}).json()
+    state = play_move(client, "d2d4").json()
     assert state["stats"]["legal_move_streak"] == 2
     assert state["stats"]["recovered_turns"] == 1
 
 
 def test_a_new_game_starts_with_clean_stats(scripted):
     client, _ = start(scripted, ["Qh4", "e5"])
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     state = client.post("/api/games").json()
 
@@ -172,7 +172,7 @@ def test_bare_feedback_says_only_that_the_move_was_illegal(scripted):
     client, player = scripted(["Qh4", "banana", "e5"])
     client.post("/api/games", json={"retry_feedback": "bare"})
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert [prompt[-1].content for prompt in player.prompts[1:]] == [
         'Your move "Qh4" is illegal. Attempt 1 of 4. Try again.',
@@ -185,7 +185,7 @@ def test_hinted_feedback_adds_the_legal_moves_in_san(scripted):
     client, player = scripted(["Qh4", "e5"])
     client.post("/api/games", json={"retry_feedback": "hinted"})
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     legal_after_e4 = (
         "Nh6 Nf6 Nc6 Na6 h6 g6 f6 e6 d6 c6 b6 a6 h5 g5 f5 e5 d5 c5 b5 a5"

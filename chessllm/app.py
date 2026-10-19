@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from chessllm.game import Color, GameSession, RejectedHumanMove, Settings
+from chessllm.game import Color, GameSession, RefusedLlmTurn, RejectedHumanMove, Settings
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
@@ -99,6 +99,16 @@ def create_app(
             session.play_human_move(move.uci)
         except RejectedHumanMove as error:
             raise HTTPException(400, str(error)) from None
+        return session.state()
+
+    @app.post("/api/games/current/llm-turn")
+    def play_llm_turn() -> dict[str, Any]:
+        """The only way an LLM turn starts. The page asks for one whenever a state says it is the LLM's turn."""
+        session = current_game()
+        try:
+            session.play_llm_turn()
+        except RefusedLlmTurn as error:
+            raise HTTPException(409, str(error)) from None
         return session.state()
 
     return app

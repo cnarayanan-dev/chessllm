@@ -1,3 +1,5 @@
+from conftest import play_move
+
 from chessllm.game import Settings
 from chessllm.models import LlmModel
 
@@ -75,7 +77,7 @@ def test_the_sampling_config_is_copied_into_the_next_game_only(scripted, tmp_pat
     client.post("/api/games")
 
     config.write_text("temperature = 0.9\n")
-    playing = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    playing = play_move(client, "e2e4").json()
     next_game = client.post("/api/games").json()
 
     assert playing["settings"]["sampling"] == {"temperature": 0.2, "top_k": 40}

@@ -4,6 +4,8 @@ import json
 import chess
 import chess.pgn
 
+from conftest import play_move
+
 from chessllm.game import Settings
 from chessllm.players import Message
 from chessllm.prompt import LISTED_SYSTEM_PROMPT_FILE, SYSTEM_PROMPT_FILE, system_prompt
@@ -40,10 +42,10 @@ def test_the_llm_constraints_default_to_free(scripted):
 
 def test_listed_is_copied_into_the_game_and_applies_to_the_next_game_only(scripted):
     client, player = listed_game(scripted, ["e5", "e5"])
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     client.post("/api/games")
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     assert [settings.llm_constraints for settings in player.built_for] == ["listed", "free"]
     assert state["settings"]["llm_constraints"] == "free"
@@ -60,7 +62,7 @@ def test_unknown_llm_constraints_are_refused(scripted):
 def test_listed_sends_the_listed_system_prompt_and_every_legal_move_under_the_pgn_and_fen(scripted):
     client, player = listed_game(scripted, ["e5"])
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     [prompt] = player.prompts
     assert prompt[0] == Message("system", system_prompt("black", LISTED_SYSTEM_PROMPT_FILE))
@@ -84,7 +86,7 @@ def test_the_order_of_the_legal_moves_varies_between_turns(scripted):
     client, player = listed_game(scripted, ["Nf6", "Ng8", "Nf6"])
 
     for uci in ["g1f3", "f3g1", "g1f3"]:
-        client.post("/api/games/current/moves", json={"uci": uci})
+        play_move(client, uci)
 
     first, _, third = player.prompts
     position = lambda prompt: prompt[1].content.splitlines()[1].split(" ")[:5]  # the FEN without the move counters
@@ -96,7 +98,7 @@ def test_the_order_of_the_legal_moves_varies_between_turns(scripted):
 def test_hinted_feedback_in_listed_repeats_the_list_shown_that_turn(scripted):
     client, player = listed_game(scripted, ["Qh4", "e5"], retry_feedback="hinted")
 
-    state = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
+    state = play_move(client, "e2e4").json()
 
     shown = shown_legal_moves(player.prompts[0])
     feedback = state["llm_turn"]["attempts"][1]["feedback_sent"]
@@ -106,7 +108,7 @@ def test_hinted_feedback_in_listed_repeats_the_list_shown_that_turn(scripted):
 def test_the_log_records_the_llm_constraints_the_prompt_file_and_the_list_each_attempt_saw(scripted, tmp_path):
     client, player = listed_game(scripted, ["Qh4", "e5"])
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     (start, _, attempt_1, attempt_2), _ = log_events(tmp_path / "games")
     assert start["llm_constraints"] == "listed"
@@ -119,7 +121,7 @@ def test_a_free_game_logs_free_and_no_legal_moves(scripted, tmp_path):
     client, _ = scripted(["e5"])
     client.post("/api/games")
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     (start, _, attempt), _ = log_events(tmp_path / "games")
     assert start["llm_constraints"] == "free"
@@ -130,7 +132,7 @@ def test_a_free_game_logs_free_and_no_legal_moves(scripted, tmp_path):
 def test_the_pgn_headers_name_the_llm_constraints(scripted, tmp_path):
     client, _ = listed_game(scripted, ["Qh4"] * 4)
 
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})  # four illegal moves: a forfeit ends the game
+    play_move(client, "e2e4")  # four illegal moves: a forfeit ends the game
 
     _, log = log_events(tmp_path / "games")
     game = chess.pgn.read_game(io.StringIO(log.with_suffix(".pgn").read_text(encoding="utf-8")))

@@ -1,6 +1,7 @@
 """One game between the human and the LLM player, each playing the colour the settings give them."""
 
 import random
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any, Literal
@@ -41,6 +42,10 @@ def color_name(color: chess.Color) -> Color:
 
 class RejectedHumanMove(Exception):
     pass
+
+
+class RefusedLlmTurn(Exception):
+    """An LLM turn can't start: it isn't the LLM's turn, the game is over, or a turn is already running."""
 
 
 @dataclass(frozen=True)
@@ -98,6 +103,8 @@ class GameSession:
         self._recovered_turns = 0
         self._notation_slips = 0
         self._human = chess.WHITE if settings.human_color == "white" else chess.BLACK
+        # Requests run in a threadpool, so two could otherwise both find it the LLM's turn and both ask it to move.
+        self._llm_turn_running = threading.Lock()
         log.write(
             "game_start",
             game_id=log.game_id,
@@ -111,13 +118,9 @@ class GameSession:
             prompt_file=str(SYSTEM_PROMPT_FILES[settings.llm_constraints]),
             started_at=now(),
         )
-        if self._human == chess.BLACK:  # the LLM plays White, so it opens the game
-            self._play_llm_turn()
-            if self._end is not None:  # it forfeited its first move
-                self._write_end(self._end)
 
     def play_human_move(self, uci: str) -> None:
-        """Apply the human's move and let the LLM reply.
+        """Apply the human's move. The LLM's reply is a separate turn, started with play_llm_turn.
 
         Raises RejectedHumanMove and leaves the game unchanged."""
         board = self._board
@@ -133,12 +136,28 @@ class GameSession:
         board.push(move)
         self._log.write("human_move", ply=len(board.move_stack), move=san, fen_after=board.fen())
         self._check_end()
-        if self._end is None:
+        if self._end is not None:
+            self._write_end(self._end)
+
+    def play_llm_turn(self) -> None:
+        """Play the LLM's turn: it moves or forfeits.
+
+        Raises RefusedLlmTurn and leaves the game unchanged if it isn't the LLM's turn, the game is over, or
+        another LLM turn is still running."""
+        if not self._llm_turn_running.acquire(blocking=False):
+            raise RefusedLlmTurn("an LLM turn is already running")
+        try:
+            if self._end is not None:
+                raise RefusedLlmTurn("the game is over")
+            if self._board.turn == self._human:
+                raise RefusedLlmTurn("it is not the LLM's turn")
             self._play_llm_turn()
             if self._end is None:
                 self._check_end()
-        if self._end is not None:
-            self._write_end(self._end)
+            if self._end is not None:
+                self._write_end(self._end)
+        finally:
+            self._llm_turn_running.release()
 
     def _write_end(self, end: GameEnd) -> None:
         board = self._board
