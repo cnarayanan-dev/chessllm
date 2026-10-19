@@ -7,8 +7,12 @@
   with the request's id. An answer to any request but the one in flight is dropped: that is how New game abandons
   the running game's requests (an LLM turn of an abandoned game still lands in that game's log, but nothing follows
   it here). It runs no chess logic (ADR 0001): who is to move and whether the game is over come from the backend.
+
+  The move history lets the user look back through the game without changing it: the board shows a past position
+  from the plies the backend sent, and takes no move until it is back at live. A state that lands meanwhile doesn't
+  pull the view; it only marks that there is news.
 */
-import type { Color, GameState, LlmTurn, NewGame } from '@/api/types'
+import type { Color, GameState, LlmTurn, NewGame, Ply } from '@/api/types'
 import { nextGameFrom, type NextGame } from '@/settings/next-game'
 
 /** The one request to the backend in flight. */
@@ -35,11 +39,19 @@ export type GameLoop = {
   moveSounds: number
   /** The board flashes of the last LLM turn to land, until the next one lands or New game. */
   flash: Flash | null
+  /** The past position viewed in the move history, or null when the board shows the game as it is (live). */
+  history: History | null
   nextId: number
 }
 
 /** An LLM turn that landed, with the square the last move landed on; `id` tells one landing from the next. */
 export type Flash = { id: number; turn: LlmTurn; landedOn: string | null }
+
+/**
+ * A past position viewed in the move history: the position after ply `ply` (0: the start position, never the last
+ * ply, which is live). `news`: the game has moved on since the view left live (a move landed, or the game ended).
+ */
+export type History = { ply: number; news: boolean }
 
 export type GameLoopAction =
   | { type: 'new-game'; newGame: NewGame | null }
@@ -47,6 +59,10 @@ export type GameLoopAction =
   | { type: 'next-game'; next: NextGame }
   | { type: 'received'; requestId: number; game: GameState }
   | { type: 'failed'; requestId: number; message: string }
+  // The move history: view the position after a ply (0: the start), step back or forward a ply, or go back to live.
+  | { type: 'view'; ply: number }
+  | { type: 'step'; by: -1 | 1 }
+  | { type: 'live' }
 
 /** idle: no game yet. human: the human to move. llm: waiting for an LLM. over: the game has ended. */
 export type Phase = 'idle' | 'human' | 'llm' | 'over'
@@ -58,6 +74,7 @@ export const initialGameLoop: GameLoop = {
   next: null,
   moveSounds: 0,
   flash: null,
+  history: null,
   nextId: 2,
 }
 
@@ -73,6 +90,50 @@ export function phase(state: GameLoop): Phase {
   if (game.status === 'over') return 'over'
   return game.turn === humanColor(game) ? 'human' : 'llm'
 }
+
+/**
+ * The position the board shows: the game as it is, or the past position viewed, all as the backend sent them
+ * (ADR 0001). `ply` is the ply it follows (0: the start position) and `move` that ply. `animateFrom` is set only
+ * in the history: the board puts that position up first, so the move animates in from the position before it.
+ */
+export type Shown = {
+  ply: number
+  fen: string
+  lastMove: string | null
+  check: boolean
+  animateFrom: string | null
+  move: Ply | null
+}
+
+export function shownPosition(state: GameLoop): Shown | null {
+  const game = state.game
+  if (!game) return null
+  if (!state.history) {
+    const move = game.plies.at(-1) ?? null
+    return { ply: game.plies.length, fen: game.fen, lastMove: game.last_move, check: game.check, animateFrom: null, move }
+  }
+  const ply = state.history.ply
+  if (ply === 0) return { ply, fen: game.plies[0].fen_before, lastMove: null, check: false, animateFrom: null, move: null }
+  const move = game.plies[ply - 1]
+  return { ply, fen: move.fen_after, lastMove: move.move, check: move.check, animateFrom: move.fen_before, move }
+}
+
+/** The side whose pieces the user may move now, or null: only the human, on their turn, at the live position. */
+export const boardInput = (state: GameLoop): Color | null =>
+  phase(state) === 'human' && !state.history ? humanColor(state.game!) : null
+
+/** The history after viewing the position after `ply`, kept within the game: the last ply is live. */
+function view(state: GameLoop, ply: number): GameLoop {
+  const plies = state.game?.plies.length ?? 0
+  const target = Math.max(ply, 0)
+  const history = target >= plies ? null : { ply: target, news: state.history?.news ?? false }
+  if (history?.ply === state.history?.ply) return state
+  return { ...state, history }
+}
+
+/** Whether the game has moved on in `next`: a ply was played, or it ended (a forfeit plays none). */
+const movedOn = (game: GameState, next: GameState) =>
+  next.plies.length !== game.plies.length || next.status !== game.status
 
 /** Whether the LLM's turn is running: asked for and not yet answered. */
 export const waitingForLlm = (state: GameLoop): boolean => state.request?.kind === 'llm-turn'
@@ -103,9 +164,9 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
   switch (action.type) {
     case 'new-game':
       // Also during an LLM turn or a human move: their answers are dropped from here on.
-      return send({ ...state, error: null, flash: null }, { kind: 'start', newGame: action.newGame })
+      return send({ ...state, error: null, flash: null, history: null }, { kind: 'start', newGame: action.newGame })
     case 'human-move':
-      if (phase(state) !== 'human' || state.request) return state
+      if (!boardInput(state) || state.request) return state
       return send({ ...state, error: null }, { kind: 'move', uci: action.uci })
     case 'next-game':
       return { ...state, next: action.next }
@@ -117,7 +178,11 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       const flash = turn
         ? { id: request.id, turn, landedOn: action.game.last_move?.slice(2, 4) ?? null }
         : state.flash
-      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash }, action.game)
+      // The view stays where it is in the same game, marked if the game moved on; another game is shown live.
+      const past = state.history
+      const sameGame = state.game?.game_id === action.game.game_id
+      const history = past && sameGame ? { ...past, news: past.news || movedOn(state.game!, action.game) } : null
+      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history }, action.game)
     }
     case 'failed': {
       const request = state.request
@@ -129,5 +194,11 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       if (request.kind === 'move' && state.game) return { ...failed, game: { ...state.game } }
       return failed
     }
+    case 'view':
+      return view(state, action.ply)
+    case 'step':
+      return view(state, (state.history?.ply ?? state.game?.plies.length ?? 0) + action.by)
+    case 'live':
+      return state.history ? { ...state, history: null } : state
   }
 }

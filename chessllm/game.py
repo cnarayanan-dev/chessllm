@@ -247,6 +247,9 @@ class GameSession:
         # python-chess's move stack, so repetition, the last move and the Move record come from these lists.
         self._positions = [position_key(self._board)]  # the start position, then the position after each ply
         self._moves: list[tuple[str, str]] = []  # each ply's move in UCI and as written in the Move record
+        # Each ply as the page gets it for its move history: the move and the whole position before and after it,
+        # so the page can step through the game without any chess logic (ADR 0001).
+        self._plies: list[dict[str, Any]] = []
         self._standard_moves: list[chess.Move] = []  # the moves up to the first chaos move, for the PGN export
         self._first_chaos_ply: int | None = None
         self._llm_turns: list[dict[str, Any]] = []  # every LLM turn of the game, the last one included
@@ -494,6 +497,7 @@ class GameSession:
             "turn": color_name(board.turn),
             "human_legal_moves": self._human_legal_moves(),
             "last_move": self._moves[-1][0] if self._moves else None,
+            "plies": self._plies,
             "check": board.is_check(),  # the side to move's king, so the page needn't work it out (ADR 0001)
             "llm_turn": self._llm_turns[-1] if self._llm_turns else None,
             "llm_turns": self._llm_turns,
@@ -523,24 +527,32 @@ class GameSession:
 
     def _play_legal(self, move: chess.Move) -> str:
         """Play a legal move, the human's or the LLM's, and return its SAN."""
-        san = self._board.san(move)
+        san, fen_before = self._board.san(move), self._board.fen()
         self._board.push(move)
         if self._first_chaos_ply is None:
             self._standard_moves.append(move)
-        self._played(move.uci(), san)
+        self._played(move.uci(), san, fen_before)
         return san
 
     def _play_chaos(self, resolution: chaos.Resolution, written: str) -> None:
         """Play a chaos move or spawn by editing the board by hand (ADR 0006), recorded as the LLM wrote it."""
-        uci = resolution.uci(self._board)
+        uci, fen_before = resolution.uci(self._board), self._board.fen()
         self._board = chaos.apply(self._board, resolution)
         if self._first_chaos_ply is None:
             self._first_chaos_ply = len(self._moves) + 1
-        self._played(uci, written)
+        self._played(uci, written, fen_before, resolution)
 
-    def _played(self, uci: str, written: str) -> None:
+    def _played(self, uci: str, written: str, fen_before: str, resolution: chaos.Resolution | None = None) -> None:
+        """Record the ply just played. Only a chaos move or spawn has a resolution, the same as the attempt that
+        played it has, so the page can replay it without resolving it again."""
         self._moves.append((uci, written))
         self._positions.append(position_key(self._board))
+        ply: dict[str, Any] = {"ply": len(self._moves), "color": color_name(not self._board.turn), "move": uci}
+        ply |= {"written": written, "fen_before": fen_before, "fen_after": self._board.fen()}
+        ply["check"] = self._board.is_check()  # after the ply, as the state's check is for the live position
+        if resolution is not None:
+            ply["resolution"] = resolution.as_dict()
+        self._plies.append(ply)
 
 
 def position_key(board: chess.Board) -> str:

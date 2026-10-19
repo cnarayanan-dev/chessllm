@@ -1,6 +1,6 @@
 // The words around the board, as the old page had them: the chips, the status line and the end-of-game banner.
 import type { Color, GameSettings, GameState } from '@/api/types'
-import { humanColor } from '@/game/gameLoop'
+import { humanColor, type Shown } from '@/game/gameLoop'
 
 export const COLORS: readonly Color[] = ['white', 'black']
 export const COLOR_NAMES: Record<Color, string> = { white: 'White', black: 'Black' }
@@ -49,6 +49,15 @@ export function statusText(game: GameState | null, failed: boolean, seconds: num
     return `${llmName(game, game.turn)} ${doing} ${seconds}s`
   }
   return `Waiting for ${faceoff(game) ? llmName(game, game.turn) : COLOR_NAMES[game.turn]}…`
+}
+
+/** The status line while viewing a past position in the move history, e.g. "Viewing 12… Nf6 · → or Back to live". */
+export function historyStatusText(shown: Shown): string {
+  const move = shown.move
+  const viewed = move
+    ? `${Math.ceil(move.ply / 2)}${move.color === 'white' ? '.' : '…'} ${move.written}`
+    : 'the start position'
+  return `Viewing ${viewed} · → or Back to live`
 }
 
 /** The end-of-game banner's title and reason. */

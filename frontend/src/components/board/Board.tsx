@@ -28,8 +28,13 @@ type BoardProps = {
   fen: string
   /** The side at the bottom. */
   orientation: Color
-  /** The last move, as UCI: both its squares are tinted. */
+  /** The last move, as UCI: both its squares are tinted, or only the target of a drop (a Spawn, Q@d5). */
   lastMove?: string | null
+  /**
+   * The position before the last move, as FEN, to replay it from the move history: the board puts it up at once,
+   * then animates the move into `fen`. Without it, the board animates from whatever it shows.
+   */
+  animateFrom?: string | null
   /** Whether the side to move is in check: its king glows red. */
   check?: boolean
   /** The side whose pieces the user may move, or null when the board is locked. */
@@ -79,6 +84,7 @@ export function Board({
   fen,
   orientation,
   lastMove = null,
+  animateFrom = null,
   check = false,
   input = null,
   legalMoves = NO_MOVES,
@@ -91,6 +97,9 @@ export function Board({
   const queue = useRef(Promise.resolve())
   // Brings the board in line with the latest props. The move input handler calls it too, so it lives in a ref.
   const sync = useRef(() => {})
+  // The last position drawn, as FEN, and how many times sync was called.
+  const drawn = useRef<string | null>(null)
+  const syncs = useRef(0)
 
   // The board is created once, from the first props: later ones reach it through sync.
   const first = useRef({ fen, orientation })
@@ -142,19 +151,25 @@ export function Board({
     }
 
     sync.current = () => {
+      const version = ++syncs.current
       queue.current = queue.current.then(async () => {
         const current = board.current
-        if (!current) return
+        // Skipped once newer props wait in the queue, so stepping quickly through the history doesn't lag behind.
+        if (!current || version !== syncs.current) return
         clearTargets(current)
         current.removeMarkers(MARKER.lastMove)
         current.removeMarkers(MARKER.check) // at once, not after the pieces have moved
         if (lastMove) {
-          current.addMarker(MARKER.lastMove, lastMove.slice(0, 2))
+          // A drop (Q@d5) has a target square only, in the same place as a move's.
+          if (!lastMove.includes('@')) current.addMarker(MARKER.lastMove, lastMove.slice(0, 2))
           current.addMarker(MARKER.lastMove, lastMove.slice(2, 4))
         }
         // The board turns after the position is set: an animated turn redraws a stale position.
         const turn = current.getOrientation() !== COLOR[orientation]
+        // A replay only when the position changes, not when, say, new legal moves arrive for the same one.
+        if (animateFrom && drawn.current !== fen) await current.setPosition(animateFrom, false)
         await current.setPosition(fen, !turn)
+        drawn.current = fen
         if (turn) await current.setOrientation(COLOR[orientation])
         if (check) showCheck(current, fen) // once the position is set, so the king is found where it now stands
         current.disableMoveInput()
@@ -162,7 +177,7 @@ export function Board({
       })
     }
     sync.current()
-  }, [fen, orientation, lastMove, check, input, legalMoves, onMove])
+  }, [fen, orientation, lastMove, animateFrom, check, input, legalMoves, onMove])
 
   return (
     <div className="board-wrap">

@@ -10,16 +10,35 @@ import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { humanColor, phase, waitingForLlm } from '@/game/gameLoop'
+import {
+  boardInput,
+  humanColor,
+  phase,
+  shownPosition,
+  waitingForLlm,
+  type History,
+  type Shown,
+} from '@/game/gameLoop'
 import { useGameLoop } from '@/game/useGameLoop'
-import { bannerText, faceoff, llmName, settingsChips, statusText } from '@/game/wording'
+import { bannerText, faceoff, historyStatusText, llmName, settingsChips, statusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsButton, SettingsModal } from '@/settings/SettingsModal'
 
 const NO_MOVES: readonly string[] = []
 
-/** The status line. While an LLM turn runs, a timer ticks every second, to show the app has not frozen. */
-function Status({ game, failed, running }: { game: GameState | null; failed: boolean; running: boolean }) {
+type StatusProps = {
+  game: GameState | null
+  failed: boolean
+  running: boolean
+  /** The past position viewed in the move history, which the status names instead, with Back to live. */
+  viewing: { shown: Shown; history: History; onLive: () => void } | null
+}
+
+/**
+ * The status line. While an LLM turn runs, a timer ticks every second, to show the app has not frozen. While the
+ * move history shows the past, it says so, with Back to live, marked once the game has moved on.
+ */
+function Status({ game, failed, running, viewing }: StatusProps) {
   const [started] = useState(() => Date.now())
   const [seconds, setSeconds] = useState(0)
   useEffect(() => {
@@ -29,12 +48,36 @@ function Status({ game, failed, running }: { game: GameState | null; failed: boo
   }, [running, started])
   return (
     <Card size="sm">
-      <CardContent className="text-muted-foreground" data-testid="status">
-        {statusText(game, failed, running ? seconds : null)}
+      <CardContent className="flex items-center gap-3 text-muted-foreground">
+        <span data-testid="status">
+          {viewing ? historyStatusText(viewing.shown) : statusText(game, failed, running ? seconds : null)}
+        </span>
+        {viewing && (
+          <>
+            <span className="flex-1" />
+            <Button size="sm" variant={viewing.history.news ? 'default' : 'outline'} onClick={viewing.onLive}>
+              {!viewing.history.news
+                ? 'Back to live'
+                : game?.status === 'over'
+                  ? 'Back to live · game over'
+                  : 'Back to live · new move'}
+            </Button>
+          </>
+        )}
       </CardContent>
     </Card>
   )
 }
+
+/** Whether a key press belongs to a field or a dialog rather than to the move history. */
+const keyTakenElsewhere = (event: KeyboardEvent) =>
+  event.defaultPrevented ||
+  event.altKey ||
+  event.ctrlKey ||
+  event.metaKey ||
+  event.shiftKey ||
+  (event.target instanceof HTMLElement &&
+    (event.target.isContentEditable || !!event.target.closest('input, textarea, select, [role="dialog"]')))
 
 function Banner({ game, onNewGame }: { game: GameState; onNewGame: () => void }) {
   const { title, reason } = bannerText(game)
@@ -73,8 +116,9 @@ function Thinking({ game, hidden }: { game: GameState; hidden: boolean }) {
 }
 
 export default function App() {
-  const { state, newGame, humanMove, changeNext } = useGameLoop()
-  const { game, error, request, next } = state
+  const { state, newGame, humanMove, changeNext, viewPly, step, backToLive } = useGameLoop()
+  const { game, error, request, next, history } = state
+  const shown = shownPosition(state)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // The models as the Settings modal last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
@@ -86,6 +130,19 @@ export default function App() {
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
   // The next game, as set up in the Settings modal, or the default game if none could be loaded.
   const startNewGame = () => newGame(next ? newGameRequest(next, models) : null)
+
+  // ← and → step through the move history, unless a field or the Settings modal has the keys.
+  useEffect(() => {
+    if (settingsOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      const by = ({ ArrowLeft: -1, ArrowRight: 1 } as const)[event.key as 'ArrowLeft' | 'ArrowRight']
+      if (!by || keyTakenElsewhere(event)) return
+      event.preventDefault()
+      step(by)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [settingsOpen, step])
 
   return (
     <div className="min-h-svh text-sm">
@@ -115,26 +172,34 @@ export default function App() {
         />
       )}
       <main className="grid grid-cols-[minmax(320px,560px)_340px] justify-center gap-8 px-5 pt-7 pb-10 max-[960px]:grid-cols-[minmax(280px,560px)]">
-        {game ? (
+        {game && shown ? (
           <Board
-            fen={game.fen}
+            fen={shown.fen}
             orientation={human ?? 'white'}
-            lastMove={game.last_move}
-            check={game.check}
+            lastMove={shown.lastMove}
+            animateFrom={shown.animateFrom}
+            check={shown.check}
             // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
-            // position the move left.
-            input={phase(state) === 'human' ? human : null}
+            // position the move left. Locked while the move history shows the past.
+            input={boardInput(state)}
             legalMoves={legalMoves}
             onMove={humanMove}
           >
-            <BoardFlashes flash={state.flash} />
+            {/* The live turn's flashes, kept off a past position. */}
+            {!history && <BoardFlashes flash={state.flash} />}
           </Board>
         ) : (
           <div className="aspect-square w-full" />
         )}
         <div className="flex flex-col gap-3.5">
           {game && phase(state) === 'over' && <Banner game={game} onNewGame={startNewGame} />}
-          <Status key={running ? request!.id : 'idle'} game={game} failed={error !== null} running={running} />
+          <Status
+            key={running ? request!.id : 'idle'}
+            game={game}
+            failed={error !== null}
+            running={running}
+            viewing={history && shown ? { shown, history, onLive: backToLive } : null}
+          />
           {error !== null && (
             <Alert variant="destructive">
               <AlertDescription className="text-destructive">{error}</AlertDescription>
@@ -142,7 +207,7 @@ export default function App() {
           )}
           {/* In Play LLM the thinking hides as the LLM's next turn starts. */}
           {game && <Thinking game={game} hidden={running && !faceoff(game)} />}
-          {game && <MovesCard game={game} />}
+          {game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
         </div>
       </main>
       <footer className="px-5 pb-6 text-center text-xs text-muted-foreground">

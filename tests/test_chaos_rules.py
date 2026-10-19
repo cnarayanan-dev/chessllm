@@ -149,6 +149,26 @@ def test_a_piece_the_llm_no_longer_has_spawns_on_its_target(scripted):
     assert state["pgn"] == "1. e4 Qh4 2. Nf3 a6 3. Nxh4 Qd5"
 
 
+def test_the_plies_of_a_chaos_game_carry_the_resolution_of_each_chaos_move_and_spawn(scripted):
+    _, _, state = chaos_game(scripted, ["Qh4", "a6", "Qd5"], "e2e4", "g1f3", "f3h4")
+
+    plies = state["plies"]
+    assert [(ply["move"], ply["written"]) for ply in plies] == [
+        ("e2e4", "e4"), ("d8h4", "Qh4"), ("g1f3", "Nf3"), ("a7a6", "a6"), ("f3h4", "Nxh4"), ("Q@d5", "Qd5"),
+    ]
+    # Each position follows on from the one before, chaos moves included.
+    assert all(ply["fen_before"] == before["fen_after"] for before, ply in zip(plies, plies[1:]))
+    assert plies[-1]["fen_after"] == state["fen"]
+    # A chaos move or spawn carries its resolution, the same as its attempt's, for the replay; other plies none.
+    assert plies[1]["resolution"] == state["llm_turns"][0]["attempts"][0]["resolution"]
+    assert plies[1]["resolution"]["kind"] == "chaos"
+    assert plies[5]["resolution"] == {
+        "kind": "spawn", "from": None, "to": "d5", "piece": "q", "rook": None,
+        "reason": "no queen on the board; one appears on d5",
+    }
+    assert [("resolution" in ply) for ply in plies] == [False, True, False, False, False, True]
+
+
 def test_the_llm_taking_the_humans_king_wins_by_king_capture(scripted):
     _, _, state = chaos_game(scripted, ["Qe1"], "e2e4")
 

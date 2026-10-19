@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import type { Attempt, GameState } from '@/api/types'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { aGame, aTurn } from '@/test/games'
@@ -26,6 +26,25 @@ test('lists the moves, one row per move number, the last move marked', () => {
   ])
   expect(within(moveList()).getByText('Nf3')).toHaveClass('last')
   expect(within(moveList()).getByText('e5')).not.toHaveClass('last')
+})
+
+test('clicking a move views the position after it', async () => {
+  const onView = vi.fn()
+  render(<MovesCard game={aGame({ pgn: '1. e4 e5 2. Nf3', llm_turns: [aTurn('e5')] })} viewed={null} onView={onView} />)
+
+  await userEvent.click(within(moveList()).getByRole('button', { name: 'e5' }))
+  await userEvent.click(within(moveList()).getByRole('button', { name: 'Nf3' }))
+
+  expect(onView.mock.calls).toEqual([[2], [3]])
+})
+
+test('the move viewed in the history is marked, and the last move still is', () => {
+  render(<MovesCard game={aGame({ pgn: '1. e4 e5 2. Nf3', llm_turns: [aTurn('e5')] })} viewed={2} onView={vi.fn()} />)
+
+  expect(within(moveList()).getByText('e5')).toHaveClass('viewed')
+  expect(within(moveList()).getByText('e5')).toHaveAttribute('aria-current', 'step')
+  expect(within(moveList()).getByText('Nf3')).toHaveClass('last')
+  expect(within(moveList()).getByText('Nf3')).not.toHaveClass('viewed')
 })
 
 function anAttempt(move: string | null, result: Attempt['result'], overrides: Partial<Attempt> = {}): Attempt {

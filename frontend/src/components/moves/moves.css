@@ -4,7 +4,11 @@
 .moves { font-family: ui-monospace, monospace; font-size: 13px; min-height: 1.5em; display: grid; grid-template-columns: 28px 1fr 1fr; row-gap: 2px; }
 .moves .no { color: var(--faint); }
 .moves .ply { padding: 0 4px; border-radius: 3px; }
+.moves button.ply { text-align: left; cursor: pointer; font: inherit; }
+.moves button.ply:hover { background: var(--hover); }
 .moves .ply.last { background: var(--hover); }
+/* The move viewed in the move history, in the board's last-move green. */
+.moves .ply.viewed { background: rgba(155, 199, 0, .41); }
 .moves .ply.slip { box-shadow: inset 0 0 0 1px var(--amber); }
 .mistakes { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px; margin: 1px 0 5px; }
 .mistake { font-size: 11.5px; border-radius: 4px; padding: 0 6px; line-height: 18px; white-space: nowrap; }

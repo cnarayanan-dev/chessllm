@@ -110,6 +110,21 @@ class LlmTurn(BaseModel):
     thinking: str | None  # the thinking of the last try that answered
 
 
+class Ply(BaseModel):
+    """One ply of the game as played, for the page's move history: it shows any ply's position and animates into
+    it without chess logic of its own (ADR 0001). The LLM turn that played it, if any, has the same ply number."""
+
+    ply: int  # 1 for White's first move
+    color: Color  # the side that moved
+    move: str  # in UCI, with any promotion (e7e8q); a Spawn as a drop (Q@d5)
+    written: str  # as in the Move record: standard SAN, or a chaos move in the LLM's own spelling
+    fen_before: str
+    fen_after: str
+    check: bool  # whether the side to move after the ply is in check
+    # Only for a chaos move or spawn: its resolution, as its attempt has it, so a replay never resolves it again.
+    resolution: Resolution | None = Field(None, exclude_if=is_none)
+
+
 class IllegalMoves(BaseModel):
     invalid: int
     illegal: int
@@ -153,6 +168,7 @@ class GameState(BaseModel):
     turn: Color
     human_legal_moves: list[str]
     last_move: str | None  # in UCI
+    plies: list[Ply]  # every ply played, in order
     check: bool
     llm_turn: LlmTurn | None  # the last LLM turn
     llm_turns: list[LlmTurn]

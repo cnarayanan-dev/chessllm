@@ -28,7 +28,8 @@ function mistakeChips(turn: LlmTurn | undefined): ReactNode[] {
 
 // One row per move number, and under each LLM move its mistakes. A forfeited turn has no move, but its chips still
 // show under the ply the LLM failed to play. With the switch off, only the moves.
-function MoveList({ game, mistakes: shown }: { game: GameState; mistakes: boolean }) {
+// Each move is a button that views the position after it in the move history; the one viewed is marked.
+function MoveList({ game, mistakes: shown, viewed, onView }: { game: GameState; mistakes: boolean } & Viewing) {
   const sans = game.pgn.split(' ').filter((token) => token && !token.endsWith('.')) // drop the move numbers
   const turns = new Map(game.llm_turns.map((turn) => [turn.ply, turn]))
   const plies = Math.max(sans.length, ...game.llm_turns.map((turn) => turn.ply))
@@ -38,10 +39,23 @@ function MoveList({ game, mistakes: shown }: { game: GameState; mistakes: boolea
     rows.push(<span key={`no${white}`} className="no">{`${(white + 1) / 2}.`}</span>)
     for (const ply of [white, white + 1]) {
       const slip = shown && turns.get(ply)?.attempts.at(-1)?.notation_slip
+      const className =
+        'ply' + (ply === sans.length ? ' last' : '') + (slip ? ' slip' : '') + (ply === viewed ? ' viewed' : '')
+      const san = sans[ply - 1]
       rows.push(
-        <span key={ply} className={'ply' + (ply === sans.length ? ' last' : '') + (slip ? ' slip' : '')}>
-          {sans[ply - 1] ?? ''}
-        </span>,
+        san ? (
+          <button
+            type="button"
+            key={ply}
+            className={className}
+            aria-current={ply === viewed ? 'step' : undefined}
+            onClick={() => onView?.(ply)}
+          >
+            {san}
+          </button>
+        ) : (
+          <span key={ply} className={className} />
+        ),
       )
       if (shown) mistakes.push(...mistakeChips(turns.get(ply)))
     }
@@ -84,7 +98,14 @@ function totalsText(game: GameState): string {
 // The switch is a page setting, kept in the browser across games and reloads.
 const MISTAKES_KEY = 'chessllm.showMistakes'
 
-export function MovesCard({ game }: { game: GameState }) {
+type Viewing = {
+  /** The ply viewed in the move history (0: the start position), or null when live. */
+  viewed?: number | null
+  /** Views the position after a ply. */
+  onView?: (ply: number) => void
+}
+
+export function MovesCard({ game, viewed = null, onView }: { game: GameState } & Viewing) {
   const [show, setShow] = useState(() => localStorage.getItem(MISTAKES_KEY) !== 'off')
   const toggle = (on: boolean) => {
     setShow(on)
@@ -101,7 +122,7 @@ export function MovesCard({ game }: { game: GameState }) {
             Show LLM mistakes
           </label>
         </div>
-        <MoveList game={game} mistakes={show} />
+        <MoveList game={game} mistakes={show} viewed={viewed} onView={onView} />
         {show && (
           <div className="mt-2.5 border-t pt-2 text-xs text-muted-foreground" data-testid="totals">
             {totalsText(game)}

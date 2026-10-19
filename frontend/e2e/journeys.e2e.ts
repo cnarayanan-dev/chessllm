@@ -123,6 +123,64 @@ test('an LLM faceoff started from the settings modal plays to its end', async ({
   await expectPiece(page, 'h4', 'bq')
 })
 
+test('stepping back through the move history and returning to live', async ({ page }) => {
+  await playLlm(page, { black: ['e5', 'Nc6'] })
+  await move(page, 'e2e4', 'e5')
+  await move(page, 'g1f3', 'Nc6')
+  const status = page.getByTestId('status')
+  const backToLive = page.getByRole('button', { name: /Back to live/ })
+  await expect(backToLive).toHaveCount(0)
+
+  await page.keyboard.press('ArrowLeft')
+  await expect(status).toHaveText('Viewing 2. Nf3 · → or Back to live')
+  await expectPiece(page, 'f3', 'wn')
+  await expect(page.locator('.chessboard g[data-piece][data-square="c6"]')).toHaveCount(0)
+  await expect(page.locator('.chessboard .board.input-enabled')).toHaveCount(0)
+
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowLeft')
+  await expect(status).toHaveText('Viewing the start position · → or Back to live')
+  await expectPiece(page, 'e2', 'wp')
+  await page.keyboard.press('ArrowLeft') // no further back than the start
+  await expect(status).toHaveText('Viewing the start position · → or Back to live')
+
+  await page.keyboard.press('ArrowRight')
+  await expect(status).toHaveText('Viewing 1. e4 · → or Back to live')
+  await expectPiece(page, 'e4', 'wp')
+
+  await page.getByTestId('moves').getByRole('button', { name: 'e5' }).click()
+  await expect(status).toHaveText('Viewing 1… e5 · → or Back to live')
+  await expectPiece(page, 'e5', 'bp')
+  await expect(page.locator('.chessboard g[data-piece][data-square="f3"]')).toHaveCount(0)
+
+  await backToLive.click()
+  await expect(status).toHaveText('Your move (White)')
+  await expectPiece(page, 'c6', 'bn')
+  await expect(backToLive).toHaveCount(0)
+  // The board takes the human's move again.
+  await clickMove(page, 'f1c4')
+  await expect(page.getByTestId('moves')).toContainText('Bc4')
+})
+
+test('the move history of an LLM faceoff, stepped through after its end', async ({ page }) => {
+  await page.request.post('/e2e/script', { data: { white: ['f3', 'g4'], black: ['e5', 'Qh4#'] } })
+  await page.request.post('/api/games', {
+    data: { mode: 'llm_faceoff', white: { player: 'llm' }, black: { player: 'llm' } },
+  })
+  await page.goto('/')
+  await expect(page.getByTestId('banner')).toContainText('by checkmate')
+
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.getByTestId('status')).toHaveText('Viewing 2. g4 · → or Back to live')
+  await expect(page.locator('.chessboard g[data-piece][data-square="h4"]')).toHaveCount(0)
+  await expectPiece(page, 'd8', 'bq')
+
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByTestId('status')).toHaveText('Game over')
+  await expectPiece(page, 'h4', 'bq')
+})
+
 test('the page at / credits the Merida pieces and the move sound', async ({ page }) => {
   await playLlm(page, {})
 

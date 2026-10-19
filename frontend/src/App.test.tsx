@@ -392,3 +392,88 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
   expect(within(screen.getByTestId('moves')).queryByText('e4')).not.toBeInTheDocument()
 })
+
+describe('the move history', () => {
+  const backToLive = () => screen.queryByRole('button', { name: /Back to live/ })
+
+  test('← and → step through the game with the board locked, and Back to live gives the move back', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+    expect(backToLive()).not.toBeInTheDocument()
+
+    await userEvent.keyboard('{ArrowLeft}')
+
+    expect(status()).toHaveTextContent('Viewing 1. e4 · → or Back to live')
+    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR'))
+    expect(board.marked('last-move')).toEqual(['e2', 'e4'])
+    expect(board.input).toBeNull()
+
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(status()).toHaveTextContent('Viewing the start position · → or Back to live')
+    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
+
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}')
+    expect(status()).toHaveTextContent('Your move (White)')
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+    expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR')
+
+    await userEvent.keyboard('{ArrowLeft}')
+    await userEvent.click(backToLive()!)
+    expect(status()).toHaveTextContent('Your move (White)')
+    expect(backToLive()).not.toBeInTheDocument()
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+  })
+
+  test('clicking a move in the move list views the position after it', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
+    renderApp()
+    const board = await waitFor(theBoard)
+
+    await userEvent.click(within(await screen.findByTestId('moves')).getByRole('button', { name: 'e4' }))
+
+    expect(status()).toHaveTextContent('Viewing 1. e4')
+    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR'))
+    expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'e4' })).toHaveClass('viewed')
+  })
+
+  test("an LLM move landing while viewing the past doesn't pull the view; Back to live says so and shows it", async () => {
+    const turn = later()
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(afterE4()))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+    renderApp()
+    const board = await waitFor(theBoard)
+    await screen.findByText(/is choosing a move/)
+
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(status()).toHaveTextContent('Viewing the start position')
+    expect(backToLive()).toHaveAccessibleName('Back to live')
+
+    await act(async () => turn.resolve(Response.json(afterE5())))
+
+    expect(await screen.findByRole('button', { name: 'Back to live · new move' })).toBeInTheDocument()
+    expect(status()).toHaveTextContent('Viewing the start position')
+    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
+    expect(board.input).toBeNull()
+
+    await userEvent.click(backToLive()!)
+
+    expect(status()).toHaveTextContent('Your move (White)')
+    await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+  })
+
+  test('the arrow keys leave the settings modal alone', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(afterE5())).on('GET /api/models', Response.json([]))
+    renderApp()
+    await screen.findByText('Your move (White)')
+
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    await screen.findByRole('dialog', { name: 'Settings' })
+    await userEvent.keyboard('{ArrowLeft}')
+
+    expect(status()).toHaveTextContent('Your move (White)')
+  })
+})

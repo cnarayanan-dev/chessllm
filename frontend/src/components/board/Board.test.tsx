@@ -43,6 +43,60 @@ test('tints the last move and the king in check, on the same board', async () =>
   expect(theBoard()).toBe(board)
 })
 
+const AFTER_E5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
+const AFTER_NF3 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2'
+
+test('a move replayed from the history animates in from the position before it', async () => {
+  const { rerender } = render(<Board fen={AFTER_NF3} orientation="white" lastMove="g1f3" />)
+  const board = theBoard()
+  await waitFor(() => expect(board.positionsSet).toHaveLength(1))
+
+  // Back to 1… e5: the board jumps to the position after 1. e4, then plays e7e5.
+  rerender(<Board fen={AFTER_E5} orientation="white" lastMove="e7e5" animateFrom={AFTER_E4} />)
+
+  await waitFor(() => expect(board.positionsSet).toHaveLength(3))
+  expect(board.positionsSet.slice(1)).toEqual([
+    { position: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR', animated: false },
+    { position: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR', animated: true },
+  ])
+  expect(board.marked('last-move')).toEqual(['e5', 'e7'])
+})
+
+test('a replayed move is not replayed again when only other props change', async () => {
+  const { rerender } = render(<Board fen={AFTER_E5} orientation="white" lastMove="e7e5" animateFrom={AFTER_E4} />)
+  const board = theBoard()
+  await waitFor(() => expect(board.positionsSet).toHaveLength(2))
+
+  // A state lands while the history is viewed: the board gets new legal moves, but shows the same position.
+  rerender(<Board fen={AFTER_E5} orientation="white" lastMove="e7e5" animateFrom={AFTER_E4} legalMoves={[]} />)
+
+  await waitFor(() => expect(board.positionsSet).toHaveLength(3))
+  expect(board.positionsSet.at(-1)).toEqual({ position: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR', animated: true })
+})
+
+test('stepping quickly through the history skips the positions already left behind', async () => {
+  const { rerender } = render(<Board fen={START} orientation="white" />)
+  const board = theBoard()
+
+  rerender(<Board fen={AFTER_E4} orientation="white" lastMove="e2e4" animateFrom={START} />)
+  rerender(<Board fen={AFTER_E5} orientation="white" lastMove="e7e5" animateFrom={AFTER_E4} />)
+
+  await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
+  // Only the last step is drawn: e5 played from the position before it.
+  expect(board.positionsSet).toEqual([
+    { position: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR', animated: false },
+    { position: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR', animated: true },
+  ])
+  expect(board.marked('last-move')).toEqual(['e5', 'e7'])
+})
+
+test("a spawn's drop tints only the square it appeared on", async () => {
+  render(<Board fen={AFTER_E5} orientation="white" lastMove="Q@d5" />)
+  const board = theBoard()
+
+  await waitFor(() => expect(board.marked('last-move')).toEqual(['d5']))
+})
+
 // 1. e4 d5, White to move. Only some of White's legal moves: the board takes the list as given (ADR 0001).
 const SCANDINAVIAN = 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
 const SOME_LEGAL_MOVES = ['e4e5', 'e4d5', 'g1f3', 'g1h3']

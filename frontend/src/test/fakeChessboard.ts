@@ -64,8 +64,12 @@ export class Chessboard {
     boards.push(this)
   }
 
-  async setPosition(fen: string) {
+  /** Every position set, in order, with whether it was animated. */
+  positionsSet: { position: string; animated: boolean }[] = []
+
+  async setPosition(fen: string, animated = false) {
     this.position = fen.split(' ')[0]
+    this.positionsSet.push({ position: this.position, animated })
   }
 
   async setOrientation(color: BoardColor) {
