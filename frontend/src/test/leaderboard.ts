@@ -14,6 +14,7 @@ export function anEntry(id: string, overrides: Overrides = {}): LeaderboardEntry
       llm_constraints: 'free',
       rules: 'standard',
       retry_feedback: 'explained',
+      max_retries: 4,
       sampling: {},
       prompt: 'system.txt',
       ...configuration,

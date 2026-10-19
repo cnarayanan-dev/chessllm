@@ -41,7 +41,7 @@ test('a chaos move that takes its own king loses', () => {
 
 test('in a faceoff the King capture names both LLMs by their side', () => {
   const llm = aGame().settings.black
-  const faceoff = { mode: 'llm_faceoff' as const, white: { ...llm, model: 'gemma3:4b' }, black: llm, sampling: {}, rules: 'chaos' as const }
+  const faceoff = { mode: 'llm_faceoff' as const, white: { ...llm, model: 'gemma3:4b' }, black: llm, sampling: {}, rules: 'chaos' as const, max_attempts: 5 }
 
   expect(bannerText(kingCaptured({ result: '1-0', settings: faceoff }))).toEqual({
     title: 'gemma3:4b (White) wins',

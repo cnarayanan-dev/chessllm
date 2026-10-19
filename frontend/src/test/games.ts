@@ -51,6 +51,7 @@ export function aGame(overrides: Partial<GameState> = {}): GameState {
       white: { player: 'human' },
       black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
       sampling: {},
+      max_attempts: 5,
     },
     status: 'playing',
     result: null,

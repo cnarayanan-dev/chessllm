@@ -1,10 +1,14 @@
 """The Anchor port: an opponent of known strength that, given a position, returns a move (ADR 0005).
 
-The one adapter is Komodo Dragon 1, driven over UCI by python-chess. Dragon isn't bundled: it is downloaded from
-komodochess.com (/pub/dragon.zip) and its executable's path is configured, with --dragon or CHESSLLM_DRAGON."""
+The adapters are Komodo Dragon 1 and Stockfish, both driven over UCI by python-chess. Dragon isn't bundled: it is
+downloaded from komodochess.com (/pub/dragon.zip) and its executable's path is configured, with --dragon or
+CHESSLLM_DRAGON. Stockfish is the stand-in where Dragon can't be had: its own strength settings don't go as low as
+Dragon's Skill levels, so each of its Skill levels is a Stockfish Skill Level held to a shallow search depth, and its
+ratings are rough guesses, not published ones."""
 
 import os
 import platform
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -33,6 +37,13 @@ class AnchorRating:
 # random legal mover at about -122, is added here and then rated games against it count towards the Rating.
 ANCHOR_RATINGS: dict[str, AnchorRating] = {
     f"anchor:dragon:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=100) for skill in DRAGON_SKILLS
+}
+# Stockfish's Skill s (Stockfish Skill Level and search depth below) is guessed to play about as well as Dragon's Skill
+# s. The guess is uncalibrated, so its prior is three times as wide as Dragon's and the fit can move it a long way.
+STOCKFISH_LEVELS: dict[int, tuple[int, int]] = {1: (0, 1), 2: (0, 2), 3: (1, 3), 4: (2, 4), 5: (3, 5), 6: (4, 6), 7: (5, 7)}
+STOCKFISH_PATH_VARIABLE = "CHESSLLM_STOCKFISH"
+ANCHOR_RATINGS |= {
+    f"anchor:stockfish:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=300) for skill in STOCKFISH_LEVELS
 }
 
 
@@ -120,3 +131,97 @@ class DragonAnchor:
             self._engine.quit()
         except Exception:
             pass  # it has stopped already
+
+
+def configured_stockfish_path(path: str | None = None) -> Path:
+    """The Stockfish executable: the given path, else the CHESSLLM_STOCKFISH environment variable, else stockfish on
+    the PATH. Raises AnchorUnavailable if there is none."""
+    path = path or os.environ.get(STOCKFISH_PATH_VARIABLE) or shutil.which("stockfish")
+    if not path:
+        raise AnchorUnavailable(
+            f"Stockfish isn't installed: pass --stockfish or set {STOCKFISH_PATH_VARIABLE} to its executable."
+        )
+    return Path(path).expanduser()
+
+
+class StockfishAnchor:
+    """Stockfish at one of its Skill levels (STOCKFISH_LEVELS): a Stockfish Skill Level and a search depth, with
+    Threads = 1. The engine starts when the Anchor is made, so a missing Stockfish is found before the game starts."""
+
+    def __init__(self, path: Path, skill: int) -> None:
+        if not path.is_file():
+            raise AnchorUnavailable(f"Stockfish isn't installed at {path}: no such file.")
+        self._path = path
+        self._skill_level, depth = STOCKFISH_LEVELS[skill]
+        self._limit = chess.engine.Limit(depth=depth)
+        self._engine = self._start()
+        self.fallback_moves = 0  # moves in positions Stockfish refused, chosen by greedy_move instead
+
+    def _start(self) -> chess.engine.SimpleEngine:
+        try:
+            engine = chess.engine.SimpleEngine.popen_uci(str(self._path), timeout=START_TIMEOUT_S)
+        except Exception as error:
+            raise AnchorUnavailable(f"Stockfish at {self._path} won't start: {error or type(error).__name__}") from error
+        try:
+            engine.configure({"Skill Level": self._skill_level, "Threads": 1})
+        except Exception as error:
+            engine.quit()
+            raise AnchorUnavailable(f"{self._path} won't take Skill Level {self._skill_level}: {error}") from error
+        return engine
+
+    def move(self, board: chess.Board) -> chess.Move:
+        """Stockfish's move. Under Chaos rules the position can be one python-chess calls invalid, and Stockfish quits
+        on those (ADR 0006): then it takes the enemy king if it can, else asks Stockfish about the position with any
+        pawn on a back rank made a queen, and if Stockfish still won't have it, plays greedy_move."""
+        if board.is_valid():
+            return self._play(board)
+        king_captures = [move for move in board.legal_moves if board.piece_type_at(move.to_square) == chess.KING]
+        if king_captures:
+            return king_captures[0]
+        cleaned = board.copy(stack=False)
+        for square in cleaned.pieces(chess.PAWN, chess.WHITE) | cleaned.pieces(chess.PAWN, chess.BLACK):
+            if chess.square_rank(square) in (0, 7):
+                cleaned.set_piece_at(square, chess.Piece(chess.QUEEN, cleaned.color_at(square) or chess.WHITE))
+        if cleaned.is_valid():
+            move = self._play(cleaned)
+            if move in board.legal_moves:
+                return move
+        self.fallback_moves += 1
+        return greedy_move(board)
+
+    def _play(self, board: chess.Board) -> chess.Move:
+        try:
+            move = self._engine.play(board, self._limit).move
+        except Exception as error:
+            self.close()
+            self._engine = self._start()  # it quits on a position it won't have; the game goes on with greedy_move
+            if board.is_valid():
+                raise AnchorUnavailable(f"Stockfish stopped answering: {error or type(error).__name__}") from error
+            self.fallback_moves += 1
+            return greedy_move(board)
+        if move is None:
+            raise AnchorUnavailable("Stockfish gave no move")
+        return move
+
+    def close(self) -> None:
+        try:
+            self._engine.quit()
+        except Exception:
+            pass  # it has stopped already
+
+
+PIECE_VALUES = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 100}
+
+
+def greedy_move(board: chess.Board) -> chess.Move:
+    """A move for a position no engine will take: the most valuable capture, else a check, else the first legal
+    move. Raises AnchorUnavailable when there is no legal move."""
+    moves = list(board.legal_moves)
+    if not moves:
+        raise AnchorUnavailable("no legal move in a position Stockfish won't take")
+
+    def value(move: chess.Move) -> tuple[int, bool]:
+        taken = board.piece_type_at(move.to_square)
+        return (PIECE_VALUES[taken] if taken else 0, board.gives_check(move))
+
+    return max(moves, key=value)

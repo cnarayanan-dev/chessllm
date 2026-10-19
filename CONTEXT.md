@@ -92,6 +92,14 @@ _Avoid_: PGN (for a game with chaos moves), move history
 One decision by an LLM in a game: it is shown the current position and replies with a move, including any retries. Each turn starts fresh, without the conversation from earlier turns.
 _Avoid_: Round, step
 
+**Thinking**:
+The long internal reasoning a model produces before it answers, when thinking is on for its side. Part of the **Player configuration**.
+_Avoid_: Chain of thought, reasoning, explanation
+
+**Reasoning**:
+The short explanation an LLM writes in its answer, before its move, when thinking is off. A model with thinking on gives none.
+_Avoid_: Explanation, thinking, justification
+
 **Illegal move**:
 A move proposed by the LLM that cannot be played in the current position: badly formed notation, a rule-breaking move, or an ambiguous move all count, each recorded with its kind.
 _Avoid_: Invalid move, wrong move
@@ -101,7 +109,7 @@ A legal move the LLM writes in anything other than its exact standard SAN, such 
 _Avoid_: Format error, non-SAN move
 
 **Retry**:
-A further attempt the LLM gets after an illegal move, told why the previous move was rejected. Limited to three per turn, so four attempts in total.
+A further attempt the LLM gets after an illegal move, told why the previous move was rejected. The attempts per turn, retries included, are set for the whole game, 1 to 25 and 5 by default, the same for every LLM in it; a Player configuration includes them.
 _Avoid_: Re-prompt, second chance
 
 **Retry feedback**:

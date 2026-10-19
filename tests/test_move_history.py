@@ -21,7 +21,7 @@ def test_the_state_keeps_the_attempts_of_every_llm_turn_with_its_ply(scripted):
 
 
 def test_a_forfeited_turn_is_kept_at_the_ply_the_llm_failed_to_play(scripted):
-    client, _ = scripted(["e5", "Ke6", "banana", "O-O", "Qa1"])
+    client, _ = scripted(["e5", "Ke6", "banana", "O-O", "Qa1", "Kd6"])
     client.post("/api/games")
     play_move(client, "e2e4")
 
@@ -29,7 +29,7 @@ def test_a_forfeited_turn_is_kept_at_the_ply_the_llm_failed_to_play(scripted):
 
     assert turns(state) == [
         (2, [("e5", "legal")]),
-        (4, [("Ke6", "illegal"), ("banana", "invalid"), ("O-O", "illegal"), ("Qa1", "illegal")]),
+        (4, [("Ke6", "illegal"), ("banana", "invalid"), ("O-O", "illegal"), ("Qa1", "illegal"), ("Kd6", "illegal")]),
     ]
 
 
@@ -102,7 +102,7 @@ def test_a_ply_is_written_as_in_the_move_record_and_a_promotion_keeps_its_piece_
 
 
 def test_a_forfeited_turn_adds_no_ply(scripted):
-    client, _ = scripted(["Ke6", "banana", "O-O", "Qa1"])
+    client, _ = scripted(["Ke6", "banana", "O-O", "Qa1", "Kd6"])
     client.post("/api/games")
 
     state = play_move(client, "e2e4").json()

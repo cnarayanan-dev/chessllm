@@ -205,7 +205,7 @@ export default function App() {
               onMove={humanMove}
             >
               {/* The live turn's flashes, kept off a past position. */}
-              {!history && <BoardFlashes flash={state.flash} />}
+              {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
             </Board>
             {chaos && <ChaosCaption chaos={chaos} />}
           </div>

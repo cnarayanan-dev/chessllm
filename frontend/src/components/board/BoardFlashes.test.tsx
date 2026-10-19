@@ -18,7 +18,7 @@ const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 const withFlash = (flash: Flash | null) => (
   <Board fen={START} orientation="white">
-    <BoardFlashes flash={flash} />
+    <BoardFlashes flash={flash} maxAttempts={5} />
   </Board>
 )
 
@@ -36,17 +36,17 @@ const card = () => {
   return [...element.children].map((child) => child.textContent)
 }
 
-test("an LLM turn's illegal tries are listed in the middle of the board, by kind, out of four tries", () => {
+test("an LLM turn's illegal tries are listed in the middle of the board, by kind, out of the game's tries", () => {
   renderFlash(aTurn('Nf6', { attempts: [anAttempt('Nf9', 'invalid'), anAttempt('Ke7', 'illegal'), anAttempt('Nf6', 'legal')] }))
 
-  expect(card()).toEqual(['✗ LLM move illegal ×2', 'Nf9 invalid · try 1 of 4', 'Ke7 illegal · try 2 of 4'])
+  expect(card()).toEqual(['✗ LLM move illegal ×2', 'Nf9 invalid · try 1 of 5', 'Ke7 illegal · try 2 of 5'])
   expect(screen.getByText('Nf9').tagName).toBe('S')
 })
 
 test('under Chaos rules, the chaos move played is not an illegal try: only the badly formed one before it is', () => {
   renderFlash(aTurn('Bb4', { attempts: [anAttempt('Bb9', 'invalid'), chaosAttempt('Bb4', { kind: 'chaos', from: 'f8', to: 'b4', piece: 'b', rook: null, reason: 'the bishop on f8 moves' } as const)] }))
 
-  expect(card()).toEqual(['✗ LLM move illegal', 'Bb9 invalid · try 1 of 4'])
+  expect(card()).toEqual(['✗ LLM move illegal', 'Bb9 invalid · try 1 of 5'])
 })
 
 test('a chaos move at the first try flashes nothing in the middle of the board', () => {
@@ -58,7 +58,7 @@ test('a chaos move at the first try flashes nothing in the middle of the board',
 test('one illegal try has no count', () => {
   renderFlash(aTurn('Nf6', { attempts: [anAttempt('Bb4', 'ambiguous'), anAttempt('Nf6', 'legal')] }))
 
-  expect(card()).toEqual(['✗ LLM move illegal', 'Bb4 ambiguous · try 1 of 4'])
+  expect(card()).toEqual(['✗ LLM move illegal', 'Bb4 ambiguous · try 1 of 5'])
 })
 
 test('a forfeit after four illegal moves', () => {
@@ -67,10 +67,10 @@ test('a forfeit after four illegal moves', () => {
 
   expect(card()).toEqual([
     '✗ LLM forfeits: 4 illegal moves',
-    'Nf9 illegal · try 1 of 4',
-    'Ke7 illegal · try 2 of 4',
-    'Nc6 illegal · try 3 of 4',
-    'Qh4 illegal · try 4 of 4',
+    'Nf9 illegal · try 1 of 5',
+    'Ke7 illegal · try 2 of 5',
+    'Nc6 illegal · try 3 of 5',
+    'Qh4 illegal · try 4 of 5',
   ])
 })
 
@@ -123,7 +123,7 @@ test("the next turn's flashes replace the last one's, for another 7 seconds", ()
 
   const second = aTurn('Nc6', { attempts: [anAttempt('Nc9', 'invalid'), anAttempt('Nc6', 'legal')] })
   rerender(withFlash({ id: 2, turn: second, landedOn: 'c6' }))
-  expect(card()).toEqual(['✗ LLM move illegal', 'Nc9 invalid · try 1 of 4'])
+  expect(card()).toEqual(['✗ LLM move illegal', 'Nc9 invalid · try 1 of 5'])
 
   act(() => void vi.advanceTimersByTime(5000))
   expect(card()).not.toBeNull()

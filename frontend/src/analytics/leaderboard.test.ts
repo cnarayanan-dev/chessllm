@@ -59,16 +59,17 @@ describe('the other numbers as text', () => {
 })
 
 describe('the chips', () => {
-  test('the LLM constraints coloured, thinking on green, retry feedback grey', () => {
+  test('the LLM constraints coloured, thinking on green, retry feedback and retries grey', () => {
     expect(chips(anEntry('a', { configuration: { llm_constraints: 'blind_enforced', thinking: true } }).configuration)).toEqual([
       { label: 'Blind enforced', hue: 'blind_enforced' },
       { label: 'thinking on', hue: 'thinking' },
       { label: 'feedback explained', hue: null },
+      { label: '4 retries', hue: null },
     ])
   })
 
   test('no chip for thinking off', () => {
-    expect(chips(anEntry('a').configuration).map((chip) => chip.label)).toEqual(['Free', 'feedback explained'])
+    expect(chips(anEntry('a').configuration).map((chip) => chip.label)).toEqual(['Free', 'feedback explained', '4 retries'])
   })
 
   test('grey chips for Chaos rules, sampling and a prompt other than the default', () => {
@@ -79,6 +80,7 @@ describe('the chips', () => {
     expect(chips(configuration)).toEqual([
       { label: 'Free', hue: 'free' },
       { label: 'feedback explained', hue: null },
+      { label: '4 retries', hue: null },
       { label: 'Chaos rules', hue: null },
       { label: 'temperature 0.2 · top_k 40', hue: null },
       { label: 'prompt terse.txt', hue: null },

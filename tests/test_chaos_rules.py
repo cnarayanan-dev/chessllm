@@ -126,8 +126,8 @@ def test_a_move_the_resolver_cannot_read_gets_a_retry(scripted, unreadable):
     assert len(player.prompts) == 2
 
 
-def test_four_unreadable_moves_still_forfeit(scripted):
-    _, _, state = chaos_game(scripted, ["banana", "e3e5", "O-O-O-O", "Qz9"], "e2e4")
+def test_five_unreadable_moves_still_forfeit(scripted):
+    _, _, state = chaos_game(scripted, ["banana", "e3e5", "O-O-O-O", "Qz9", "Kk1"], "e2e4")
 
     assert (state["result"], state["end_reason"]) == ("1-0", "forfeit")
 
@@ -219,8 +219,8 @@ def test_after_a_chaos_move_the_llm_is_shown_the_move_record_with_its_own_spelli
 
 
 def test_a_chaos_game_logs_the_resolutions_the_chaos_counts_and_a_pgn_up_to_the_first_chaos_move(scripted, tmp_path):
-    # Qh4 is a chaos move and Qd5 a spawn; then four unreadable moves forfeit.
-    replies = ["Qh4", "a6", "Qd5", "x", "y", "z", "w"]
+    # Qh4 is a chaos move and Qd5 a spawn; then five unreadable moves forfeit.
+    replies = ["Qh4", "a6", "Qd5", "x", "y", "z", "w", "v"]
 
     chaos_game(scripted, replies, "e2e4", "g1f3", "f3h4", "b1c3")
 
@@ -228,7 +228,7 @@ def test_a_chaos_game_logs_the_resolutions_the_chaos_counts_and_a_pgn_up_to_the_
     assert start["rules"] == "chaos"
     llm_attempts = [event for event in moves if event["type"] == "llm_attempt"]
     assert [attempt["resolution"] and attempt["resolution"]["kind"] for attempt in llm_attempts] == [
-        "chaos", "legal", "spawn", None, None, None, None,
+        "chaos", "legal", "spawn", None, None, None, None, None,
     ]
     assert llm_attempts[2]["resolution"] == {
         "kind": "spawn", "from": None, "to": "d5", "piece": "q", "rook": None,
@@ -237,7 +237,7 @@ def test_a_chaos_game_logs_the_resolutions_the_chaos_counts_and_a_pgn_up_to_the_
     assert (end["result"], end["reason"], end["plies"], end["chaos_plies"]) == ("1-0", "forfeit", 7, 6)
     assert end["stats"]["black"] == {
         "legal_move_streak": 0,
-        "illegal_moves": {"invalid": 4, "illegal": 2, "ambiguous": 0},
+        "illegal_moves": {"invalid": 5, "illegal": 2, "ambiguous": 0},
         "recovered_turns": 0,
         "notation_slips": 0,
         "chaos_moves": 2,

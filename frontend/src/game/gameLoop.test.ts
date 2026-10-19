@@ -174,7 +174,7 @@ describe('waiting for the LLM', () => {
 })
 
 describe('new game', () => {
-  const settings: NewGame = { mode: 'play_llm', white: { player: 'human' }, black: afterE4().settings.black, rules: 'standard' }
+  const settings: NewGame = { mode: 'play_llm', white: { player: 'human' }, black: afterE4().settings.black, rules: 'standard', max_attempts: 5 }
   const waiting = run(received(initialGameLoop, afterE4()))
 
   test('asks the backend for a game with the settings given, and clears the error', () => {
@@ -368,6 +368,7 @@ describe("the next game's setup", () => {
         black: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
       },
       rules: 'standard',
+      max_attempts: 5,
     })
 
     const changed = { ...shown.next!, mode: 'llm_faceoff' as const }

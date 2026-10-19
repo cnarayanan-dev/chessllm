@@ -35,6 +35,8 @@ UNATTENDED_MODES: tuple[Mode, ...] = ("llm_faceoff", "anchor_match")
 MOVE_CAP = 150
 # Standard rules never play an illegal move; Chaos rules play an LLM's rule-breaking or ambiguous move (ADR 0006).
 Rules = Literal["standard", "chaos"]
+# How many illegal moves an LLM may make in one turn before it forfeits: one attempt, the rest retries.
+MAX_ATTEMPTS_RANGE = range(1, 26)
 
 
 @dataclass(frozen=True)
@@ -57,21 +59,24 @@ class LlmSide:
         return f"{self.model} ({'thinking' if self.thinking else 'no thinking'})"
 
 
+AnchorEngine = Literal["dragon", "stockfish"]
+
+
 @dataclass(frozen=True)
 class AnchorSide:
-    """An Anchor side: Komodo Dragon 1 at a Skill level, in the game log's shape."""
+    """An Anchor side: Komodo Dragon 1, or Stockfish standing in for it, at a Skill level, in the game log's shape."""
 
     player: Literal["anchor"] = "anchor"
-    engine: Literal["dragon"] = "dragon"
+    engine: AnchorEngine = "dragon"
     skill: int = 1
 
     def name(self) -> str:
         """The side's name in the PGN, e.g. "Dragon (Skill 1)"."""
-        return f"Dragon (Skill {self.skill})"
+        return f"{self.engine.capitalize()} (Skill {self.skill})"
 
     def file_name(self) -> str:
         """The side's part of the game log's file name, e.g. "dragon-skill1"."""
-        return f"dragon-skill{self.skill}"
+        return f"{self.engine}-skill{self.skill}"
 
 
 Side = HumanSide | LlmSide | AnchorSide
@@ -93,6 +98,7 @@ class Settings:
     black: Side = LlmSide()
     sampling: dict[str, float] = field(default_factory=dict)  # from the config file; empty means the model's defaults
     rules: Rules = "standard"  # one value for the whole game, applying to every LLM in it
+    max_attempts: int = 5  # per LLM turn; after this many illegal moves the LLM forfeits
 
     def side(self, color: Color) -> Side:
         return self.white if color == "white" else self.black
@@ -123,9 +129,14 @@ class Settings:
                 return f"{MODE_NAMES[self.mode]} needs {number} {SIDE_KINDS[kind]}{'s' * (needed == 2)}, not {count}"
         for color, anchor in self.anchor_sides().items():
             if anchor.skill not in DRAGON_SKILLS:
-                return f"Dragon ({color}) plays at Skill {DRAGON_SKILLS[0]}-{DRAGON_SKILLS[-1]}, not {anchor.skill}"
-        if self.mode == "anchor_match" and self.rules == "chaos":
-            return "An Anchor match is always under Standard rules: Anchors never play under Chaos rules"
+                low, high = DRAGON_SKILLS[0], DRAGON_SKILLS[-1]
+                return f"{anchor.engine.capitalize()} ({color}) plays at Skill {low}-{high}, not {anchor.skill}"
+        if self.max_attempts not in MAX_ATTEMPTS_RANGE:
+            low, high = MAX_ATTEMPTS_RANGE[0], MAX_ATTEMPTS_RANGE[-1]
+            return f"An LLM gets {low}-{high} attempts per turn, not {self.max_attempts}"
+        for anchor in self.anchor_sides().values():
+            if self.rules == "chaos" and anchor.engine != "stockfish":
+                return "Only Stockfish can be the Anchor under Chaos rules: it alone copes with chaos positions"
         for color, side in self.llm_sides().items():
             model = next((model for model in models if model.name == side.model), None)
             if model is None:
@@ -161,8 +172,6 @@ class GameEnd:
     reason: str
 
 
-# One attempt and three retries per turn; after the fourth illegal move the LLM forfeits.
-MAX_ATTEMPTS = 4
 ILLEGAL_KINDS = ("invalid", "illegal", "ambiguous")
 
 
@@ -276,7 +285,7 @@ class GameSession:
             white=asdict(settings.white),
             black=asdict(settings.black),
             sampling=settings.sampling or "model_default",
-            max_retries=MAX_ATTEMPTS - 1,
+            max_retries=settings.max_attempts - 1,
             **logged_prompts,
             **({"rules": settings.rules} if self._chaos else {}),  # absent means Standard rules, as in older logs
             # To the microsecond, so games started within the same second still sort in the order they started.
@@ -409,7 +418,7 @@ class GameSession:
             self._end = GameEnd("1/2-1/2", "move_cap")
 
     def _play_llm_turn(self) -> None:
-        """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after MAX_ATTEMPTS
+        """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
         illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
         board = self._board
         color = color_name(board.turn)
@@ -431,7 +440,8 @@ class GameSession:
         turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None}
         self._llm_turns.append(turn)
         feedback = None
-        for number in range(1, MAX_ATTEMPTS + 1):
+        max_attempts = self._settings.max_attempts
+        for number in range(1, max_attempts + 1):
             attempt: dict[str, Any] = {
                 "move": None, "san": None, "notation_slip": False, "result": None, "feedback_sent": feedback,
                 "raw_reply": None, "thinking": None, "error": None, "latency_s": None,
@@ -484,7 +494,7 @@ class GameSession:
                 stats.chaos_moves += 1
                 stats.spawns += resolution.kind == "spawn"
                 return
-            feedback = retry_feedback(side.retry_feedback, written, result, number, MAX_ATTEMPTS, legal_moves)
+            feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
         self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
 

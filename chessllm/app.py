@@ -19,6 +19,7 @@ from chessllm.game import (
     GameSession,
     HumanSide,
     LlmSide,
+    MAX_ATTEMPTS_RANGE,
     Mode,
     Rules,
     RefusedLlmTurn,
@@ -58,6 +59,8 @@ class NewGame(BaseModel):
     white: SideIn = HumanSide()
     black: SideIn = LlmSide()
     rules: Rules = Settings.rules  # refused unless every LLM side is under Free or Listed
+    # Illegal moves per turn before an LLM forfeits, the same for every LLM in the game.
+    max_attempts: int = Field(default=Settings.max_attempts, ge=MAX_ATTEMPTS_RANGE[0], le=MAX_ATTEMPTS_RANGE[-1])
 
 
 # Sampling options keep the type they were given in: an int stays an int in the JSON (top_k 40, not 40.0).
@@ -157,6 +160,7 @@ class GameSettings(BaseModel):
     sampling: Sampling  # from the config file; empty means the models' defaults
     # Left out under Standard rules, so a Standard rules game reads as it did before Chaos rules existed.
     rules: Rules | None = Field(None, exclude_if=lambda rules: rules in (None, "standard"))
+    max_attempts: int
 
 
 class GameState(BaseModel):
@@ -252,7 +256,12 @@ def create_app(
         nonlocal game
         new_game = new_game or NewGame()
         settings = Settings(
-            new_game.mode, new_game.white, new_game.black, sampling=sampling_config(), rules=new_game.rules
+            new_game.mode,
+            new_game.white,
+            new_game.black,
+            sampling=sampling_config(),
+            rules=new_game.rules,
+            max_attempts=new_game.max_attempts,
         )
         problem = settings.problem(models)
         if problem is not None:

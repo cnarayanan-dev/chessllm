@@ -9,7 +9,7 @@ E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
 def explained(move: str, kind: str, attempt: int) -> str:
     return (
         f'Your move "{move}" is illegal in this position (kind: {kind} move). '
-        f"Attempt {attempt} of 4. Reply with a different legal move."
+        f"Attempt {attempt} of 5. Reply with a different legal move."
     )
 
 
@@ -96,18 +96,41 @@ def test_a_turn_recovered_by_a_retry_is_counted(scripted):
     assert state["stats"]["black"]["illegal_moves"] == {"invalid": 0, "illegal": 1, "ambiguous": 0}
 
 
-def test_the_fourth_failed_attempt_forfeits_the_game(scripted):
-    client, player = start(scripted, ["Qh4", "banana", "O-O", "Ke7"])
+def test_the_fifth_failed_attempt_forfeits_the_game(scripted):
+    client, player = start(scripted, ["Qh4", "banana", "O-O", "Ke7", "Kd6"])
 
     state = play_move(client, "e2e4").json()
 
-    assert len(player.prompts) == 4
-    assert attempts(state) == [("Qh4", "illegal"), ("banana", "invalid"), ("O-O", "illegal"), ("Ke7", "illegal")]
+    assert len(player.prompts) == 5
+    assert attempts(state) == [
+        ("Qh4", "illegal"), ("banana", "invalid"), ("O-O", "illegal"), ("Ke7", "illegal"), ("Kd6", "illegal"),
+    ]
     assert (state["status"], state["result"], state["end_reason"]) == ("over", "1-0", "forfeit")
     assert state["pgn"] == "1. e4"  # the human's move stays
     assert state["human_legal_moves"] == []
-    assert state["stats"]["black"]["illegal_moves"] == {"invalid": 1, "illegal": 3, "ambiguous": 0}
+    assert state["stats"]["black"]["illegal_moves"] == {"invalid": 1, "illegal": 4, "ambiguous": 0}
     assert state["stats"]["black"]["recovered_turns"] == 0
+
+
+def test_the_attempts_per_turn_can_be_chosen_for_the_game(scripted):
+    client, player = scripted(["Qh4", "banana", "e5"])
+    client.post("/api/games", json=play_llm(model="qwen3.5:9b") | {"max_attempts": 2})
+
+    state = play_move(client, "e2e4").json()
+
+    assert state["settings"]["max_attempts"] == 2
+    assert attempts(state) == [("Qh4", "illegal"), ("banana", "invalid")]
+    assert player.prompts[1][-1].content.endswith("Attempt 1 of 2. Reply with a different legal move.")
+    assert (state["status"], state["result"], state["end_reason"]) == ("over", "1-0", "forfeit")
+
+
+@pytest.mark.parametrize("max_attempts", [0, 26])
+def test_attempts_per_turn_outside_1_to_25_are_refused(scripted, max_attempts):
+    client, _ = scripted(["e5"])
+
+    response = client.post("/api/games", json=play_llm() | {"max_attempts": max_attempts})
+
+    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -175,8 +198,8 @@ def test_bare_feedback_says_only_that_the_move_was_illegal(scripted):
     state = play_move(client, "e2e4").json()
 
     assert [prompt[-1].content for prompt in player.prompts[1:]] == [
-        'Your move "Qh4" is illegal. Attempt 1 of 4. Try again.',
-        'Your move "banana" is illegal. Attempt 2 of 4. Try again.',
+        'Your move "Qh4" is illegal. Attempt 1 of 5. Try again.',
+        'Your move "banana" is illegal. Attempt 2 of 5. Try again.',
     ]
     assert state["settings"]["black"]["retry_feedback"] == "bare"
 

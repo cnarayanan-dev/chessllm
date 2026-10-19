@@ -55,7 +55,7 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
         "white": {"player": "human"},
         "black": QWEN_THINKING,
         "sampling": "model_default",
-        "max_retries": 3,
+        "max_retries": 4,
     }
     assert start["prompt_file"].endswith("system.txt")
     assert human == {"type": "human_move", "color": "white", "ply": 1, "move": "e4", "fen_after": E4_FEN}

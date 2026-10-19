@@ -3,6 +3,7 @@ import type { GameSettings, ModelInfo, SideValues } from '@/settings/next-game'
 import {
   chaosAllowed,
   chooseHumanColor,
+  chooseMaxAttempts,
   chooseRules,
   chooseMode,
   chooseModel,
@@ -34,6 +35,7 @@ const playLlm: GameSettings = {
   black: llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }),
   sampling: { temperature: 0.6 },
   rules: 'standard',
+  max_attempts: 5,
 }
 
 const faceoff: GameSettings = {
@@ -42,6 +44,7 @@ const faceoff: GameSettings = {
   black: llm('gemma3:4b', { llm_constraints: 'listed_enforced', retry_feedback: 'bare' }),
   sampling: {},
   rules: 'standard',
+  max_attempts: 5,
 }
 
 describe('the next game starts as the running one', () => {
@@ -51,6 +54,7 @@ describe('the next game starts as the running one', () => {
     expect(newGameRequest(next, models)).toEqual({
       mode: 'play_llm',
       rules: 'standard',
+      max_attempts: 5,
       white: { player: 'human' },
       black: llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }),
     })
@@ -61,7 +65,7 @@ describe('the next game starts as the running one', () => {
     const next = nextGameFrom(faceoff)
 
     expect(next.custom).toBe(true)
-    expect(newGameRequest(next, models)).toEqual({ mode: 'llm_faceoff', rules: 'standard', white: faceoff.white, black: faceoff.black })
+    expect(newGameRequest(next, models)).toEqual({ mode: 'llm_faceoff', rules: 'standard', max_attempts: 5, white: faceoff.white, black: faceoff.black })
     expect(isPending(next, models, faceoff)).toBe(false)
   })
 
@@ -76,6 +80,18 @@ test('a change is pending until the next game starts', () => {
   const next = setValue(nextGameFrom(playLlm), 'black', 'retry_feedback', 'hinted')
 
   expect(isPending(next, models, playLlm)).toBe(true)
+})
+
+describe('Illegal moves before forfeit', () => {
+  test("the next game keeps the running game's limit; another is a change until it starts", () => {
+    const next = nextGameFrom({ ...playLlm, max_attempts: 9 })
+
+    expect(next.max_attempts).toBe(9)
+    expect(isPending(next, models, { ...playLlm, max_attempts: 9 })).toBe(false)
+    const changed = chooseMaxAttempts(next, 25)
+    expect(newGameRequest(changed, models)).toMatchObject({ max_attempts: 25 })
+    expect(isPending(changed, models, { ...playLlm, max_attempts: 9 })).toBe(true)
+  })
 })
 
 describe('Chaos rules', () => {
@@ -104,6 +120,7 @@ describe('Chaos rules', () => {
     expect(newGameRequest(enforcedNext, models)).toMatchObject({ rules: 'standard' })
     expect(newGameRequest(setValue(enforcedNext, 'black', 'llm_constraints', 'listed'), models)).toMatchObject({
       rules: 'chaos',
+      max_attempts: 5,
     })
   })
 
@@ -132,6 +149,7 @@ test('the human changing colour leaves the LLM its model', () => {
   expect(newGameRequest(next, models)).toEqual({
     mode: 'play_llm',
     rules: 'standard',
+    max_attempts: 5,
     white: llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }),
     black: { player: 'human' },
   })
@@ -144,6 +162,7 @@ test('switching from Play LLM to an LLM faceoff gives both LLMs the shared setti
   expect(newGameRequest(next, models)).toEqual({
     mode: 'llm_faceoff',
     rules: 'standard',
+    max_attempts: 5,
     white: llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }),
     black: llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }),
   })
@@ -160,6 +179,7 @@ describe('Customize per LLM', () => {
     expect(newGameRequest(next, models)).toEqual({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b', { thinking: true }),
       black: llm('qwen3.5:9b', { llm_constraints: 'blind_enforced' }),
     })
@@ -171,6 +191,7 @@ describe('Customize per LLM', () => {
     expect(newGameRequest(next, models)).toEqual({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b'),
       black: llm('gemma3:4b'),
     })
@@ -182,6 +203,7 @@ describe('Customize per LLM', () => {
     expect(newGameRequest(next, models)).toEqual({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b'),
       black: llm('gemma3:4b'),
     })
@@ -211,6 +233,7 @@ describe('Customize per LLM', () => {
     expect(newGameRequest(next, models)).toEqual({
       mode: 'play_llm',
       rules: 'standard',
+      max_attempts: 5,
       white: { player: 'human' },
       black: llm('gemma3:4b'),
     })
@@ -219,7 +242,7 @@ describe('Customize per LLM', () => {
   test('⇄ takes each LLM with its settings to the other colour', () => {
     const next = swapSides(nextGameFrom(faceoff))
 
-    expect(newGameRequest(next, models)).toEqual({ mode: 'llm_faceoff', rules: 'standard', white: faceoff.black, black: faceoff.white })
+    expect(newGameRequest(next, models)).toEqual({ mode: 'llm_faceoff', rules: 'standard', max_attempts: 5, white: faceoff.black, black: faceoff.white })
   })
 })
 

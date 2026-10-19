@@ -26,6 +26,7 @@ const playLlm: GameSettings = {
   black: llm('qwen3.5:9b', { thinking: true }),
   sampling: {},
   rules: 'standard',
+  max_attempts: 5,
 }
 
 const faceoff: GameSettings = {
@@ -34,6 +35,7 @@ const faceoff: GameSettings = {
   black: llm('qwen3.5:9b'),
   sampling: {},
   rules: 'standard',
+  max_attempts: 5,
 }
 
 /** The modal as the page holds it: the next game and whether the modal is open, with the running game's settings. */
@@ -149,6 +151,7 @@ describe('changes apply to the next game', () => {
     expect(onStartNext).toHaveBeenCalledWith({
       mode: 'play_llm',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b', { thinking: true }),
       black: { player: 'human' },
     })
@@ -203,6 +206,7 @@ describe('Game section', () => {
     expect(onStartNext).toHaveBeenCalledWith({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('gemma3:4b'),
       black: llm('qwen3.5:9b'),
     })
@@ -218,9 +222,37 @@ describe('Game section', () => {
     expect(onStartNext).toHaveBeenCalledWith({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b'),
       black: llm('llama3:8b'),
     })
+  })
+
+  test('Illegal moves before forfeit: 5 by default, any of 1 to 25, sent with the next game', async () => {
+    const { user, onStartNext } = await openSettings()
+    const limit = screen.getByRole('combobox', { name: 'Illegal moves before forfeit' })
+
+    expect(limit).toHaveTextContent('5')
+    expect(screen.getByText('The LLM forfeits at its 5th illegal move in a turn: 4 retries. Default 5.')).toBeInTheDocument()
+    await user.click(limit)
+    const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
+    expect(options).toEqual(Array.from({ length: 25 }, (_, index) => String(index + 1)))
+    await user.click(screen.getByRole('option', { name: '12' }))
+
+    expect(screen.getByText('The LLM forfeits at its 12th illegal move in a turn: 11 retries. Default 5.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Start new game' }))
+    expect(onStartNext).toHaveBeenCalledWith(expect.objectContaining({ max_attempts: 12 }))
+  })
+
+  test('Illegal moves before forfeit at 1 leaves no retry, and has no effect under Enforced decoding', async () => {
+    const { user } = await openSettings()
+
+    await user.click(screen.getByRole('combobox', { name: 'Illegal moves before forfeit' }))
+    await user.click(await screen.findByRole('option', { name: '1' }))
+    expect(screen.getByText('The LLM forfeits at its first illegal move, with no retry. Default 5.')).toBeInTheDocument()
+
+    await user.click(radio(/^Listed enforced/))
+    expect(screen.getByRole('combobox', { name: 'Illegal moves before forfeit' })).toBeDisabled()
   })
 
   test('the LLM constraints and Retry feedback, each with its default', async () => {
@@ -237,7 +269,7 @@ describe('Game section', () => {
       expect.stringMatching(/^Bare/),
       expect.stringMatching(/^Hinted/),
     ])
-    expect(screen.getByText('What the LLM is told after an illegal move. It gets 3 retries, then forfeits.'))
+    expect(screen.getByText('What the LLM is told after an illegal move.'))
       .toBeInTheDocument()
   })
 
@@ -273,6 +305,7 @@ describe('Game section', () => {
     expect(onStartNext).toHaveBeenLastCalledWith({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b'),
       black: llm('qwen3.5:9b', { llm_constraints: 'listed' }),
     })
@@ -401,6 +434,7 @@ describe('Model section', () => {
     expect(onStartNext).toHaveBeenCalledWith({
       mode: 'play_llm',
       rules: 'standard',
+      max_attempts: 5,
       white: { player: 'human' },
       black: llm('gemma3:4b'),
     })
@@ -433,6 +467,7 @@ describe('Model section', () => {
     expect(onStartNext).toHaveBeenCalledWith({
       mode: 'llm_faceoff',
       rules: 'standard',
+      max_attempts: 5,
       white: llm('qwen3.5:9b', { thinking: true }),
       black: llm('gemma3:4b', { retry_feedback: 'bare' }),
     })

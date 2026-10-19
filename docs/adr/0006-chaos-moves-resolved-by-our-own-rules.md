@@ -23,4 +23,4 @@ The resolver decides once per move, deterministically, and stores the result, so
 
 - A game under Chaos rules has no valid PGN once a chaos move is played. The LLM is shown the Move record instead, and the PGN export covers only games under Standard rules or stops at the first chaos move.
 - python-chess treats capturing a king that was left in check as a legal move, so King capture is checked explicitly after every move, before checkmate and the draw rules.
-- An Anchor engine may refuse positions python-chess calls invalid (no king, too many pawns). Check this before allowing Chaos rules in Anchor matches.
+- An Anchor engine may refuse positions python-chess calls invalid (no king, too many pawns). Check this before allowing Chaos rules in Anchor matches. Checked for Stockfish 19: it quits on every such position, so the Stockfish Anchor takes an en-prise king, else plays on a copy with back-rank pawns made queens, else a greedy move; Chaos rules are allowed in Anchor matches against it alone (`docs/research/llama3-anchor-matches-2026-10-19.md`).

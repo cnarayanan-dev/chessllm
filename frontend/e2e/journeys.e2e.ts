@@ -68,23 +68,23 @@ test('an illegal LLM try flashes on the board, then its legal retry is played', 
   const flash = page.locator('.center-flash')
   await expect(flash).toContainText('✗ LLM move illegal')
   await expect(flash).toContainText('Qh4')
-  await expect(flash).toContainText('illegal · try 1 of 4')
+  await expect(flash).toContainText('illegal · try 1 of 5')
   await expect(page.getByTestId('moves')).toContainText('✗ Qh4 illegal · try 1')
   await expectPiece(page, 'e5', 'bp')
   await expect(page.getByTestId('status')).toHaveText('Your move (White)')
 })
 
 test('the LLM forfeits after its retries', async ({ page }) => {
-  await playLlm(page, { black: ['Qh4', 'Qh4', 'Ke7', 'Bb4'] })
+  await playLlm(page, { black: ['Qh4', 'Qh4', 'Ke7', 'Ke7', 'Bb4'] })
 
   await clickMove(page, 'e2e4')
 
   const banner = page.getByTestId('banner')
   await expect(banner).toContainText('White wins')
   await expect(banner).toContainText('by forfeit')
-  await expect(page.locator('.center-flash')).toContainText('✗ LLM forfeits: 4 illegal moves')
+  await expect(page.locator('.center-flash')).toContainText('✗ LLM forfeits: 5 illegal moves')
   await expect(page.getByTestId('status')).toHaveText('Game over')
-  await expect(page.getByTestId('moves')).toContainText('✗ Bb4 illegal · try 4')
+  await expect(page.getByTestId('moves')).toContainText('✗ Bb4 illegal · try 5')
   await expect(page.locator('.chessboard .board.input-enabled')).toHaveCount(0)
 })
 

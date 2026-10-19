@@ -52,13 +52,15 @@ export const LLM_CONSTRAINTS_NAMES: Record<PlayerConfiguration['llm_constraints'
 }
 const DEFAULT_PROMPT = 'system.txt'
 
-/** The chips that tell configurations apart: the LLM constraints, thinking on, retry feedback, then what's unusual. */
+/** The chips that tell configurations apart: the LLM constraints, thinking on, retry feedback and retries, then what's
+ * unusual. */
 export function chips(configuration: PlayerConfiguration): Chip[] {
   const sampling = Object.entries(configuration.sampling)
   return [
     { label: LLM_CONSTRAINTS_NAMES[configuration.llm_constraints], hue: configuration.llm_constraints },
     ...(configuration.thinking ? [{ label: 'thinking on', hue: 'thinking' as const }] : []),
     { label: `feedback ${configuration.retry_feedback}`, hue: null },
+    { label: `${configuration.max_retries} ${configuration.max_retries === 1 ? 'retry' : 'retries'}`, hue: null },
     ...(configuration.rules === 'chaos' ? [{ label: 'Chaos rules', hue: null }] : []),
     ...(sampling.length ? [{ label: sampling.map(([name, value]) => `${name} ${value}`).join(' · '), hue: null }] : []),
     ...(configuration.prompt !== DEFAULT_PROMPT ? [{ label: `prompt ${configuration.prompt}`, hue: null }] : []),

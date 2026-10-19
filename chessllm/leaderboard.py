@@ -36,6 +36,7 @@ class PlayerConfiguration(BaseModel):
     llm_constraints: LlmConstraints
     rules: Rules
     retry_feedback: RetryFeedback
+    max_retries: int  # per turn, before the LLM forfeits
     sampling: dict[str, int | float]  # from the config file; empty means the model's defaults
     prompt: str  # the system prompt's file name, e.g. "system.txt"
 
@@ -290,6 +291,7 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         llm_constraints=side["llm_constraints"],
         rules=start.get("rules", "standard"),
         retry_feedback=side["retry_feedback"],
+        max_retries=start["max_retries"],
         sampling=sampling if isinstance(sampling, dict) else {},
         prompt=PurePath(prompt_file).name,
     )
@@ -304,6 +306,7 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         llm_constraints=side.llm_constraints,
         rules=settings.rules,
         retry_feedback=side.retry_feedback,
+        max_retries=settings.max_attempts - 1,
         sampling=dict(settings.sampling),
         prompt=SYSTEM_PROMPT_FILES[side.llm_constraints].name,
     )

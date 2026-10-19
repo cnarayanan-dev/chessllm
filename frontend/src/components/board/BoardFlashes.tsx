@@ -15,7 +15,7 @@ const SHOWN_MS = 7400
 type Box = { x: number; y: number; width: number; height: number }
 
 // A chaos move was played, so it is shown on the board with its arrow and caption, not as an illegal try here.
-function CenterFlash({ turn }: { turn: LlmTurn }) {
+function CenterFlash({ turn, maxAttempts }: { turn: LlmTurn; maxAttempts: number }) {
   const illegal = turn.attempts.filter((attempt) => !played(attempt) && !attempt.error)
   const error = turn.attempts.find((attempt) => attempt.error)?.error // a forfeit with no answer
   const forfeit = !turn.attempts.some(played)
@@ -32,7 +32,7 @@ function CenterFlash({ turn }: { turn: LlmTurn }) {
         const index = turn.attempts.indexOf(attempt)
         return (
           <div className="line" key={index}>
-            <s>{attempt.move}</s> <span className="kind">{`${attempt.result} · try ${index + 1} of 4`}</span>
+            <s>{attempt.move}</s> <span className="kind">{`${attempt.result} · try ${index + 1} of ${maxAttempts}`}</span>
           </div>
         )
       })}
@@ -45,7 +45,15 @@ function CenterFlash({ turn }: { turn: LlmTurn }) {
   )
 }
 
-function TurnFlashes({ turn, landedOn }: { turn: LlmTurn; landedOn: string | null }) {
+function TurnFlashes({
+  turn,
+  landedOn,
+  maxAttempts,
+}: {
+  turn: LlmTurn
+  landedOn: string | null
+  maxAttempts: number
+}) {
   const anchor = useRef<HTMLSpanElement>(null)
   const [shown, setShown] = useState(true)
   const [box, setBox] = useState<Box | null>(null)
@@ -70,7 +78,7 @@ function TurnFlashes({ turn, landedOn }: { turn: LlmTurn; landedOn: string | nul
   return (
     <>
       <span ref={anchor} hidden />
-      <CenterFlash turn={turn} />
+      <CenterFlash turn={turn} maxAttempts={maxAttempts} />
       {slip && box && (
         <>
           <div
@@ -87,8 +95,9 @@ function TurnFlashes({ turn, landedOn }: { turn: LlmTurn; landedOn: string | nul
   )
 }
 
-/** The flashes of the last LLM turn to land: each landing replaces the last one's. */
-export function BoardFlashes({ flash }: { flash: Flash | null }) {
+/** The flashes of the last LLM turn to land: each landing replaces the last one's. maxAttempts is the game's tries per
+ * turn before a forfeit. */
+export function BoardFlashes({ flash, maxAttempts }: { flash: Flash | null; maxAttempts: number }) {
   if (!flash) return null
-  return <TurnFlashes key={flash.id} turn={flash.turn} landedOn={flash.landedOn} />
+  return <TurnFlashes key={flash.id} turn={flash.turn} landedOn={flash.landedOn} maxAttempts={maxAttempts} />
 }

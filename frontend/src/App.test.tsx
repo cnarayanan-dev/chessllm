@@ -240,6 +240,7 @@ test("New game starts a game with the running game's settings and drops the aban
     white: { player: 'human' },
     black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
     rules: 'standard',
+    max_attempts: 5,
   })
   expect(status()).toHaveTextContent('Your move (White)')
   await waitFor(() => expect(theBoard().position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
@@ -304,6 +305,7 @@ describe('settings', () => {
       white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
       black: { player: 'human' },
       rules: 'standard',
+      max_attempts: 5,
     })
     expect(within(topBar()).queryByText('changes apply next game')).not.toBeInTheDocument()
   })
@@ -378,7 +380,7 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   renderApp()
 
   expect(await screen.findByText('✗ LLM move illegal')).toBeInTheDocument()
-  expect(screen.getByText('illegal · try 1 of 4')).toBeInTheDocument()
+  expect(screen.getByText('illegal · try 1 of 5')).toBeInTheDocument()
   const moves = screen.getByTestId('moves')
   expect(within(moves).getByText('e4')).toBeInTheDocument()
   expect(within(moves).getByText('illegal · try 1', { exact: false })).toHaveClass('mistake', 'illegal')

@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { isMoveSoundOn, setMoveSoundOn } from '@/components/board/moveSound'
 import {
   COLORS,
+  MAX_ATTEMPTS_CHOICES,
   type Color,
   type GameSettings,
   type LlmConstraints,
@@ -23,6 +24,7 @@ import {
   canThink,
   chaosAllowed,
   chooseHumanColor,
+  chooseMaxAttempts,
   chooseRules,
   chooseMode,
   chooseModel,
@@ -70,6 +72,24 @@ function chaosHint(next: NextGame): string {
     .map((color) => `${colorName(color)} plays under ${LLM_CONSTRAINTS[value(next, color, 'llm_constraints')].name}`)
     .join(' and ')
   return `Only when every LLM plays under Free or Listed: ${enforcedSides}.`
+}
+
+/** The forfeit limit's hint: how many retries it leaves, or why it has no effect. */
+function maxAttemptsHint(next: NextGame): string {
+  if (llmColors(next).every((color) => enforced(next, color)))
+    return 'No effect: under Enforced decoding the LLM never plays an illegal move, so never forfeits for one.'
+  const retries = next.max_attempts - 1
+  const shared = next.mode === 'llm_faceoff' ? ' The same for both LLMs.' : ''
+  const limit =
+    retries === 0
+      ? 'The LLM forfeits at its first illegal move, with no retry.'
+      : `The LLM forfeits at its ${ordinal(next.max_attempts)} illegal move in a turn: ${retries} ${retries === 1 ? 'retry' : 'retries'}.`
+  return `${limit}${shared} Default 5.`
+}
+
+const ordinal = (n: number) => {
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th')
+  return `${n}${suffix}`
 }
 
 const SECTIONS = { game: '♟ Game', model: '◆ Model', advanced: '⚙ Advanced' }
@@ -200,7 +220,7 @@ function GameSection({ next, models, onNextChange }: SectionProps) {
   const feedbackHint =
     noEffect.length === shownColors.length
       ? "No effect: under Enforced decoding the LLM can't play an illegal move."
-      : 'What the LLM is told after an illegal move. It gets 3 retries, then forfeits.' +
+      : 'What the LLM is told after an illegal move.' +
         (noEffect.length
           ? ` No effect for ${colorName(noEffect[0])}: under Enforced decoding it can't play an illegal move.`
           : '')
@@ -278,6 +298,24 @@ function GameSection({ next, models, onNextChange }: SectionProps) {
           onChange={(choice) => onNextChange(setValue(next, color, 'retry_feedback', choice))}
         />
       ))}
+      <Row title="Illegal moves before forfeit" description={maxAttemptsHint(next)}>
+        <Select
+          value={String(next.max_attempts)}
+          disabled={noEffect.length === shownColors.length}
+          onValueChange={(choice) => choice && onNextChange(chooseMaxAttempts(next, Number(choice)))}
+        >
+          <SelectTrigger aria-label="Illegal moves before forfeit" className="min-w-[110px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MAX_ATTEMPTS_CHOICES.map((choice) => (
+              <SelectItem key={choice} value={String(choice)}>
+                {choice}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Row>
       <Row title="Chaos rules" description={chaosHint(next)}>
         <Switch
           aria-label="Chaos rules"

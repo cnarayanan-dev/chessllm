@@ -35,10 +35,11 @@ from chessllm.evaluator import Evaluator
 from chessllm.anchor_match import (
     add_configuration_arguments,
     anchor_match_settings,
+    default_anchor,
     default_player_for,
     play_anchor_match,
 )
-from chessllm.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable, DragonAnchor, configured_dragon_path
+from chessllm.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable
 from chessllm.game import COLORS, AnchorSide, Color, Settings
 from chessllm.game_log import GameLog
 from chessllm.leaderboard import PlayerConfiguration, finished_game, llm_configuration, settings_configuration
@@ -94,8 +95,10 @@ def llm_score(result: str, llm_color: Color) -> float:
     return 1.0 if result == ("1-0" if llm_color == "white" else "0-1") else 0.0
 
 
-def earlier_games(games_dir: Path, configuration: PlayerConfiguration) -> list[AnchoredGame]:
-    """The finished Anchor matches against Dragon of the configuration in games_dir, oldest first: by game_start's
+def earlier_games(
+    games_dir: Path, configuration: PlayerConfiguration, engine: str = "dragon"
+) -> list[AnchoredGame]:
+    """The finished Anchor matches against the engine (Dragon by default) of the configuration in games_dir, oldest first: by game_start's
     started_at, which is to the microsecond (older logs have whole seconds, and their ties go by file name)."""
     logs = []
     for path in sorted(games_dir.glob("*.jsonl")) if games_dir.is_dir() else []:
@@ -110,7 +113,7 @@ def earlier_games(games_dir: Path, configuration: PlayerConfiguration) -> list[A
             llm, anchor = start[llm_color], start["black" if llm_color == "white" else "white"]
             if (
                 llm["player"] == "llm"
-                and anchor.get("engine") == "dragon"
+                and anchor.get("engine") == engine
                 and llm_configuration(start, llm_color, llm) == configuration
             ):
                 history.append(AnchoredGame(anchor["skill"], llm_color, llm_score(end["result"], llm_color)))
@@ -223,8 +226,8 @@ def main(
     except ValueError as error:
         return fail(str(error))
     if anchor_for is None:
-        anchor_for = lambda side: DragonAnchor(configured_dragon_path(args.dragon), side.skill)  # noqa: E731
-    history = earlier_games(args.games_dir, settings_configuration(settings, "white"))
+        anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
+    history = earlier_games(args.games_dir, settings_configuration(settings, "white"), args.engine)
     if history:
         print(f"Going on from {len(history)} earlier Anchor matches of this Player configuration.")
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
@@ -236,7 +239,7 @@ def main(
             llm_color = next_color(history)
             settings = anchor_match_settings(args, llm_color, skill, sampling_file)
             try:
-                anchor = anchor_for(AnchorSide(skill=skill))
+                anchor = anchor_for(AnchorSide(engine=args.engine, skill=skill))
             except AnchorUnavailable as error:
                 summary(played, history)
                 return fail(str(error))

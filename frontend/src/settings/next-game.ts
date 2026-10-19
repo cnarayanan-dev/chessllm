@@ -28,12 +28,16 @@ export type NextGame = {
   sides: Record<Color, SideValues>
   /** Chaos rules as chosen, kept while they aren't possible: the game then plays under Standard rules. */
   rules: Rules
+  /** Illegal moves per turn before an LLM forfeits, the same for every LLM. */
+  max_attempts: number
 }
 
 /** The model list from GET /api/models, or null until it has loaded. */
 export type Models = ModelInfo[] | null
 
 export const COLORS: Color[] = ['white', 'black']
+/** The choices for the illegal moves per turn before an LLM forfeits; the API takes the same range. */
+export const MAX_ATTEMPTS_CHOICES = Array.from({ length: 25 }, (_, index) => index + 1)
 export const other = (color: Color): Color => (color === 'white' ? 'black' : 'white')
 
 // Under Enforced decoding the LLM can't play an illegal move, so Retry feedback has no effect (ADR 0003).
@@ -66,6 +70,7 @@ export function nextGameFrom(settings: GameSettings): NextGame {
     custom: settings.mode === 'llm_faceoff' && !sameSide(sides.white, sides.black),
     sides,
     rules: settings.rules ?? 'standard', // the API leaves out Standard rules
+    max_attempts: settings.max_attempts,
   }
 }
 
@@ -95,6 +100,8 @@ export const enforced = (next: NextGame, color: Color) => ENFORCED.includes(valu
 export const chaosAllowed = (next: NextGame) => llmColors(next).every((color) => !enforced(next, color))
 
 export const chooseRules = (next: NextGame, rules: Rules): NextGame => ({ ...next, rules })
+
+export const chooseMaxAttempts = (next: NextGame, max_attempts: number): NextGame => ({ ...next, max_attempts })
 
 /** Sets a side's setting: that side's alone when customizing, else both sides'. */
 export function setValue<K extends keyof SideValues>(
@@ -160,7 +167,7 @@ export function newGameRequest(next: NextGame, models: Models): NewGame {
   const side = (color: Color): Side =>
     next.mode === 'play_llm' && color === next.human_color ? { player: 'human' } : llm(color)
   const rules = next.rules === 'chaos' && chaosAllowed(next) ? 'chaos' : 'standard'
-  return { mode: next.mode, white: side('white'), black: side('black'), rules }
+  return { mode: next.mode, white: side('white'), black: side('black'), rules, max_attempts: next.max_attempts }
 }
 
 /** Whether the next game differs from the running one, so the changes apply only once it starts. */
@@ -169,6 +176,7 @@ export function isPending(next: NextGame, models: Models, running: GameSettings)
   return (
     request.mode !== running.mode ||
     request.rules !== (running.rules ?? 'standard') || // the API leaves out Standard rules
+    request.max_attempts !== running.max_attempts ||
     COLORS.some((color) => !sameSide(request[color], running[color]))
   )
 }

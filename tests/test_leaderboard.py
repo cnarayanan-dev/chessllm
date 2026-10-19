@@ -106,6 +106,7 @@ def test_games_with_identical_llm_settings_are_one_player_configuration(leaderbo
         "llm_constraints": "free",
         "rules": "standard",
         "retry_feedback": "explained",
+        "max_retries": 3,
         "sampling": {},
         "prompt": "system.txt",
     }

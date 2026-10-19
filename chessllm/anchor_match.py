@@ -11,8 +11,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, get_args
 
-from chessllm.anchors import DRAGON_PATH_VARIABLE, Anchor, AnchorUnavailable, DragonAnchor, configured_dragon_path
-from chessllm.game import COLORS, AnchorSide, Color, GameSession, LlmSide, Rules, Settings
+from chessllm.anchors import (
+    DRAGON_PATH_VARIABLE,
+    STOCKFISH_PATH_VARIABLE,
+    Anchor,
+    AnchorUnavailable,
+    DragonAnchor,
+    StockfishAnchor,
+    configured_dragon_path,
+    configured_stockfish_path,
+)
+from chessllm.game import COLORS, AnchorEngine, AnchorSide, Color, GameSession, LlmSide, Rules, Settings
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.players import LlmPlayer
@@ -26,9 +35,24 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=defaults.thinking)
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
-    # Part of the Player configuration, though only Standard rules can be played: Anchors never play Chaos rules.
+    # Part of the Player configuration. Chaos rules only with the Stockfish Anchor, which copes with chaos positions.
     parser.add_argument("--rules", choices=get_args(Rules), default=Settings.rules)
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=Settings.max_attempts,
+        help=f"illegal moves per turn before the LLM forfeits (default {Settings.max_attempts})",
+    )
+    parser.add_argument(
+        "--engine",
+        choices=get_args(AnchorEngine),
+        default="dragon",
+        help="the Anchor: Dragon, or Stockfish as a rough stand-in where Dragon can't be had (default dragon)",
+    )
     parser.add_argument("--dragon", help=f"the Dragon executable (default: ${DRAGON_PATH_VARIABLE})")
+    parser.add_argument(
+        "--stockfish", help=f"the Stockfish executable (default: ${STOCKFISH_PATH_VARIABLE}, else on the PATH)"
+    )
     parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help=f"where logs go (default {GAMES_DIR})")
 
 
@@ -52,13 +76,27 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         llm_constraints=args.llm_constraints,
         retry_feedback=args.retry_feedback,
     )
-    anchor_side = AnchorSide(skill=skill)
+    anchor_side = AnchorSide(engine=args.engine, skill=skill)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)
-    settings = Settings("anchor_match", white, black, sampling=load_sampling(sampling_file), rules=args.rules)
+    settings = Settings(
+        "anchor_match",
+        white,
+        black,
+        sampling=load_sampling(sampling_file),
+        rules=args.rules,
+        max_attempts=args.max_attempts,
+    )
     problem = settings.problem(LLM_MODELS)
     if problem is not None:
         raise ValueError(problem)
     return settings
+
+
+def default_anchor(args: argparse.Namespace, side: AnchorSide) -> Anchor:
+    """The Anchor of the side, from --dragon or --stockfish."""
+    if side.engine == "stockfish":
+        return StockfishAnchor(configured_stockfish_path(args.stockfish), side.skill)
+    return DragonAnchor(configured_dragon_path(args.dragon), side.skill)
 
 
 def default_player_for(settings: Settings, color: Color) -> LlmPlayer:
@@ -94,9 +132,9 @@ def main(
         settings = anchor_match_settings(args, llm_color, args.skill, sampling_file)
     except ValueError as error:
         return fail(str(error))
-    anchor_side = AnchorSide(skill=args.skill)
+    anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     if anchor_for is None:
-        anchor_for = lambda side: DragonAnchor(configured_dragon_path(args.dragon), side.skill)  # noqa: E731
+        anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
     try:
         anchor = anchor_for(anchor_side)  # started before the game, so a missing Dragon leaves no log behind
     except AnchorUnavailable as error:

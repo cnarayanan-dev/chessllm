@@ -14,6 +14,7 @@ from test_move_cap import MOVE_CAP_PLIES, long_game, sans
 
 from chessllm.analysis import analyse_game
 from chessllm.anchor_match import main
+from chessllm.anchors import ANCHOR_RATINGS, anchor_name
 from chessllm.app import create_app
 
 
@@ -83,7 +84,7 @@ def test_the_llms_retries_and_forfeit_are_logged_as_in_a_faceoff_and_the_anchor_
         ["Nf3", "Ke3", "Ke2", "Ke4", "Ke5"],
         ["e5"],
         "--model", "qwen3.5:9b", "--thinking", "--llm-constraints", "listed", "--retry-feedback", "bare",
-        "--color", "white", "--skill", "1",
+        "--max-attempts", "4", "--color", "white", "--skill", "1",
     )
 
     assert code == 0
@@ -153,7 +154,7 @@ def test_an_anchor_match_not_ended_after_150_moves_per_side_is_a_draw_at_the_mov
 @pytest.mark.parametrize(
     ("args", "error"),
     [
-        (["--rules", "chaos"], "An Anchor match is always under Standard rules"),
+        (["--rules", "chaos"], "Only Stockfish can be the Anchor under Chaos rules"),
         (["--skill", "8"], "Dragon (black) plays at Skill 1-7, not 8"),
         (["--model", "nonesuch:1b"], "nonesuch:1b (white) is not in the model list"),
         (["--model", "llama3:8b", "--thinking"], "llama3:8b (white) cannot think"),
@@ -219,3 +220,30 @@ def test_the_dragon_path_can_come_from_the_environment(tmp_path, capsys, monkeyp
 
     assert code == 1
     assert f"Dragon isn't installed at {tmp_path / 'from-env' / 'dragon-osx'}" in capsys.readouterr().err
+
+
+def test_stockfish_can_stand_in_for_dragon_and_is_logged_and_rated_as_its_own_anchor(anchor_match, tmp_path):
+    code, _, _, built_for = anchor_match(["e5", "Qh4#"], ["f3", "g4"], "--engine", "stockfish", "--color", "black")
+
+    assert code == 0
+    assert [(side.engine, side.skill) for side in built_for] == [("stockfish", 1)]
+    [log] = (tmp_path / "games").glob("*.jsonl")
+    assert log.name.endswith("_stockfish-skill1_vs_llama3-8b.jsonl")
+    start = events(tmp_path / "games")[0]
+    assert start["white"] == {"player": "anchor", "engine": "stockfish", "skill": 1}
+    assert pgn_game(tmp_path / "games").headers["White"] == "Stockfish (Skill 1)"
+    assert anchor_name(start["white"]) in ANCHOR_RATINGS
+
+
+def test_under_chaos_rules_the_llms_illegal_move_is_played_against_the_stockfish_anchor(anchor_match, tmp_path):
+    # Qxe8 isn't legal (the queen can't get there), but under Chaos rules it is played, and takes the king.
+    code, _, _, built_for = anchor_match(
+        ["e4", "Qxe8"], ["e5"], "--engine", "stockfish", "--rules", "chaos", "--color", "white"
+    )
+
+    assert code == 0
+    assert [side.engine for side in built_for] == ["stockfish"]
+    start, *_, end = events(tmp_path / "games")
+    assert start["rules"] == "chaos"
+    assert (end["result"], end["reason"]) == ("1-0", "king_capture")
+    assert end["stats"]["white"]["chaos_moves"] == 1

@@ -85,6 +85,7 @@ def test_the_default_opponent_is_llama_with_thinking_off(scripted):
             "retry_feedback": "explained",
         },
         "sampling": {},
+        "max_attempts": 5,
     }
 
 
@@ -104,6 +105,7 @@ def test_the_game_reports_the_settings_it_was_started_with(scripted):
             "retry_feedback": "bare",
         },
         "sampling": {},
+        "max_attempts": 5,
     }
 
 
@@ -142,6 +144,7 @@ def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
             "retry_feedback": "explained",
         },
         "sampling": {},
+        "max_attempts": 5,
     }
 
 
