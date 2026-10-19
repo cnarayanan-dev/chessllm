@@ -63,3 +63,31 @@ def test_the_board_flashes_an_llm_turns_illegal_tries_forfeit_and_notation_slip_
     assert "of 4" in page
     assert "square-ring" in page and "bubble" in page
     assert "flash-out .4s ease-in 7s forwards" in page
+
+
+def test_the_board_is_lichess_brown_with_tints_instead_of_frames(client):
+    page = client.get("/").text
+
+    assert 'cssClass: "lichess"' in page
+    assert "#f0d9b5" in page and "#b58863" in page
+    assert "autoMarkers: null" in page
+    assert "MARKER_TYPE.frame" not in page
+    assert "state.check" in page
+
+
+def test_picking_up_a_piece_shows_its_targets_from_the_human_legal_moves(client):
+    page = client.get("/").text
+
+    assert "function showTargets(from)" in page
+    assert "state.human_legal_moves.filter(uci => uci.startsWith(from))" in page
+
+
+def test_the_move_sound_is_served_switchable_and_credited(client):
+    page = client.get("/").text
+    sound = client.get("/static/sounds/move.mp3")
+
+    assert sound.status_code == 200
+    assert sound.content.startswith(b"ID3")
+    assert 'id="moveSoundSwitch"' in page
+    assert '"chessllm.moveSound"' in page
+    assert "Move sound: Kenney, CC0" in page

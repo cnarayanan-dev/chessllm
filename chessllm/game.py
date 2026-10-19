@@ -266,6 +266,7 @@ class GameSession:
             "turn": color_name(board.turn),
             "human_legal_moves": self._human_legal_moves(),
             "last_move": board.peek().uci() if board.move_stack else None,
+            "check": board.is_check(),  # the side to move's king, so the page needn't work it out (ADR 0001)
             "llm_turn": self._llm_turns[-1] if self._llm_turns else None,
             "llm_turns": self._llm_turns,
             "settings": asdict(self._settings),
