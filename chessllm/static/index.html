@@ -43,12 +43,31 @@
   .side { display: flex; flex-direction: column; gap: 14px; }
   .card { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
   .label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-bottom: 6px; }
-  .moves { font-family: ui-monospace, monospace; font-size: 13px; min-height: 1.5em; }
+  /* Move list: one row per move number, with the LLM's mistakes under its move */
+  .moves-head { display: flex; align-items: center; margin-bottom: 6px; }
+  .moves-head .label { margin-bottom: 0; }
+  .moves-head .spacer { flex: 1; }
+  .toggle { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  .toggle input { display: none; }
+  .toggle .track { width: 26px; height: 15px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; }
+  .toggle .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .toggle input:checked + .track { background: var(--accent); }
+  .toggle input:checked + .track::after { transform: translateX(11px); }
+  .moves { font-family: ui-monospace, monospace; font-size: 13px; min-height: 1.5em; display: grid; grid-template-columns: 28px 1fr 1fr; row-gap: 2px; }
+  .moves .no { color: var(--faint); }
+  .moves .ply { padding: 0 4px; border-radius: 3px; }
+  .moves .ply.last { background: var(--hover); }
+  .mistakes { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px; margin: 1px 0 5px; }
+  .mistakes:empty, .hide-mistakes .mistakes { display: none; }
+  .mistake { font-size: 11.5px; border-radius: 4px; padding: 0 6px; line-height: 18px; white-space: nowrap; }
+  .mistake.illegal, .mistake.error { background: var(--red-soft); color: var(--red); }
+  .mistake.illegal s { text-decoration-thickness: 1px; }
+  .mistake.error { white-space: normal; }
+  .totals { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .hide-mistakes .totals { display: none; }
   .status { color: var(--muted); }
   .callout { border-left: 3px solid var(--red); background: var(--red-soft); border-radius: 4px; padding: 8px 10px; font-size: 13px; }
   .callout[hidden] { display: none; }
-  .callouts { display: flex; flex-direction: column; gap: 6px; }
-  .callouts:empty { display: none; }
   .thinking summary { cursor: pointer; color: var(--muted); }
   .thinking[hidden] { display: none; }
   .thinking-text { margin-top: 8px; max-height: 320px; overflow-y: auto; white-space: pre-wrap; font-size: 13px; color: var(--muted); }
@@ -120,14 +139,18 @@
     </div>
     <div class="card"><div class="status" id="status">Loading…</div></div>
     <div class="callout" id="error" hidden></div>
-    <div class="callouts" id="callouts"></div>
     <details class="card thinking" id="thinkingPanel" hidden>
       <summary>Show thinking</summary>
       <div class="thinking-text" id="thinking"></div>
     </details>
-    <div class="card">
-      <div class="label">Moves</div>
+    <div class="card" id="movesCard">
+      <div class="moves-head">
+        <span class="label">Moves</span>
+        <span class="spacer"></span>
+        <label class="toggle"><input type="checkbox" id="showMistakes" checked><span class="track"></span>Show LLM mistakes</label>
+      </div>
       <div class="moves" id="moves"></div>
+      <div class="totals" id="totals"></div>
     </div>
   </div>
 </div>
@@ -197,21 +220,52 @@ function showBanner() {
   if (!over) return
   $("bannerTitle").textContent = RESULT_TITLES[state.result] ?? state.result
   $("bannerReason").textContent = END_REASONS[state.end_reason] ?? `by ${state.end_reason.replaceAll("_", " ")}`
+  // A forfeit with no answer says why here too, since the switch can hide the move list's chips.
+  const error = state.llm_turn?.attempts.at(-1).error
+  if (state.end_reason === "forfeit" && error) $("bannerReason").textContent += `: ${error}`
 }
 
-// One red callout per failed attempt of the LLM's last turn. They stack, and clear when the next turn starts.
-function showCallouts() {
-  const failed = (state.llm_turn?.attempts ?? []).filter(attempt => attempt.result !== "legal")
-  $("callouts").replaceChildren(...failed.map(attempt => {
-    const callout = document.createElement("div")
-    callout.className = "callout"
-    const number = state.llm_turn.attempts.indexOf(attempt) + 1
-    callout.textContent = attempt.error
-      ? `⚠ ${attempt.error}`
-      : `⚠ LLM move illegal: "${attempt.move}" (${attempt.result} move), attempt ${number} of 4`
-    return callout
-  }))
+// The move list: one row per move number, and under each LLM move a chip per failed attempt, in order.
+// A forfeited turn has no move, but its chips still show under the ply the LLM failed to play.
+function mistakeChips(turn) {
+  return (turn?.attempts ?? []).flatMap((attempt, index) => {
+    if (attempt.result === "legal") return []
+    if (attempt.error) return [chip(`⚠ ${attempt.error}`, "mistake error")]
+    const element = chip("✗ ", "mistake illegal")
+    element.append(Object.assign(document.createElement("s"), {textContent: attempt.move}), ` ${attempt.result} · try ${index + 1}`)
+    return [element]
+  })
 }
+
+function showMoves() {
+  const sans = state.pgn.split(" ").filter(token => token && !token.endsWith(".")) // drop the move numbers
+  const turns = new Map(state.llm_turns.map(turn => [turn.ply, turn]))
+  const plies = Math.max(sans.length, ...state.llm_turns.map(turn => turn.ply))
+  const cells = []
+  for (let white = 1; white <= plies; white += 2) {
+    const mistakes = Object.assign(document.createElement("div"), {className: "mistakes"})
+    cells.push(chip(`${(white + 1) / 2}.`, "no"))
+    for (const ply of [white, white + 1]) {
+      cells.push(chip(sans[ply - 1] ?? "", "ply" + (ply === sans.length ? " last" : "")))
+      mistakes.append(...mistakeChips(turns.get(ply)))
+    }
+    cells.push(mistakes)
+  }
+  $("moves").replaceChildren(...cells)
+  const illegal = Object.values(state.stats.illegal_moves).reduce((sum, count) => sum + count, 0)
+  $("totals").textContent = `✗ ${illegal} illegal ${illegal === 1 ? "try" : "tries"}`
+}
+
+// The switch is a page setting, kept in the browser across games and reloads.
+const MISTAKES_KEY = "chessllm.showMistakes"
+function showMistakesSwitch() {
+  const on = $("showMistakes").checked
+  $("movesCard").classList.toggle("hide-mistakes", !on)
+  localStorage.setItem(MISTAKES_KEY, on ? "on" : "off")
+}
+$("showMistakes").checked = localStorage.getItem(MISTAKES_KEY) !== "off"
+$("showMistakes").onchange = showMistakesSwitch
+showMistakesSwitch()
 
 async function api(method, path, body) {
   const response = await fetch(path, {
@@ -226,10 +280,9 @@ async function api(method, path, body) {
 async function show(next) {
   const animate = state !== null // the first position appears at once instead of fading in from an empty board
   state = next
-  $("moves").textContent = state.pgn
+  showMoves()
   $("status").textContent = state.status === "over" ? "Game over" : state.turn === "white" ? "Your move (White)" : "Waiting for Black…"
   showBanner()
-  showCallouts()
   showSettings()
   const thinking = state.llm_turn?.thinking
   $("thinkingPanel").hidden = !thinking
@@ -251,7 +304,6 @@ async function play(uci) {
   $("newGame").disabled = $("startNext").disabled = true
   $("error").hidden = true
   $("thinkingPanel").hidden = true
-  $("callouts").replaceChildren()
   const started = Date.now()
   const tick = () => {
     const seconds = Math.floor((Date.now() - started) / 1000)

@@ -23,3 +23,11 @@ def test_the_merida_sprite_has_every_piece_cm_chessboard_expects(client):
     assert response.status_code == 200
     ids = set(re.findall(r'<g id="([wb][kqrbnp])"', response.text))
     assert ids == {c + p for c in "wb" for p in "kqrbnp"}
+
+
+def test_the_moves_card_has_the_show_llm_mistakes_switch_and_the_callout_stack_is_gone(client):
+    page = client.get("/").text
+
+    assert 'id="showMistakes"' in page
+    assert "Show LLM mistakes" in page
+    assert 'id="callouts"' not in page

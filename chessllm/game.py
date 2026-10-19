@@ -73,7 +73,7 @@ class GameSession:
         self._settings = settings
         self._log = log
         self._board = chess.Board()
-        self._llm_turn: dict[str, Any] | None = None
+        self._llm_turns: list[dict[str, Any]] = []  # every LLM turn of the game, the last one included
         self._end: GameEnd | None = None
         self._legal_move_streak = 0
         self._streak_broken = False
@@ -159,7 +159,8 @@ class GameSession:
         pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
         messages = turn_messages(pgn, fen)
         attempts: list[dict[str, Any]] = []
-        self._llm_turn = {"attempts": attempts, "thinking": None}
+        turn: dict[str, Any] = {"ply": ply, "attempts": attempts, "thinking": None}
+        self._llm_turns.append(turn)
         feedback = None
         for number in range(1, MAX_ATTEMPTS + 1):
             attempt: dict[str, Any] = {"move": None, "result": None, "feedback_sent": feedback}
@@ -182,7 +183,7 @@ class GameSession:
             attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking}
             attempt["latency_s"] = reply.latency_s
             self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
-            self._llm_turn["thinking"] = thinking
+            turn["thinking"] = thinking
             if move is not None:
                 board.push(move)
                 if number > 1:
@@ -205,7 +206,8 @@ class GameSession:
             "turn": "white" if board.turn == chess.WHITE else "black",
             "human_legal_moves": self._human_legal_moves(),
             "last_move": board.peek().uci() if board.move_stack else None,
-            "llm_turn": self._llm_turn,
+            "llm_turn": self._llm_turns[-1] if self._llm_turns else None,
+            "llm_turns": self._llm_turns,
             "settings": asdict(self._settings),
             "status": "over" if self._end else "playing",
             "result": self._end.result if self._end else None,

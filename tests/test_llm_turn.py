@@ -52,6 +52,7 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
     assert state["pgn"] == "1. e4 e5 2. Nf3 Nc6"
     assert state["last_move"] == "b8c6"
     assert state["llm_turn"] == {
+        "ply": 4,
         "attempts": [
             {
                 "move": "Nc6",
