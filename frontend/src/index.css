@@ -1,13 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Inter Variable', sans-serif;
+    --color-turn: var(--turn);
+    --color-timer: var(--timer);
+    --color-timer-foreground: var(--timer-foreground);
+    --color-slip: var(--slip);
+    --color-spawn: var(--spawn);
+    --color-move-last: var(--move-last);
+    --color-move-viewed: var(--move-viewed);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,38 +56,54 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    /*
+      The Stone palette (DESIGN.md): shadcn Luma's light page, near-white cards, borderless filled surfaces and a
+      near-black primary, with stone's warm hue (55 to 80) at very low chroma, so the greys sit with the board's wood.
+      The muted foreground is darker than stock (0.556) so secondary text passes WCAG AA on the page, cards and filled
+      surfaces (src/theme.test.ts).
+    */
+    --background: oklch(0.963 0.006 75);
+    --foreground: oklch(0.16 0.006 55);
+    --card: oklch(0.997 0.001 90);
+    --card-foreground: oklch(0.16 0.006 55);
+    --popover: oklch(0.997 0.001 90);
+    --popover-foreground: oklch(0.16 0.006 55);
+    --primary: oklch(0.23 0.008 55);
+    --primary-foreground: oklch(0.985 0.002 80);
+    --secondary: oklch(0.948 0.006 70);
+    --secondary-foreground: oklch(0.23 0.008 55);
+    --muted: oklch(0.948 0.006 70);
+    --muted-foreground: oklch(0.49 0.012 65);
+    --accent: oklch(0.93 0.008 70);
+    --accent-foreground: oklch(0.23 0.008 55);
+    --destructive: oklch(0.54 0.21 27);
+    --border: oklch(0.915 0.006 60);
+    --input: oklch(0.915 0.006 60);
+    --ring: oklch(0.7 0.012 60);
+    --chart-1: oklch(0.87 0.006 60);
+    --chart-2: oklch(0.56 0.012 60);
+    --chart-3: oklch(0.44 0.012 60);
+    --chart-4: oklch(0.37 0.01 60);
+    --chart-5: oklch(0.27 0.008 55);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: oklch(0.985 0.002 80);
+    --sidebar-foreground: oklch(0.16 0.006 55);
+    --sidebar-primary: oklch(0.23 0.008 55);
+    --sidebar-primary-foreground: oklch(0.985 0.002 80);
+    --sidebar-accent: oklch(0.93 0.008 70);
+    --sidebar-accent-foreground: oklch(0.23 0.008 55);
+    --sidebar-border: oklch(0.915 0.006 60);
+    --sidebar-ring: oklch(0.7 0.012 60);
+    /* The game page's own tokens: the ring around the side to move, the move timer, notation slips and Spawns. */
+    --turn: oklch(0.23 0.008 55);
+    --timer: oklch(0.23 0.008 55);
+    --timer-foreground: oklch(0.985 0.002 80);
+    --slip: oklch(0.54 0.12 65);
+    --spawn: oklch(0.5 0.19 305);
+    /* Move-list highlights, mixed from the board's last-move olive so the list and the board point at the same move. */
+    --move-olive: oklch(0.69 0.13 110);
+    --move-last: color-mix(in oklab, var(--move-olive) 22%, var(--card));
+    --move-viewed: color-mix(in oklab, var(--move-olive) 48%, var(--card));
 }
 
 .dark {

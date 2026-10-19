@@ -20,7 +20,7 @@ import {
   type Sort,
 } from '@/analytics/leaderboard'
 import { leaderboardQuery } from '@/api/leaderboard'
-import { buttonVariants } from '@/components/ui/button'
+import { TopBar } from '@/components/top-bar/TopBar'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -66,7 +66,7 @@ const CELLS: Record<Exclude<ColumnKey, 'rank' | 'configuration'>, (entry: Leader
   rating: (entry) => <span className="font-semibold">{estimateText(entry.rating)}</span>,
   games: (entry) => entry.games,
   wdl: (entry) => (
-    <span className="font-mono whitespace-nowrap">
+    <span className="whitespace-nowrap tabular-nums">
       <b>{entry.wins}</b> · {entry.draws} · {entry.losses}
     </span>
   ),
@@ -173,8 +173,6 @@ function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
   )
 }
 
-const linkClass = buttonVariants({ variant: 'ghost' })
-
 export function AnalyticsPage() {
   const leaderboard = useQuery(leaderboardQuery)
   const entries = leaderboard.data?.configurations
@@ -182,14 +180,7 @@ export function AnalyticsPage() {
   return (
     <TooltipProvider>
       <div className="min-h-svh text-sm">
-        <header className="flex items-center gap-3 border-b px-5 py-2.5">
-          <span className="font-semibold">♞ ChessLLM</span>
-          <span className="text-muted-foreground">/ Analytics</span>
-          <span className="flex-1" />
-          <a href="/" className={linkClass}>
-            Game
-          </a>
-        </header>
+        <TopBar current="analytics" />
         <main className="mx-auto max-w-[1400px] px-5 pt-6 pb-10">
           {leaderboard.isError ? (
             <p className="text-destructive">Could not load the leaderboard: {leaderboard.error.message}</p>

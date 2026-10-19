@@ -1,7 +1,9 @@
 import { Radio } from '@base-ui/react/radio'
 import { useQuery } from '@tanstack/react-query'
+import { ArrowLeftRight, Bot, type LucideIcon, SlidersHorizontal, Swords } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { modelsQuery } from '@/api/models'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { RadioGroup } from '@/components/ui/radio-group'
@@ -92,18 +94,12 @@ const ordinal = (n: number) => {
   return `${n}${suffix}`
 }
 
-const SECTIONS = { game: '♟ Game', model: '◆ Model', advanced: '⚙ Advanced' }
+const SECTIONS = {
+  game: { label: 'Game', Icon: Swords },
+  model: { label: 'Model', Icon: Bot },
+  advanced: { label: 'Advanced', Icon: SlidersHorizontal },
+} satisfies Record<string, { label: string; Icon: LucideIcon }>
 type Section = keyof typeof SECTIONS
-
-/** The top bar's button that opens the settings, as ⌘K does. */
-export function SettingsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button variant="ghost" className="text-muted-foreground" onClick={onClick}>
-      ⚙ Settings
-      <kbd className="rounded border bg-muted px-1.5 font-mono text-[11px] text-muted-foreground">⌘K</kbd>
-    </Button>
-  )
-}
 
 type SettingsModalProps = {
   open: boolean
@@ -134,21 +130,22 @@ export function SettingsModal({ open, onOpenChange, ...pane }: SettingsModalProp
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => onOpenChange(isOpen)}>
-      <DialogContent className="grid h-[min(560px,88vh)] w-[min(880px,94vw)] max-w-none grid-cols-[220px_1fr] gap-0 overflow-hidden p-0 sm:max-w-none">
+      <DialogContent className="grid h-[min(600px,88vh)] w-[min(900px,94vw)] max-w-none grid-cols-[220px_1fr] gap-0 overflow-hidden p-0 sm:max-w-none">
         <DialogTitle className="sr-only">Settings</DialogTitle>
-        <nav className="bg-muted/60 px-1.5 py-3.5">
-          <div className="px-2.5 pt-0.5 pb-2.5 text-xs text-muted-foreground">ChessLLM settings</div>
-          {Object.entries(SECTIONS).map(([key, label]) => (
+        <nav className="flex flex-col gap-0.5 bg-muted px-3 py-5">
+          <div className="px-3 pb-3 text-xs font-medium text-muted-foreground">ChessLLM settings</div>
+          {Object.entries(SECTIONS).map(([key, { label, Icon }]) => (
             <button
               key={key}
               type="button"
               aria-current={section === key ? 'page' : undefined}
               className={cn(
-                'flex w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-muted-foreground',
-                section === key && 'bg-muted font-medium text-foreground',
+                'flex w-full cursor-pointer items-center gap-2.5 rounded-4xl px-3 py-2 text-left font-medium text-muted-foreground transition-colors hover:text-foreground',
+                section === key && 'bg-card text-foreground shadow-sm',
               )}
               onClick={() => setSection(key as Section)}
             >
+              <Icon className="size-4" aria-hidden="true" />
               {label}
             </button>
           ))}
@@ -184,9 +181,9 @@ function SettingsPane({ section, running, next, onNextChange, onStartNext }: Pan
         <ModelSection next={next} models={models} modelsError={modelsError} onNextChange={onNextChange} />
       )}
       {section === 'advanced' && <AdvancedSection next={next} models={models} modelsError={modelsError} />}
-      <div className="mt-4 flex items-center gap-2 rounded-md bg-muted px-2.5 py-2 text-[12.5px] text-muted-foreground">
+      <div className="mt-6 flex min-h-12 items-center gap-2 rounded-3xl bg-muted py-2 pr-2 pl-4 text-[12.5px] text-muted-foreground">
         Changes apply when you start a new game.
-        {pending && <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">changes apply next game</span>}
+        {pending && <Badge variant="outline" className="bg-card text-foreground">changes apply next game</Badge>}
         <span className="flex-1" />
         {pending && (
           <Button size="sm" onClick={() => onStartNext(newGameRequest(next, models))}>
@@ -242,8 +239,14 @@ function GameSection({ next, models, onNextChange }: SectionProps) {
           <Row heading title="Players" description="A model for each side. The same model can play itself." />
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2.5 py-3.5">
             <PlayerSelect color="white" next={next} models={models} onNextChange={onNextChange} />
-            <Button variant="outline" aria-label="Swap colours" title="Swap colours" onClick={() => onNextChange(swapSides(next))}>
-              ⇄
+            <Button
+              variant="secondary"
+              size="icon"
+              aria-label="Swap colours"
+              title="Swap colours"
+              onClick={() => onNextChange(swapSides(next))}
+            >
+              <ArrowLeftRight />
             </Button>
             <PlayerSelect color="black" next={next} models={models} onNextChange={onNextChange} />
           </div>
@@ -451,7 +454,7 @@ function AdvancedSection({ next, models, modelsError }: { next: NextGame; models
 }
 
 function Heading({ children }: { children: ReactNode }) {
-  return <h2 className="mb-1 border-b pb-3 text-base font-semibold">{children}</h2>
+  return <h2 className="mb-1 pb-2 text-lg font-semibold tracking-tight">{children}</h2>
 }
 
 /** A setting's title and description, with its control on the right; a heading row sits over its cards. */
@@ -511,7 +514,7 @@ function Cards<T extends string>({
         const card = (
           <Radio.Root
             value={choice}
-            className="cursor-pointer rounded-md border px-3 py-2 text-center hover:bg-muted data-checked:border-primary data-checked:bg-primary/10 data-disabled:cursor-default data-disabled:opacity-40 data-disabled:hover:bg-transparent"
+            className="cursor-pointer rounded-2xl bg-muted px-3 py-2.5 text-center transition-colors outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 data-checked:bg-card data-checked:shadow-sm data-checked:ring-2 data-checked:ring-primary data-disabled:cursor-default data-disabled:opacity-40 data-disabled:hover:bg-muted"
           >
             <span className="font-medium">{name}</span>
             {choice === defaultChoice && <span className="ml-1 text-[11px] text-muted-foreground">default</span>}

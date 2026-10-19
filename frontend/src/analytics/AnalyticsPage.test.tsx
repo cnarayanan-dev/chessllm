@@ -145,8 +145,12 @@ test('says so when the leaderboard cannot be loaded', async () => {
   expect(await screen.findByText(/Could not load the leaderboard: disk on fire/)).toBeInTheDocument()
 })
 
-test('links back to the game', () => {
+test('has the top bar: the ChessLLM mark links back to the game, and Analytics is marked as the page shown', () => {
   showPage()
 
-  expect(screen.getByRole('link', { name: 'Game' })).toHaveAttribute('href', '/')
+  const topBar = screen.getByRole('banner')
+  expect(within(topBar).getByRole('link', { name: 'ChessLLM' })).toHaveAttribute('href', '/')
+  expect(within(topBar).getByRole('link', { name: 'Analytics' })).toHaveAttribute('aria-current', 'page')
+  expect(within(topBar).getByRole('link', { name: 'New game' })).toBeInTheDocument()
+  expect(within(topBar).getByRole('link', { name: 'Settings' })).toBeInTheDocument()
 })

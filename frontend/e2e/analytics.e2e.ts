@@ -75,6 +75,6 @@ test('the game and the analytics page link to each other', async ({ page }) => {
   await expect(page).toHaveURL(/\/analytics$/)
   await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible()
 
-  await page.getByRole('link', { name: 'Game' }).click()
+  await page.getByRole('link', { name: 'ChessLLM' }).click()
   await expect(page.getByTestId('status')).toHaveText('Your move (White)')
 })

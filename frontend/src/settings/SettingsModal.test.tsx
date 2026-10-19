@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { GameSettings, ModelInfo, NewGame, SideValues } from '@/settings/next-game'
 import { nextGameFrom } from '@/settings/next-game'
-import { SettingsButton, SettingsModal } from '@/settings/SettingsModal'
+import { SettingsModal } from '@/settings/SettingsModal'
 
 const qwen: ModelInfo = { name: 'qwen3.5:9b', thinking: true, sampling: { temperature: 0.6, top_k: 40 } }
 const gemma: ModelInfo = { name: 'gemma3:4b', thinking: false, sampling: {} }
@@ -44,7 +44,9 @@ function Page({ running, onStartNext }: { running: GameSettings; onStartNext: (r
   const [next, setNext] = useState(() => nextGameFrom(running))
   return (
     <>
-      <SettingsButton onClick={() => setOpen(true)} />
+      <button type="button" onClick={() => setOpen(true)}>
+        Settings
+      </button>
       <SettingsModal
         open={open}
         onOpenChange={setOpen}

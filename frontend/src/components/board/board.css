@@ -29,7 +29,7 @@
 /* The caption under the board, with the resolver's reason: red for a chaos move, purple for a spawn. */
 .chaos-caption { border-radius: 6px; padding: 6px 10px; font-size: 13px; animation: chaos-in .25s ease-out; }
 .chaos-caption.chaos { background: #fbe4e4; color: #e03e3e; }
-.chaos-caption.spawn { background: #f1e6fa; color: #8e44c9; }
+.chaos-caption.spawn { background: color-mix(in oklab, var(--spawn) 10%, var(--card)); color: var(--spawn); }
 @media (prefers-reduced-motion: reduce) {
   .cm-chessboard .arrow.chaos-arrow, .cm-chessboard .markers .marker.spawn, .chaos-caption { animation: none; }
 }

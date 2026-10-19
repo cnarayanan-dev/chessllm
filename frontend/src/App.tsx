@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { modelsQuery } from '@/api/models'
 import type { GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { BoardFlashes } from '@/components/board/BoardFlashes'
 import { MovesCard } from '@/components/moves/MovesCard'
+import { thenFrom } from '@/components/top-bar/then'
+import { TopBar } from '@/components/top-bar/TopBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { chaosShown, type ChaosShown } from '@/game/chaos'
@@ -23,7 +25,7 @@ import {
 import { useGameLoop } from '@/game/useGameLoop'
 import { bannerText, faceoff, historyStatusText, llmName, settingsChips, statusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
-import { SettingsButton, SettingsModal } from '@/settings/SettingsModal'
+import { SettingsModal } from '@/settings/SettingsModal'
 
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
@@ -84,7 +86,7 @@ const keyTakenElsewhere = (event: KeyboardEvent) =>
 function Banner({ game, onNewGame }: { game: GameState; onNewGame: () => void }) {
   const { title, reason } = bannerText(game)
   return (
-    <div data-testid="banner" className="flex items-center gap-3 rounded-lg border bg-muted px-4 py-3.5">
+    <div data-testid="banner" className="flex items-center gap-3 rounded-3xl bg-muted py-3.5 pr-3.5 pl-5">
       <div>
         <div className="text-base font-semibold">{title}</div>
         <div className="text-muted-foreground">{reason}</div>
@@ -145,7 +147,19 @@ export default function App() {
   const shownPly = shown?.move ?? null
   const chaos = useMemo(() => chaosShown(shownPly), [shownPly])
   // The next game, as set up in the Settings modal, or the default game if none could be loaded.
-  const startNewGame = () => newGame(next ? newGameRequest(next, models) : null)
+  const startNewGame = useCallback(() => newGame(next ? newGameRequest(next, models) : null), [newGame, next, models])
+
+  // New game or Settings chosen in the top bar of another page, done once the game is shown. New game is then the
+  // button's: the models are listed only by the Settings modal, so until it opens the button has none either.
+  const then = useRef(thenFrom(window.location.search))
+  useEffect(() => {
+    if (!then.current || !game || !next) return
+    const asked = then.current
+    then.current = null
+    window.history.replaceState(null, '', window.location.pathname)
+    if (asked === 'settings') setSettingsOpen(true)
+    else startNewGame()
+  }, [game, next, startNewGame])
 
   // ← and → step through the move history, unless a field or the Settings modal has the keys.
   useEffect(() => {
@@ -162,21 +176,12 @@ export default function App() {
 
   return (
     <div className="min-h-svh text-sm">
-      <header className="flex items-center gap-3 border-b px-5 py-2.5">
-        <span className="font-semibold">♞ ChessLLM</span>
-        <div className="ml-2 flex flex-wrap gap-1.5">
+      <TopBar onNewGame={startNewGame} onSettings={() => setSettingsOpen(true)}>
+        <div className="ml-3 flex flex-wrap gap-1.5">
           {game && settingsChips(game).map((chip) => <Badge variant="secondary" key={chip}>{chip}</Badge>)}
           {pending && <Badge className="bg-primary/10 text-primary">changes apply next game</Badge>}
         </div>
-        <span className="flex-1" />
-        <a href="/analytics" className={buttonVariants({ variant: 'ghost' })}>
-          Analytics
-        </a>
-        <Button variant="ghost" onClick={startNewGame}>
-          New game
-        </Button>
-        <SettingsButton onClick={() => setSettingsOpen(true)} />
-      </header>
+      </TopBar>
       {game && next && (
         <SettingsModal
           open={settingsOpen}

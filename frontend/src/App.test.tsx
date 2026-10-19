@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from '@/App'
 import type { GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
@@ -308,6 +308,32 @@ describe('settings', () => {
       max_attempts: 5,
     })
     expect(within(topBar()).queryByText('changes apply next game')).not.toBeInTheDocument()
+  })
+
+  describe('coming from another page', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'))
+
+    test("its Settings opens the modal once the game is shown, and the address loses the request", async () => {
+      fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models))
+      window.history.replaceState(null, '', '/?then=settings')
+      renderApp()
+
+      expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+      expect(window.location.search).toBe('')
+      expect(status()).toHaveTextContent('Your move (White)')
+    })
+
+    test('its New game starts the next game, set up as the game shown', async () => {
+      const backend = fakeBackend()
+        .on('GET /api/games/current', Response.json(aGame()))
+        .on('POST /api/games', Response.json(aGame({ game_id: 'game-2' })))
+      window.history.replaceState(null, '', '/?then=new-game')
+      renderApp()
+
+      await waitFor(() => expect(backend.sentTo('POST /api/games')).toHaveLength(1))
+      expect(backend.sentTo('POST /api/games')[0].body).toMatchObject({ mode: 'play_llm', black: { model: 'qwen3.5:9b' } })
+      expect(window.location.search).toBe('')
+    })
   })
 
   test('an LLM faceoff started from the modal plays itself to the end, White at the bottom and the board locked', async () => {
