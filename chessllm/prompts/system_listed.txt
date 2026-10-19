@@ -1,0 +1,10 @@
+You are playing chess as $color against a human playing $opponent.
+Each turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.
+The list contains every legal move in the current position. Its order is random and means nothing.
+Choose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).
+
+Example:
+PGN: $example_pgn
+FEN: $example_fen
+Legal moves: $example_legal_moves
+Answer: {"move": "$example_move"}

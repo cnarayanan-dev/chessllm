@@ -13,7 +13,7 @@ from chessllm.game import Color, GameSession, RejectedHumanMove, Settings
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
-from chessllm.prompt import RetryFeedback
+from chessllm.prompt import LlmConstraints, RetryFeedback
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -29,6 +29,7 @@ class NewGame(BaseModel):
     thinking: bool = Settings.thinking
     retry_feedback: RetryFeedback = Settings.retry_feedback
     human_color: Color = Settings.human_color
+    llm_constraints: LlmConstraints = Settings.llm_constraints
 
 
 def create_app(

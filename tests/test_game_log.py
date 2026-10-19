@@ -41,7 +41,7 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
         "type": "game_start",
         "model": "qwen3.5:9b",
         "llm_color": "black",
-        "mode": "free",
+        "llm_constraints": "free",
         "thinking": True,
         "sampling": "model_default",
         "retry_feedback": "explained",

@@ -31,3 +31,10 @@ def test_the_moves_card_has_the_show_llm_mistakes_switch_and_the_callout_stack_i
     assert 'id="showMistakes"' in page
     assert "Show LLM mistakes" in page
     assert 'id="callouts"' not in page
+
+
+def test_the_settings_modal_offers_the_llm_constraints(client):
+    page = client.get("/").text
+
+    assert 'id="llmConstraints"' in page
+    assert "LLM constraints" in page

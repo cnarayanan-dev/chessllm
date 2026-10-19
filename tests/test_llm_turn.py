@@ -76,6 +76,7 @@ def test_the_default_opponent_is_qwen_with_thinking_on(scripted):
         "thinking": True,
         "retry_feedback": "explained",
         "human_color": "white",
+        "llm_constraints": "free",
         "sampling": {},
     }
 
@@ -90,6 +91,7 @@ def test_the_game_reports_the_settings_it_was_started_with(scripted):
         "thinking": False,
         "retry_feedback": "bare",
         "human_color": "white",
+        "llm_constraints": "free",
         "sampling": {},
     }
 
@@ -120,6 +122,7 @@ def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
         "thinking": True,
         "retry_feedback": "explained",
         "human_color": "white",
+        "llm_constraints": "free",
         "sampling": {},
     }
 

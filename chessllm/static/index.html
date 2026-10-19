@@ -171,7 +171,8 @@
       <h2>Game</h2>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Your colour</div><div class="d">The LLM plays the other colour. White moves first.</div></div></div>
       <div class="radios" id="colors" style="grid-template-columns:repeat(2, 1fr)"></div>
-      <div class="row"><div class="txt"><div class="t">Mode</div><div class="d">Free mode: the LLM is not shown the legal moves</div></div><span class="chip">Free</span></div>
+      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">LLM constraints</div><div class="d">Whether the LLM is shown the legal moves in each turn's prompt.</div></div></div>
+      <div class="radios" id="llmConstraints" style="grid-template-columns:repeat(2, 1fr)"></div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
       <div class="radios" id="feedbackLevels"></div>
     </section>
@@ -364,16 +365,20 @@ function onMoveInput(event) {
 const FEEDBACK_LEVELS = {
   explained: {name: "Explained", description: "The move and the kind of failure"},
   bare: {name: "Bare", description: "Only that it was illegal"},
-  hinted: {name: "Hinted", description: "Also lists the legal moves (muddies free mode)"},
+  hinted: {name: "Hinted", description: "Also lists the legal moves (muddies Free)"},
+}
+const LLM_CONSTRAINTS = {
+  free: {name: "Free", description: "No legal-move list: the LLM finds its own moves"},
+  listed: {name: "Listed", description: "Shown every legal move, but can still play an illegal one"},
 }
 const COLOR_NAMES = {white: "White", black: "Black"}
 const other = color => color === "white" ? "black" : "white"
-let next = null // {model, thinking, retry_feedback, human_color} for the next game
+let next = null // {model, thinking, retry_feedback, human_color, llm_constraints} for the next game
 let models = null // the model list, [{name, thinking, sampling}], or null until listed
 let modelsError = null // why they could not be listed
 let section = "game"
 
-const pending = () => ["model", "thinking", "retry_feedback", "human_color"].some(key => next[key] !== state.settings[key])
+const pending = () => ["model", "thinking", "retry_feedback", "human_color", "llm_constraints"].some(key => next[key] !== state.settings[key])
 
 function chip(text, className = "chip") {
   const element = document.createElement("span")
@@ -384,11 +389,15 @@ function chip(text, className = "chip") {
 
 function showSettings() {
   const settings = state.settings
-  next ??= {model: settings.model, thinking: settings.thinking, retry_feedback: settings.retry_feedback, human_color: settings.human_color}
+  next ??= {
+    model: settings.model, thinking: settings.thinking, retry_feedback: settings.retry_feedback,
+    human_color: settings.human_color, llm_constraints: settings.llm_constraints,
+  }
   $("chips").replaceChildren(
     chip(`you play ${COLOR_NAMES[settings.human_color]}`),
     chip(settings.model),
     chip(`thinking ${settings.thinking ? "on" : "off"}`),
+    chip(LLM_CONSTRAINTS[settings.llm_constraints].name.toLowerCase()),
     chip(`${FEEDBACK_LEVELS[settings.retry_feedback].name.toLowerCase()} feedback`),
     ...(pending() ? [chip("changes apply next game", "chip pending")] : []),
   )
@@ -408,6 +417,15 @@ function showSettings() {
     card.setAttribute("aria-checked", next.human_color === color)
     card.append(chip(name, "t"), ...(color === "white" ? [chip("default", "default")] : []))
     card.onclick = () => { next.human_color = color; showSettings() }
+    return card
+  }))
+  $("llmConstraints").replaceChildren(...Object.entries(LLM_CONSTRAINTS).map(([choice, {name, description}]) => {
+    const card = document.createElement("button")
+    card.className = "radio" + (next.llm_constraints === choice ? " on" : "")
+    card.setAttribute("role", "radio")
+    card.setAttribute("aria-checked", next.llm_constraints === choice)
+    card.append(chip(name, "t"), ...(choice === "free" ? [chip("default", "default")] : []), chip(description, "d"))
+    card.onclick = () => { next.llm_constraints = choice; showSettings() }
     return card
   }))
   $("feedbackLevels").replaceChildren(...Object.entries(FEEDBACK_LEVELS).map(([level, {name, description}]) => {

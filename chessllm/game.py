@@ -1,5 +1,6 @@
 """One game between the human and the LLM player, each playing the colour the settings give them."""
 
+import random
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any, Literal
@@ -9,7 +10,7 @@ from pydantic import ValidationError
 
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
-from chessllm.prompt import SYSTEM_PROMPT_FILE, RetryFeedback, retry_feedback, turn_messages
+from chessllm.prompt import SYSTEM_PROMPT_FILES, LlmConstraints, RetryFeedback, retry_feedback, turn_messages
 
 Color = Literal["white", "black"]
 
@@ -22,6 +23,7 @@ class Settings:
     thinking: bool = True
     retry_feedback: RetryFeedback = "explained"
     human_color: Color = "white"  # the LLM plays the other colour
+    llm_constraints: LlmConstraints = "free"
     sampling: dict[str, float] = field(default_factory=dict)  # from the config file; empty means the model's defaults
 
 
@@ -92,12 +94,12 @@ class GameSession:
             game_id=log.game_id,
             model=settings.model,
             llm_color=color_name(not self._human),
-            mode="free",
+            llm_constraints=settings.llm_constraints,
             thinking=settings.thinking,
             sampling=settings.sampling or "model_default",
             retry_feedback=settings.retry_feedback,
             max_retries=MAX_ATTEMPTS - 1,
-            prompt_file=str(SYSTEM_PROMPT_FILE),
+            prompt_file=str(SYSTEM_PROMPT_FILES[settings.llm_constraints]),
             started_at=now(),
         )
         if self._human == chess.BLACK:  # the LLM plays White, so it opens the game
@@ -146,6 +148,7 @@ class GameSession:
                 "Black": llm if self._human == chess.WHITE else "Human",
                 "Result": end.result,
                 "Termination": end.reason,
+                "LLMConstraints": self._settings.llm_constraints,
             },
         )
 
@@ -170,7 +173,15 @@ class GameSession:
         board = self._board
         model = self._settings.model
         pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
-        messages = turn_messages(pgn, fen, color_name(board.turn))
+        legal_moves = [board.san(legal) for legal in board.legal_moves]
+        # Listed shows the legal moves in a new random order every turn; the log keeps each list as shown.
+        listed = self._settings.llm_constraints == "listed"
+        if listed:
+            random.shuffle(legal_moves)
+        listed_moves = " ".join(legal_moves) if listed else None
+        logged_list = {"legal_moves": listed_moves} if listed else {}
+        prompt_file = SYSTEM_PROMPT_FILES[self._settings.llm_constraints]
+        messages = turn_messages(pgn, fen, color_name(board.turn), prompt_file, listed_moves)
         attempts: list[dict[str, Any]] = []
         turn: dict[str, Any] = {"ply": ply, "attempts": attempts, "thinking": None}
         self._llm_turns.append(turn)
@@ -188,14 +199,14 @@ class GameSession:
             except Exception as error:
                 attempt |= {"result": "error", "error": f"{model} did not reply: {error}"}
             if attempt["error"] is not None:
-                self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
+                self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt)
                 break
             written, move, result = judge(board, reply.raw)
             # With thinking off, the reasoning in the answer stands in for the thinking text.
             thinking = reply.thinking if self._settings.thinking else reasoning(reply.raw)
             attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking}
             attempt["latency_s"] = reply.latency_s
-            self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **attempt)
+            self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt)
             turn["thinking"] = thinking
             if move is not None:
                 board.push(move)
@@ -206,7 +217,6 @@ class GameSession:
                 return
             self._illegal_moves[result] += 1
             self._streak_broken = True
-            legal_moves = [board.san(legal) for legal in board.legal_moves]
             feedback = retry_feedback(self._settings.retry_feedback, written, result, number, MAX_ATTEMPTS, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
         self._end = GameEnd("1-0" if self._human == chess.WHITE else "0-1", "forfeit")

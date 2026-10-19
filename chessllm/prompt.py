@@ -11,8 +11,12 @@ from chessllm.players import Message
 
 # What the LLM is told after an illegal move: explained (the default), bare or hinted.
 RetryFeedback = Literal["explained", "bare", "hinted"]
+# Whether the LLM is shown the legal-move list: free (no list, the default) or listed.
+LlmConstraints = Literal["free", "listed"]
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system.txt"
+LISTED_SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_listed.txt"
+SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {"free": SYSTEM_PROMPT_FILE, "listed": LISTED_SYSTEM_PROMPT_FILE}
 
 # The example move shown in the system prompt for each colour the LLM can play: the first move of each side.
 EXAMPLE_MOVES = {"white": [], "black": ["e4"]}
@@ -41,14 +45,17 @@ def system_prompt(llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE)
     )
 
 
-def turn_messages(pgn: str, fen: str, llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE) -> list[Message]:
-    """A fresh prompt for one turn: the system prompt plus the game so far, with no earlier turns.
+def turn_messages(
+    pgn: str, fen: str, llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE, legal_moves: str | None = None
+) -> list[Message]:
+    """A fresh prompt for one turn: the system prompt plus the game so far, with no earlier turns, and the
+    legal moves (space-separated SAN) under them when given.
 
     The file is read every turn, so edits apply without restarting the app."""
-    return [
-        Message("system", system_prompt(llm_color, system_prompt_file)),
-        Message("user", f"PGN: {pgn or NO_MOVES_YET}\nFEN: {fen}"),
-    ]
+    position = f"PGN: {pgn or NO_MOVES_YET}\nFEN: {fen}"
+    if legal_moves is not None:
+        position += f"\nLegal moves: {legal_moves}"
+    return [Message("system", system_prompt(llm_color, system_prompt_file)), Message("user", position)]
 
 
 def retry_feedback(
