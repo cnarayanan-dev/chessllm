@@ -27,8 +27,8 @@ Color = Literal["white", "black"]
 class Settings:
     """The setup of one game, copied into it when it starts."""
 
-    model: str = "qwen3.5:9b"
-    thinking: bool = True
+    model: str = "llama3:8b"
+    thinking: bool = False
     retry_feedback: RetryFeedback = "explained"
     human_color: Color = "white"  # the LLM plays the other colour
     llm_constraints: LlmConstraints = "free"

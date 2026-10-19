@@ -23,7 +23,7 @@ def without(event, *keys):
 
 
 def play(client, *ucis):
-    client.post("/api/games")
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
     for uci in ucis:
         state = client.post("/api/games/current/moves", json={"uci": uci}).json()
     return state
@@ -125,7 +125,7 @@ def test_a_game_abandoned_with_new_game_keeps_its_log_so_far(scripted, tmp_path)
     client, _ = scripted(["e5"])
     play(client, "e2e4")
 
-    client.post("/api/games")
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
 
     first, second = logs(tmp_path / "games", ".jsonl")
     assert [event["type"] for event in events(first)] == ["game_start", "human_move", "llm_attempt"]

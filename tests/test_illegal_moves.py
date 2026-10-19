@@ -15,7 +15,7 @@ def explained(move: str, kind: str, attempt: int) -> str:
 
 def start(scripted, replies, **kwargs):
     client, player = scripted(replies, **kwargs)
-    client.post("/api/games")
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
     return client, player
 
 

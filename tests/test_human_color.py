@@ -78,7 +78,7 @@ def test_the_human_playing_black_cannot_move_white_pieces(scripted):
 
 def test_the_human_playing_black_can_checkmate_the_llm(scripted, tmp_path):
     client, _ = scripted(["f3", "g4"])
-    client.post("/api/games", json={"human_color": "black"})
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True, "human_color": "black"})
     client.post("/api/games/current/moves", json={"uci": "e7e5"})
 
     state = client.post("/api/games/current/moves", json={"uci": "d8h4"}).json()

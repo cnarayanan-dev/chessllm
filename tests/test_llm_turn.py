@@ -44,7 +44,7 @@ def test_there_is_no_llm_turn_before_the_llm_has_moved(scripted):
 
 def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
     client, _ = scripted(["e5", "Nc6"], thinking=["Mirror the centre pawn.", "Defend e5."])
-    client.post("/api/games")
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
     client.post("/api/games/current/moves", json={"uci": "e2e4"})
 
     state = client.post("/api/games/current/moves", json={"uci": "g1f3"}).json()
@@ -70,12 +70,12 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
     }
 
 
-def test_the_default_opponent_is_qwen_with_thinking_on(scripted):
+def test_the_default_opponent_is_llama_with_thinking_off(scripted):
     client, _ = scripted([])
 
     assert client.post("/api/games").json()["settings"] == {
-        "model": "qwen3.5:9b",
-        "thinking": True,
+        "model": "llama3:8b",
+        "thinking": False,
         "retry_feedback": "explained",
         "human_color": "white",
         "llm_constraints": "free",
@@ -114,11 +114,14 @@ def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
     client.post("/api/games", json={"model": "llama3:8b", "thinking": False, "retry_feedback": "bare"})
     playing = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
 
-    state = client.post("/api/games", json={"thinking": True}).json()
+    state = client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True}).json()
     client.post("/api/games/current/moves", json={"uci": "d2d4"})
 
     assert playing["llm_turn"]["attempts"][1]["feedback_sent"].endswith("Try again.")  # bare
-    assert player.built_for == [Settings(model="llama3:8b", thinking=False, retry_feedback="bare"), Settings()]
+    assert player.built_for == [
+        Settings(model="llama3:8b", thinking=False, retry_feedback="bare"),
+        Settings(model="qwen3.5:9b", thinking=True),
+    ]
     assert state["settings"] == {
         "model": "qwen3.5:9b",
         "thinking": True,
