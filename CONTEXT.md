@@ -48,6 +48,32 @@ _Avoid_: Blind enforced mode, constrained, grammar mode
 The **LLM constraints** with both the **Legal-move list** and **Enforced decoding**: the LLM sees its options and cannot leave them.
 _Avoid_: Listed enforced mode, constrained, fully constrained
 
+### Rules
+
+**Standard rules**:
+The normal rules of chess, under which an **Illegal move** is never played.
+_Avoid_: Normal mode, legal mode
+
+**Chaos rules**:
+Rules under which an LLM's **Illegal move** is played on the board anyway, fixed for a whole game, applying to every LLM in it, and only possible under **Free** or **Listed**. Humans and **Anchors** always play legal moves. Games under chaos rules are counted apart from games under **Standard rules** and are unrated.
+_Avoid_: Chaos mode, illegal mode, anarchy chess
+
+**Chaos move**:
+A rule-breaking or ambiguous **Illegal move** that is played on the board under **Chaos rules**, at its first attempt and without a **Retry**. An illegal move in badly formed notation is never a chaos move; it gets retries as under **Standard rules**.
+_Avoid_: Executed illegal move, forced move
+
+**Spawn**:
+A **Chaos move** by a piece the LLM does not have on the board, which then appears on its target square from nowhere. A king is never spawned.
+_Avoid_: Resurrection, summon, phantom piece
+
+**King capture**:
+The end of a game under **Chaos rules** in which one side takes the other's king, left en prise by a **Chaos move**; the capturing side wins at once.
+_Avoid_: Regicide, king taken
+
+**Move record**:
+The moves of a game so far in PGN movetext form, each written as it was played, a **Chaos move** in the LLM's own spelling. Under **Standard rules** it is valid PGN; under **Chaos rules** it may not be.
+_Avoid_: PGN (for a game with chaos moves), move history
+
 ### Moves
 
 **Turn**:
