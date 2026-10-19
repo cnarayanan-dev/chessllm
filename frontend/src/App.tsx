@@ -7,6 +7,7 @@ import { BoardFlashes } from '@/components/board/BoardFlashes'
 import { GameCard } from '@/components/game-card/GameCard'
 import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
+import { Captures } from '@/components/player-strip/Captures'
 import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
 import { ReasoningPanel } from '@/components/reasoning/ReasoningPanel'
 import { thenFrom } from '@/components/top-bar/then'
@@ -23,6 +24,7 @@ import {
   type History,
   type Shown,
 } from '@/game/gameLoop'
+import { material } from '@/game/material'
 import { useGameLoop } from '@/game/useGameLoop'
 import { historyStatusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
@@ -95,13 +97,16 @@ export default function App() {
   // the ply is, so the board doesn't draw its arrows again at every render.
   const shownPly = shown?.move ?? null
   const chaos = useMemo(() => chaosShown(shownPly), [shownPly])
-  // The player strips, by the live game; the LLM's move timer, in the strip of the side to move, restarts each turn.
+  // The player strips, by the live game, with the captures, spawns and +N of the position shown; the LLM's move
+  // timer, in the strip of the side to move, restarts each turn.
   const strip = (live: GameState, color: Color) => (
     <PlayerStrip
       game={live}
       color={color}
       timer={running && live.turn === color ? <MoveTimer key={request!.id} /> : null}
-    />
+    >
+      {shown && <Captures material={material(live.plies.slice(0, shown.ply), shown.fen, color)} color={color} />}
+    </PlayerStrip>
   )
   // The next game, as set up in the Settings modal, or the default game if none could be loaded.
   const startNewGame = useCallback(() => newGame(next ? newGameRequest(next, models) : null), [newGame, next, models])

@@ -80,6 +80,9 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expect(arrows(page)).toHaveCount(0)
   await expectPiece(page, 'd5', 'bq')
   await expect(lastMove(page)).toHaveClass(/spawn/)
+  // White's strip keeps the queen it took; Black's shows the queen it spawned.
+  await expect(page.getByTestId('strip-white').getByRole('img', { name: 'Took: queen' })).toBeVisible()
+  await expect(page.getByTestId('strip-black').getByRole('img', { name: 'Spawned: queen' })).toBeVisible()
 
   // Castling with the knight still on g8: the king and the rook move anyway, the knight is taken.
   await move(page, 'g1f3', 'O-O')

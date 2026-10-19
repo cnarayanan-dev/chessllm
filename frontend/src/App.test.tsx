@@ -7,7 +7,7 @@ import type { GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { fakeBackend, later } from '@/test/fakeBackend'
 import { theBoard } from '@/test/fakeChessboard'
-import { aGame, aTurn, afterE4, afterE5, chaosGame } from '@/test/games'
+import { aGame, aTurn, afterE4, afterE5, chaosGame, E4, plies } from '@/test/games'
 
 vi.mock('@/components/board/moveSound', () => ({ playMoveSound: vi.fn(), isMoveSoundOn: () => true, setMoveSoundOn: vi.fn() }))
 
@@ -34,6 +34,12 @@ const strips = () =>
 /** The sides whose strip has the turn ring. */
 const ringed = () => (['white', 'black'] as const).filter((color) => screen.queryByTestId(`strip-${color}`)?.hasAttribute('data-to-move'))
 const timer = () => screen.queryByRole('timer')
+/** What a strip shows after the name: the pieces its side took, those it spawned, and +N, or null for none. */
+const pieces = (color: 'white' | 'black', which: 'Took' | 'Spawned') =>
+  within(strip(color))
+    .queryByRole('img', { name: new RegExp(`^${which}: `) })
+    ?.getAttribute('aria-label') ?? null
+const ahead = (color: 'white' | 'black') => within(strip(color)).queryByTestId('ahead')?.textContent ?? null
 
 /** Waits for the human's move: the ring on their strip, and no timer running. */
 async function yourMove(color: 'white' | 'black' = 'white') {
@@ -95,6 +101,38 @@ test('shows the current game: the Game card, the player strips and the board', a
   expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
   expect(board.orientation).toBe('w')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('each strip shows the pieces its side took and +N for the side ahead, of the position on the board', async () => {
+  const AFTER_D5 = 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
+  const AFTER_EXD5 = 'rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 2'
+  fakeBackend().on(
+    'GET /api/games/current',
+    Response.json(
+      afterE4({
+        fen: AFTER_EXD5,
+        pgn: '1. e4 d5 2. exd5',
+        last_move: 'e4d5',
+        plies: plies(E4, ['d7d5', 'd5', AFTER_D5], ['e4d5', 'exd5', AFTER_EXD5]),
+      }),
+    ),
+  )
+  renderApp()
+
+  await waitFor(() => expect(pieces('white', 'Took')).toBe('Took: pawn'))
+  expect(ahead('white')).toBe('+1')
+  expect(pieces('black', 'Took')).toBeNull()
+  expect(ahead('black')).toBeNull()
+
+  // Stepping back through the move history shows the position on the board.
+  await userEvent.keyboard('{ArrowLeft}')
+  await waitFor(() => expect(pieces('white', 'Took')).toBeNull())
+  expect(ahead('white')).toBeNull()
+  expect(ahead('black')).toBeNull()
+
+  await userEvent.keyboard('{ArrowRight}')
+  await waitFor(() => expect(pieces('white', 'Took')).toBe('Took: pawn'))
+  expect(ahead('white')).toBe('+1')
 })
 
 test('credits the Merida pieces, the move sound and the model logos', async () => {
@@ -676,6 +714,22 @@ describe('Chaos rules', () => {
       { position: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR', animated: false },
       { position: 'rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR', animated: true },
     ])
+  })
+
+  test("a queen spawned after Black's queen was taken: White's strip keeps the queen, Black's shows the spawn", async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(chaosGame(8)))
+    renderApp()
+
+    await waitFor(() => expect(pieces('white', 'Took')).toBe('Took: queen'))
+    expect(pieces('black', 'Spawned')).toBe('Spawned: queen')
+    expect(pieces('black', 'Took')).toBeNull()
+    expect(ahead('white')).toBeNull()
+    expect(ahead('black')).toBeNull()
+
+    await userEvent.keyboard('{ArrowLeft}') // 4. Bxg5, before the spawn
+    await waitFor(() => expect(pieces('black', 'Spawned')).toBeNull())
+    expect(pieces('white', 'Took')).toBe('Took: queen')
+    expect(ahead('white')).toBe('+9')
   })
 
   test('the totals add the chaos moves and spawns', async () => {
