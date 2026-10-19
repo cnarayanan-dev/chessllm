@@ -24,6 +24,9 @@ import { useGameLoop } from '@/game/useGameLoop'
 import { bannerText, faceoff, historyStatusText, llmName, settingsChips, statusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsButton, SettingsModal } from '@/settings/SettingsModal'
+import { PrototypeNewGameSheet, PrototypeSwitcher, prototypeVariant } from '@/settings/prototype-new-game-sheet' // PROTOTYPE
+
+const PROTOTYPE = prototypeVariant() // PROTOTYPE: ?variant=A|B swaps the Settings modal for a New game sheet
 
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
@@ -172,12 +175,25 @@ export default function App() {
         <a href="/analytics" className={buttonVariants({ variant: 'ghost' })}>
           Analytics
         </a>
-        <Button variant="ghost" onClick={startNewGame}>
+        <Button variant="ghost" onClick={PROTOTYPE ? () => setSettingsOpen(true) : startNewGame}>
           New game
         </Button>
-        <SettingsButton onClick={() => setSettingsOpen(true)} />
+        {!PROTOTYPE && <SettingsButton onClick={() => setSettingsOpen(true)} />}
       </header>
-      {game && next && (
+      {PROTOTYPE && next && (
+        <>
+          <PrototypeNewGameSheet
+            variant={PROTOTYPE}
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+            next={next}
+            onNextChange={changeNext}
+            onStart={newGame}
+          />
+          <PrototypeSwitcher current={PROTOTYPE} />
+        </>
+      )}
+      {!PROTOTYPE && game && next && (
         <SettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
