@@ -85,9 +85,9 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   // The king walks into the bishop's line, and the human takes it.
   await move(page, 'b1d2', 'Kh6')
   await move(page, 'g5h6', 'Bxh6')
-  const banner = page.getByTestId('banner')
-  await expect(banner).toContainText('White wins')
-  await expect(banner).toContainText(/by King capture: .+ left its king hanging/)
+  const result = page.getByTestId('result')
+  await expect(result).toContainText('White wins by King capture')
+  await expect(result).toContainText(/.+ left its king hanging/)
   await expect(page.getByTestId('totals')).toHaveText('✗ 5 illegal tries · ⚑ 0 notation slips · ↯ 5 chaos moves (1 spawn)')
 
   // The history replays the spawn and the chaos move, with their marker, arrow and caption.
@@ -118,9 +118,9 @@ test('an LLM faceoff under Chaos rules, started from the Settings modal, ends in
     await settings.getByRole('switch', { name: 'Chaos rules' }).click()
   })
 
-  const banner = page.getByTestId('banner')
-  await expect(banner).toContainText(/\(White\) wins/)
-  await expect(banner).toContainText(/by King capture: .+ \(Black\) left its king hanging/)
+  const result = page.getByTestId('result')
+  await expect(result).toContainText(/\(White\) wins by King capture/)
+  await expect(result).toContainText(/.+ \(Black\) left its king hanging/)
   await expect(page.getByText('Chaos rules', { exact: true })).toBeVisible()
   await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)

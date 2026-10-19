@@ -1,4 +1,4 @@
-// The words around the board, as the old page had them: the chips, the status line and the end-of-game banner.
+// The words around the board: the Game card's settings line and result, and the status line.
 import type { Color, GameSettings, GameState } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
 import { humanColor, type Shown } from '@/game/gameLoop'
@@ -78,8 +78,8 @@ function kingCapture(game: GameState, winner: Color): string {
   return loser === human ? 'you left your king hanging' : `${name(loser)} left its king hanging`
 }
 
-/** The end-of-game banner's title and reason. */
-export function bannerText(game: GameState): { title: string; reason: string } {
+/** The Game card's result line, e.g. "Black wins by checkmate", and the reason's detail under it, if any. */
+export function resultText(game: GameState): { result: string; detail: string | null } {
   // In a faceoff the result names the models, e.g. "qwen3.5:9b (White) wins".
   const winner = ({ '1-0': 'white', '0-1': 'black' } as const)[game.result as '1-0' | '0-1'] as Color | undefined
   const title =
@@ -87,35 +87,42 @@ export function bannerText(game: GameState): { title: string; reason: string } {
       ? `${llmSide(game, winner).model} (${COLOR_NAMES[winner]}) wins`
       : (RESULT_TITLES[game.result ?? ''] ?? game.result ?? '')
   const endReason = game.end_reason ?? ''
-  let reason = END_REASONS[endReason] ?? `by ${endReason.replaceAll('_', ' ')}`
+  const reason = END_REASONS[endReason] ?? `by ${endReason.replaceAll('_', ' ')}`
   // A forfeit with no answer says why here too, since the switch can hide the move list's chips.
   const error = game.llm_turn?.attempts.at(-1)?.error
-  if (endReason === 'king_capture' && winner) reason += `: ${kingCapture(game, winner)}`
-  else if (endReason === 'forfeit' && error) reason += `: ${error}`
+  let detail: string | null = null
+  if (endReason === 'king_capture' && winner) detail = kingCapture(game, winner)
+  else if (endReason === 'forfeit' && error) detail = error
   else if (endReason === 'forfeit' && faceoff(game) && winner) {
     const tries = game.llm_turn?.attempts.length ?? 0
-    reason += `: ${llmSide(game, other(winner)).model} gave no legal move in ${tries} tries`
+    detail = `${llmSide(game, other(winner)).model} gave no legal move in ${tries} tries`
   }
-  return { title, reason }
+  return { result: `${title} ${reason}`, detail }
 }
 
-/** The top bar's chips: who plays whom, then each LLM setting, naming the side when the two LLMs' values differ. */
-export function settingsChips(game: GameState): string[] {
+/** The attempts per turn when the game does not set them otherwise (CONTEXT.md: Retry). */
+const DEFAULT_MAX_ATTEMPTS = 5
+
+/**
+ * The Game card's settings line, one item each: the LLM constraints, the rules, the feedback and thinking, then the
+ * illegal moves before forfeit if not the default. A value that differs between the two LLMs in a faceoff gives one
+ * item per side, e.g. "White thinking off", "Black thinking on".
+ */
+export function settingsLine(game: GameState): string[] {
   const colors = llmColors(game)
   const sides = colors.map((color) => llmSide(game, color))
   const perSide = (format: (side: LlmSide) => string) => {
     const values = sides.map(format)
-    return new Set(values).size === 1 ? [values[0]] : [colors.map((color, i) => `${color} ${values[i]}`).join(' · ')]
+    return new Set(values).size === 1 ? [values[0]] : colors.map((color, i) => `${COLOR_NAMES[color]} ${values[i]}`)
   }
-  const human = humanColor(game)
-  const players =
-    faceoff(game) || !human
-      ? [sides.map((side) => side.model + (side.thinking ? ' (thinking)' : '')).join(' vs ')]
-      : [`you play ${COLOR_NAMES[human]}`, sides[0].model, `thinking ${sides[0].thinking ? 'on' : 'off'}`]
+  const attempts = game.settings.max_attempts
   return [
-    ...players,
-    ...(game.settings.rules === 'chaos' ? ['Chaos rules'] : []),
-    ...perSide((side) => LLM_CONSTRAINTS_NAMES[side.llm_constraints].toLowerCase()),
+    ...perSide((side) => LLM_CONSTRAINTS_NAMES[side.llm_constraints]),
+    game.settings.rules === 'chaos' ? 'Chaos rules' : 'Standard rules',
     ...perSide((side) => `${FEEDBACK_NAMES[side.retry_feedback].toLowerCase()} feedback`),
+    ...perSide((side) => `thinking ${side.thinking ? 'on' : 'off'}`),
+    ...(attempts !== DEFAULT_MAX_ATTEMPTS
+      ? [`${attempts} illegal ${attempts === 1 ? 'move' : 'moves'} before forfeit`]
+      : []),
   ]
 }

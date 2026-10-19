@@ -51,9 +51,9 @@ test('a Play LLM game to checkmate', async ({ page }) => {
   await move(page, 'd1h5', 'Nf6')
   await move(page, 'h5f7', 'Qxf7#')
 
-  const banner = page.getByTestId('banner')
-  await expect(banner).toContainText('White wins')
-  await expect(banner).toContainText('by checkmate')
+  const result = page.getByTestId('result')
+  await expect(result).toContainText('White wins')
+  await expect(result).toContainText('by checkmate')
   await expect(page.getByTestId('status')).toHaveText('Game over')
   await expect(page.getByTestId('moves')).toContainText('Qxf7#')
   await expectPiece(page, 'f7', 'wq')
@@ -79,9 +79,9 @@ test('the LLM forfeits after its retries', async ({ page }) => {
 
   await clickMove(page, 'e2e4')
 
-  const banner = page.getByTestId('banner')
-  await expect(banner).toContainText('White wins')
-  await expect(banner).toContainText('by forfeit')
+  const result = page.getByTestId('result')
+  await expect(result).toContainText('White wins')
+  await expect(result).toContainText('by forfeit')
   await expect(page.locator('.center-flash')).toContainText('✗ LLM forfeits: 5 illegal moves')
   await expect(page.getByTestId('status')).toHaveText('Game over')
   await expect(page.getByTestId('moves')).toContainText('✗ Bb4 illegal · try 5')
@@ -115,9 +115,9 @@ test('an LLM faceoff started from the settings modal plays to its end', async ({
   await settings.getByRole('button', { name: 'Start new game' }).click()
   await expect(settings).toBeHidden()
 
-  const banner = page.getByTestId('banner')
-  await expect(banner).toContainText(/\(Black\) wins/)
-  await expect(banner).toContainText('by checkmate')
+  const result = page.getByTestId('result')
+  await expect(result).toContainText(/\(Black\) wins/)
+  await expect(result).toContainText('by checkmate')
   await expect(page.getByTestId('moves')).toContainText(/1\.\s*f3\s*e5\s*2\.\s*g4\s*Qh4#/)
   await expect(page.getByTestId('status')).toHaveText('Game over')
   await expectPiece(page, 'h4', 'bq')
@@ -169,7 +169,7 @@ test('the move history of an LLM faceoff, stepped through after its end', async 
     data: { mode: 'llm_faceoff', white: { player: 'llm' }, black: { player: 'llm' } },
   })
   await page.goto('/')
-  await expect(page.getByTestId('banner')).toContainText('by checkmate')
+  await expect(page.getByTestId('result')).toContainText('by checkmate')
 
   await page.keyboard.press('ArrowLeft')
   await expect(page.getByTestId('status')).toHaveText('Viewing 2. g4 · → or Back to live')

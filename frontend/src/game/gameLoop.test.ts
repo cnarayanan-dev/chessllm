@@ -4,6 +4,7 @@ import {
   boardInput,
   gameLoop,
   initialGameLoop,
+  orientation,
   phase,
   shownPosition,
   type GameLoop,
@@ -568,5 +569,22 @@ describe('the move history', () => {
 
     expect(gameLoop(viewing, { type: 'new-game', newGame: null }).history).toBeNull()
     expect(gameLoop(viewing, received(viewing, afterE4({ game_id: 'game-2' }))).history).toBeNull()
+  })
+})
+
+describe('orientation', () => {
+  const llm = aGame().settings.black
+
+  test("in Play LLM the human's side is at the bottom", () => {
+    expect(orientation(aGame())).toBe('white')
+    expect(orientation(aGame({ settings: { ...aGame().settings, white: llm, black: { player: 'human' } } }))).toBe(
+      'black',
+    )
+  })
+
+  test('in an LLM faceoff White is at the bottom', () => {
+    const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+
+    expect(orientation(aGame({ settings }))).toBe('white')
   })
 })

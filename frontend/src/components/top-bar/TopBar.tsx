@@ -1,6 +1,6 @@
 // The top bar of every page: the ChessLLM mark, then Analytics, New game and Settings.
 import { ChartNoAxesColumn, Plus, Settings2 } from 'lucide-react'
-import { type ReactNode, useEffect } from 'react'
+import { useEffect } from 'react'
 import rook from '@/assets/chessllm-rook.svg'
 import { thenHref } from '@/components/top-bar/then'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -18,11 +18,9 @@ type TopBarProps = {
   onSettings?: () => void
   /** The page shown, marked among the links. */
   current?: 'analytics'
-  /** What the page shows in the bar after the actions. */
-  children?: ReactNode
 }
 
-export function TopBar({ onNewGame, onSettings, current, children }: TopBarProps) {
+export function TopBar({ onNewGame, onSettings, current }: TopBarProps) {
   // On the game page the Settings modal itself listens for ⌘K (Ctrl+K).
   useEffect(() => {
     if (onSettings) return
@@ -78,7 +76,6 @@ export function TopBar({ onNewGame, onSettings, current, children }: TopBarProps
           Settings <Kbd>⌘K</Kbd>
         </TooltipContent>
       </Tooltip>
-      {children}
     </header>
   )
 }

@@ -45,16 +45,6 @@ describe('on the game page', () => {
     const tooltip = await screen.findByText('⌘K')
     expect(tooltip.closest('[data-slot=tooltip-content]')).toHaveTextContent('Settings ⌘K')
   })
-
-  test('holds what the page puts in it, after the actions', () => {
-    render(
-      <TopBar onNewGame={() => {}} onSettings={() => {}}>
-        <span>you play White</span>
-      </TopBar>,
-    )
-
-    expect(within(topBar()).getByText('you play White')).toBeInTheDocument()
-  })
 })
 
 describe('on a page without the game', () => {

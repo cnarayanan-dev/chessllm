@@ -1,0 +1,40 @@
+/* The game page's columns: the Game card ¼, the board ½, the moves ¼. */
+.game-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-areas: "game board moves";
+  align-items: start;
+  gap: 32px;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 4px 32px 40px;
+}
+.game-layout > .game-column { grid-area: game; }
+.game-layout > .board-column { grid-area: board; }
+.game-layout > .moves-column { grid-area: moves; }
+.game-column, .moves-column { display: flex; flex-direction: column; gap: 20px; }
+.board-column { display: flex; justify-content: center; }
+/* The board and whatever sits directly above and below it, at the board's width. The board fits the window's
+   height, less the top bar, the page's padding and a player strip above and below it. */
+.board-stack { width: min(100%, calc(100svh - 206px)); display: flex; flex-direction: column; gap: 10px; }
+
+/* Two columns: the board, and the moves with the Game card under them. */
+@media (max-width: 1100px) {
+  .game-layout {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-areas: "board moves" "board game";
+    grid-template-rows: auto 1fr;
+    row-gap: 20px;
+  }
+}
+
+/* One column: the board, the moves, the Game card. */
+@media (max-width: 760px) {
+  .game-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "board" "moves" "game";
+    grid-template-rows: none;
+    padding: 4px 16px 40px;
+  }
+  .board-stack { width: 100%; }
+}

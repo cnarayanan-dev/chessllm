@@ -82,6 +82,9 @@ export const initialGameLoop: GameLoop = {
 export const humanColor = (game: GameState): Color | null =>
   game.settings.white.player === 'human' ? 'white' : game.settings.black.player === 'human' ? 'black' : null
 
+/** The side at the bottom of the board: the human's in Play LLM, White in an LLM faceoff. */
+export const orientation = (game: GameState): Color => humanColor(game) ?? 'white'
+
 export const llmToMove = (game: GameState): boolean =>
   game.status === 'playing' && game.settings[game.turn].player === 'llm'
 

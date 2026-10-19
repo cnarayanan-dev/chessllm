@@ -92,3 +92,105 @@ test('the top bar on the Analytics page: its New game starts one on the game pag
   await expect.poll(async () => (await (await page.request.get('/api/games/current')).json()).game_id).not.toBe(before)
   await expect(page).toHaveURL(/\/$/)
 })
+
+/** The box of each of the game page's columns. */
+async function columns(page: Page) {
+  const box = async (testId: string) => (await page.getByTestId(testId).boundingBox())!
+  return { game: await box('game-column'), board: await box('board-column'), moves: await box('moves-column') }
+}
+
+test('at desktop width the game page has three columns: the Game card ¼, the board ½, the moves ¼', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openGame(page)
+
+  const { game, board, moves } = await columns(page)
+  expect(game.x + game.width).toBeLessThan(board.x)
+  expect(board.x + board.width).toBeLessThan(moves.x)
+  expect(new Set([game.y, board.y, moves.y]).size).toBe(1)
+  expect(board.width / game.width).toBeCloseTo(2, 1)
+  expect(moves.width).toBeCloseTo(game.width, 0)
+  await expect(page.getByRole('region', { name: 'Game' })).toBeVisible()
+})
+
+test('between 760px and 1100px: two columns, the board, and the moves with the Game card under them', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 })
+  await openGame(page)
+
+  const { game, board, moves } = await columns(page)
+  expect(board.x + board.width).toBeLessThan(moves.x)
+  expect(game.x).toBe(moves.x)
+  expect(game.y).toBeGreaterThan(moves.y + moves.height)
+})
+
+test('below 760px: one column, the board, the moves, then the Game card', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 900 })
+  await openGame(page)
+
+  const { game, board, moves } = await columns(page)
+  expect(new Set([game.x, board.x, moves.x]).size).toBe(1)
+  expect(moves.y).toBeGreaterThan(board.y + board.height)
+  expect(game.y).toBeGreaterThan(moves.y + moves.height)
+})
+
+/**
+ * The Game card's settings items, line by line: each item's box, whether it is cut off by the line's clip, and
+ * whether its "|" (in its left padding) shows; the clip hides it at the start of a line.
+ */
+async function settingsLines(page: Page) {
+  const items = await page.getByTestId('setting').evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect()
+      const clip = element.parentElement!.parentElement!.getBoundingClientRect()
+      const bar = parseFloat(getComputedStyle(element, '::before').left)
+      return {
+        top: box.top,
+        height: box.height,
+        clipped: box.right > clip.right + 0.5 || element.scrollWidth > element.clientWidth,
+        barShown: box.left + bar >= clip.left,
+      }
+    }),
+  )
+  const lines: (typeof items)[] = []
+  items.forEach((item, i) => (i === 0 || item.top !== items[i - 1].top ? lines.push([item]) : lines.at(-1)!.push(item)))
+  return lines
+}
+
+/** Expects every item shown whole, on one line unless it is alone on its line, and no "|" starting a line. */
+function expectWrappedBetweenItems(lines: Awaited<ReturnType<typeof settingsLines>>) {
+  const lineHeight = Math.min(...lines.flat().map((item) => item.height))
+  for (const line of lines) {
+    line.forEach((item, i) => {
+      expect(item.clipped).toBe(false)
+      expect(item.barShown).toBe(i > 0)
+      if (line.length > 1) expect(item.height).toBe(lineHeight)
+    })
+  }
+}
+
+test('the settings line wraps only between items, and no "|" starts a line', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openGame(page)
+
+  const lines = await settingsLines(page)
+  expect(lines.length).toBeGreaterThan(1) // it wraps at this width
+  expectWrappedBetweenItems(lines)
+})
+
+for (const width of [1101, 761]) {
+  test(`at ${width}px a faceoff's per-side settings are shown whole`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.request.post('/e2e/script', { data: {} })
+    const started = await page.request.post('/api/games', {
+      data: {
+        mode: 'llm_faceoff',
+        white: { player: 'llm', llm_constraints: 'listed_enforced' },
+        black: { player: 'llm', retry_feedback: 'hinted' },
+      },
+    })
+    expect(started.ok()).toBe(true)
+    await page.goto('/')
+    await expect(page.getByTestId('setting').first()).toHaveText('White Listed enforced')
+
+    expectWrappedBetweenItems(await settingsLines(page))
+  })
+}

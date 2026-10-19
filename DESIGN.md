@@ -36,6 +36,14 @@ Dark mode is out of scope; `.dark` keeps shadcn's neutral values.
 
 `frontend/src/components/top-bar/TopBar.tsx`, on every page: the **ChessLLM** mark (the Merida rook on a light square, `frontend/src/assets/chessllm-rook.svg`, also the browser tab's icon) linking to the game, then **Analytics**, **New game** and **Settings** on the left. The ⌘K shortcut shows only in the Settings button's tooltip. On a page without the game, New game and Settings (and ⌘K) are links to the game page (`/?then=new-game`, `/?then=settings`), which does it once the game is shown.
 
+## Game page
+
+`frontend/src/components/game-layout/GameLayout.tsx` lays the page out in three columns, **¼ | ½ | ¼**: the Game card on the left (the Reasoning panel is to go under it), the board in the middle, the moves on the right (for now with the status line and the Show thinking panel above them). From 1100px down to 760px it is two columns (the board, and the moves with the Game card under them); below 760px one column (board, moves, Game card). The board column is a stack at the board's width, which fits the window's height, so what goes directly above and below the board (the player strips) has its width.
+
+The board shows the human's side at the bottom in **Play LLM**, White in an **LLM faceoff** (`orientation` in `frontend/src/game/gameLoop.ts`).
+
+The **Game card** (`frontend/src/components/game-card/GameCard.tsx`), a lichess game card without Elo: a Mode icon (Lucide `Swords` for Play LLM, `Bot` for LLM faceoff) and the Mode, then the settings separated by "|" (each item on one line, so the line wraps only between items, and no "|" starts a line; a value that differs between the two LLMs gives one item per side), then the players as ○ White / ● Black. When the game is over, the result line and a New game button follow a Separator. The "changes apply to the next game" note and request errors go last.
+
 ## Analytics page
 
 `frontend/src/analytics/AnalyticsPage.tsx`: the page's title on the Stone page, then the leaderboard in one Card: the legend and the "All columns" Switch, the Table and its note. The table's header row is a filled `muted` strip with rounded ends, its rows are split by faint lines only, and the sorted column carries a Lucide arrow. The chips are `secondary` Badges, tinted by their hue (`analytics.css`); the unvalidated Move-quality estimate is marked by a dashed `outline` Badge. Loading, no games and errors show in a Card in the table's place. `frontend/e2e/analytics.e2e.ts` checks every text on the built page against WCAG AA, on the surface it sits on.

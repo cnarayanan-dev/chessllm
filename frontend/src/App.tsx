@@ -4,26 +4,26 @@ import { modelsQuery } from '@/api/models'
 import type { GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { BoardFlashes } from '@/components/board/BoardFlashes'
+import { GameCard } from '@/components/game-card/GameCard'
+import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { chaosShown, type ChaosShown } from '@/game/chaos'
 import {
   boardInput,
-  humanColor,
-  phase,
+  orientation,
   shownPosition,
   waitingForLlm,
   type History,
   type Shown,
 } from '@/game/gameLoop'
 import { useGameLoop } from '@/game/useGameLoop'
-import { bannerText, faceoff, historyStatusText, llmName, settingsChips, statusText } from '@/game/wording'
+import { faceoff, historyStatusText, llmName, statusText } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsModal } from '@/settings/SettingsModal'
 
@@ -83,22 +83,6 @@ const keyTakenElsewhere = (event: KeyboardEvent) =>
   (event.target instanceof HTMLElement &&
     (event.target.isContentEditable || !!event.target.closest('input, textarea, select, [role="dialog"]')))
 
-function Banner({ game, onNewGame }: { game: GameState; onNewGame: () => void }) {
-  const { title, reason } = bannerText(game)
-  return (
-    <div data-testid="banner" className="flex items-center gap-3 rounded-3xl bg-muted py-3.5 pr-3.5 pl-5">
-      <div>
-        <div className="text-base font-semibold">{title}</div>
-        <div className="text-muted-foreground">{reason}</div>
-      </div>
-      <span className="flex-1" />
-      <Button variant="outline" onClick={onNewGame}>
-        New game
-      </Button>
-    </div>
-  )
-}
-
 /** The caption under the board for the chaos move or spawn shown, live or in the move history. */
 function ChaosCaption({ chaos }: { chaos: ChaosShown }) {
   return (
@@ -139,7 +123,6 @@ export default function App() {
   const models: Models = modelsList.isError ? null : (modelsList.data ?? null)
   const pending = game !== null && next !== null && isPending(next, models, game.settings)
   const running = waitingForLlm(state)
-  const human = game && humanColor(game)
   // A new array with every state, so the same position given again snaps a rejected move's piece back.
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
   // The chaos move or spawn shown, from the ply's own resolution: the same live and in the history. Kept while
@@ -176,12 +159,7 @@ export default function App() {
 
   return (
     <div className="min-h-svh text-sm">
-      <TopBar onNewGame={startNewGame} onSettings={() => setSettingsOpen(true)}>
-        <div className="ml-3 flex flex-wrap gap-1.5">
-          {game && settingsChips(game).map((chip) => <Badge variant="secondary" key={chip}>{chip}</Badge>)}
-          {pending && <Badge className="bg-primary/10 text-primary">changes apply next game</Badge>}
-        </div>
-      </TopBar>
+      <TopBar onNewGame={startNewGame} onSettings={() => setSettingsOpen(true)} />
       {game && next && (
         <SettingsModal
           open={settingsOpen}
@@ -192,50 +170,60 @@ export default function App() {
           onStartNext={newGame}
         />
       )}
-      <main className="grid grid-cols-[minmax(320px,560px)_340px] justify-center gap-8 px-5 pt-7 pb-10 max-[960px]:grid-cols-[minmax(280px,560px)]">
-        {game && shown ? (
-          <div className="flex flex-col gap-2.5">
-            <Board
-              fen={shown.fen}
-              orientation={human ?? 'white'}
-              lastMove={shown.lastMove}
-              animateFrom={shown.animateFrom}
-              check={shown.check}
-              // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
-              // position the move left. Locked while the move history shows the past.
-              input={boardInput(state)}
-              legalMoves={legalMoves}
-              arrows={chaos?.arrows ?? NO_ARROWS}
-              spawn={chaos?.spawn ?? null}
-              onMove={humanMove}
-            >
-              {/* The live turn's flashes, kept off a past position. */}
-              {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
-            </Board>
-            {chaos && <ChaosCaption chaos={chaos} />}
-          </div>
-        ) : (
-          <div className="aspect-square w-full" />
-        )}
-        <div className="flex flex-col gap-3.5">
-          {game && phase(state) === 'over' && <Banner game={game} onNewGame={startNewGame} />}
-          <Status
-            key={running ? request!.id : 'idle'}
-            game={game}
-            failed={error !== null}
-            running={running}
-            viewing={history && shown ? { shown, history, onLive: backToLive } : null}
-          />
-          {error !== null && (
-            <Alert variant="destructive">
-              <AlertDescription className="text-destructive">{error}</AlertDescription>
-            </Alert>
-          )}
-          {/* In Play LLM the thinking hides as the LLM's next turn starts. */}
-          {game && <Thinking game={game} hidden={running && !faceoff(game)} />}
-          {game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
-        </div>
-      </main>
+      <GameLayout
+        game={
+          // The Reasoning panel is to go under the Game card; the Thinking stays with the moves for now.
+          game ? (
+            <GameCard game={game} pending={pending} error={error} onNewGame={startNewGame} />
+          ) : (
+            error !== null && (
+              <Alert variant="destructive">
+                <AlertDescription className="text-destructive">{error}</AlertDescription>
+              </Alert>
+            )
+          )
+        }
+        board={
+          game && shown ? (
+            <>
+              <Board
+                fen={shown.fen}
+                orientation={orientation(game)}
+                lastMove={shown.lastMove}
+                animateFrom={shown.animateFrom}
+                check={shown.check}
+                // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
+                // position the move left. Locked while the move history shows the past.
+                input={boardInput(state)}
+                legalMoves={legalMoves}
+                arrows={chaos?.arrows ?? NO_ARROWS}
+                spawn={chaos?.spawn ?? null}
+                onMove={humanMove}
+              >
+                {/* The live turn's flashes, kept off a past position. */}
+                {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
+              </Board>
+              {chaos && <ChaosCaption chaos={chaos} />}
+            </>
+          ) : (
+            <div className="aspect-square w-full" />
+          )
+        }
+        moves={
+          <>
+            <Status
+              key={running ? request!.id : 'idle'}
+              game={game}
+              failed={error !== null}
+              running={running}
+              viewing={history && shown ? { shown, history, onLive: backToLive } : null}
+            />
+            {/* In Play LLM the thinking hides as the LLM's next turn starts. */}
+            {game && <Thinking game={game} hidden={running && !faceoff(game)} />}
+            {game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
+          </>
+        }
+      />
       <footer className="px-5 pb-6 text-center text-xs text-muted-foreground">
         Pieces: Merida by Armando Hernandez Marroquin, GPLv2+ · Move sound: Kenney, CC0
       </footer>
