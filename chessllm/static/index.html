@@ -136,6 +136,8 @@
   .players .select { width: 100%; max-width: none; }
   .swap { border: 1px solid var(--line); background: var(--bg); border-radius: 5px; padding: 5px 9px; cursor: pointer; color: var(--muted); }
   .swap:hover { background: var(--hover); }
+  /* A side's block when each LLM is customized: its colour and model over its own cards. */
+  .sub { font-size: 12px; color: var(--muted); margin: 6px 0 -8px; }
   .row .txt { flex: 1; } .row .t { font-weight: 500; } .row .d { color: var(--muted); font-size: 12.5px; }
   .select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 5px; padding: 5px 8px; font: inherit; min-width: 170px; max-width: 260px; }
   .switch { width: 34px; height: 20px; border-radius: 99px; background: var(--line); border: 0; position: relative; cursor: pointer; flex: none; }
@@ -221,16 +223,18 @@
       <div class="radios" id="modes" style="grid-template-columns:repeat(2, 1fr)"></div>
       <div class="row" id="colorsRow" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Your colour</div><div class="d">The LLM plays the other colour. White moves first.</div></div></div>
       <div class="radios" id="colors" style="grid-template-columns:repeat(2, 1fr)"></div>
-      <div class="row" id="playersRow" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Players</div><div class="d">A model for each side. The same model can play itself. Both LLMs play under the settings below.</div></div></div>
+      <div class="row" id="playersRow" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Players</div><div class="d">A model for each side. The same model can play itself.</div></div></div>
       <div class="players" id="players">
         <div><div class="who">♔ White</div><select class="select" id="whiteModel"></select></div>
         <button class="swap" id="swapSides" title="Swap colours">⇄</button>
         <div><div class="who">♚ Black</div><select class="select" id="blackModel"></select></div>
       </div>
+      <div class="row" id="customizeRow"><div class="txt"><div class="t">Customize per LLM</div><div class="d">Off: both LLMs play under the same settings, a fair comparison. On: set each LLM separately.</div></div>
+        <button class="switch" id="customizeSwitch" role="switch" aria-label="Customize per LLM"></button></div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">LLM constraints</div><div class="d">Whether the LLM is shown the legal moves in each turn's prompt, and whether it is held to them.</div></div></div>
-      <div class="radios" id="llmConstraints" style="grid-template-columns:repeat(2, 1fr)"></div>
+      <div id="llmConstraints"></div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d" id="feedbackHint">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
-      <div class="radios" id="feedbackLevels"></div>
+      <div id="feedbackLevels"></div>
       <div class="row"><div class="txt"><div class="t">Move sound</div><div class="d">A click on every move, yours and the LLM's. Applies at once, in this browser.</div></div>
         <button class="switch" id="moveSoundSwitch" role="switch" aria-label="Move sound"></button></div>
     </section>
@@ -238,8 +242,9 @@
       <h2>Model</h2>
       <div class="row" id="modelRow"><div class="txt"><div class="t">Model</div><div class="d" id="modelHint"></div></div>
         <select class="select" id="model"></select></div>
-      <div class="row"><div class="txt"><div class="t">Thinking</div><div class="d" id="thinkingHint"></div></div>
+      <div class="row" id="thinkingRow"><div class="txt"><div class="t">Thinking</div><div class="d" id="thinkingHint"></div></div>
         <button class="switch" id="thinkingSwitch" role="switch" aria-label="Thinking"></button></div>
+      <div id="sideThinking"></div>
     </section>
     <section data-section="advanced">
       <h2>Advanced</h2>
@@ -637,9 +642,10 @@ const MODES = {
   play_llm: {name: "Play LLM", description: "You play one side, an LLM the other"},
   llm_faceoff: {name: "LLM faceoff", description: "An LLM on each side, to compare models. It plays itself to the end."},
 }
-// The setup for the next game: {mode, human_color, models: {white, black}, thinking, llm_constraints, retry_feedback}.
-// Each colour keeps a model, so the LLM keeps its model when the human changes colour or the Mode changes. Thinking,
-// LLM constraints and Retry feedback are shared by every LLM side.
+// The setup for the next game: {mode, human_color, models: {white, black}, custom, sides: {white, black}}, each side
+// {thinking, llm_constraints, retry_feedback}. Each colour keeps a model, so the LLM keeps its model when the human
+// changes colour or the Mode changes. The settings are shared by every LLM side, and both sides hold the same values,
+// unless a faceoff customizes them per LLM.
 let next = null
 let models = null // the model list, [{name, thinking, sampling}], or null until listed
 let modelsError = null // why they could not be listed
@@ -649,22 +655,33 @@ const nextLlmColors = () => next.mode === "llm_faceoff" ? COLORS : [other(next.h
 const canThink = name => models?.find(model => model.name === name)?.thinking ?? true
 // Shared thinking only when every LLM can think, so it never means different things for the two sides.
 const thinkingAllowed = () => nextLlmColors().every(color => canThink(next.models[color]))
+// Customizing is a faceoff's alone: picking Play LLM turns it off, so each side's settings never part from its model.
+const customizing = () => next.custom
+// A side's setting: its own when customizing, else the shared one, which both sides hold.
+const value = (color, key) => next.sides[customizing() ? color : "white"][key]
+function setValue(color, key, choice) {
+  for (const side of customizing() ? [color] : COLORS) next.sides[side][key] = choice
+}
+const thinkingOn = color => value(color, "thinking") && (customizing() ? canThink(next.models[color]) : thinkingAllowed())
+const sideValues = side => ({thinking: side.thinking, llm_constraints: side.llm_constraints, retry_feedback: side.retry_feedback})
 
 function nextFrom(settings) {
   const [first] = llmColors({settings}).map(color => settings[color])
+  const sides = Object.fromEntries(COLORS.map(color => [color, sideValues(settings[color].player === "llm" ? settings[color] : first)]))
   return {
     mode: settings.mode,
     human_color: humanColor({settings}) ?? "white",
     models: {white: settings.white.model ?? first.model, black: settings.black.model ?? first.model},
-    thinking: first.thinking, llm_constraints: first.llm_constraints, retry_feedback: first.retry_feedback,
+    custom: settings.mode === "llm_faceoff" && !sameSide(sides.white, sides.black),
+    sides,
   }
 }
 
 // The new-game request: the Mode and each side, in the shape of the game's settings.
 function newGameRequest() {
   const llm = color => ({
-    player: "llm", model: next.models[color], thinking: next.thinking && thinkingAllowed(),
-    llm_constraints: next.llm_constraints, retry_feedback: next.retry_feedback,
+    player: "llm", model: next.models[color], thinking: thinkingOn(color),
+    llm_constraints: value(color, "llm_constraints"), retry_feedback: value(color, "retry_feedback"),
   })
   const side = color => next.mode === "play_llm" && color === next.human_color ? {player: "human"} : llm(color)
   return {mode: next.mode, white: side("white"), black: side("black")}
@@ -694,6 +711,8 @@ function settingsChips(game) {
   ].map(text => chip(text))
 }
 
+const div = (className, textContent = "") => Object.assign(document.createElement("div"), {className, textContent})
+
 function chip(text, className = "chip") {
   const element = document.createElement("span")
   element.className = className
@@ -719,7 +738,11 @@ function showSettings() {
     card.setAttribute("role", "radio")
     card.setAttribute("aria-checked", next.mode === mode)
     card.append(chip(name, "t"), ...(mode === "play_llm" ? [chip("default", "default")] : []), chip(description, "d"))
-    card.onclick = () => { next.mode = mode; showSettings() }
+    card.onclick = () => {
+      if (mode === "play_llm" && customizing()) toggleCustomize()
+      next.mode = mode
+      showSettings()
+    }
     return card
   }))
   $("colorsRow").hidden = $("colors").hidden = isFaceoff
@@ -737,29 +760,38 @@ function showSettings() {
     }
     return card
   }))
-  $("llmConstraints").replaceChildren(...Object.entries(LLM_CONSTRAINTS).map(([choice, {name, description}]) => {
-    const card = document.createElement("button")
-    card.className = "radio" + (next.llm_constraints === choice ? " on" : "")
-    card.setAttribute("role", "radio")
-    card.setAttribute("aria-checked", next.llm_constraints === choice)
-    card.append(chip(name, "t"), ...(choice === "free" ? [chip("default", "default")] : []), chip(description, "d"))
-    card.onclick = () => { next.llm_constraints = choice; showSettings() }
-    return card
-  }))
-  const enforced = ENFORCED.includes(next.llm_constraints)
-  $("feedbackHint").textContent = enforced
+  $("customizeRow").hidden = !isFaceoff
+  $("customizeSwitch").classList.toggle("on", customizing())
+  $("customizeSwitch").setAttribute("aria-checked", customizing())
+  // When customizing, a White block and a Black block, each labelled with its side and model; else one for both.
+  const shownColors = customizing() ? COLORS : ["white"]
+  const blocks = build => shownColors.flatMap(color => [
+    ...(customizing() ? [div("sub", `${ICON[color]} ${COLOR_NAMES[color]} · ${next.models[color]}`)] : []),
+    build(color),
+  ])
+  const radios = (color, key, options, defaultChoice, columns, disabled = false) => {
+    const cards = div("radios")
+    cards.style.gridTemplateColumns = `repeat(${columns}, 1fr)`
+    cards.append(...Object.entries(options).map(([choice, {name, description}]) => {
+      const card = document.createElement("button")
+      card.className = "radio" + (value(color, key) === choice ? " on" : "")
+      card.disabled = disabled
+      card.setAttribute("role", "radio")
+      card.setAttribute("aria-checked", value(color, key) === choice)
+      card.append(chip(name, "t"), ...(choice === defaultChoice ? [chip("default", "default")] : []), chip(description, "d"))
+      card.onclick = () => { setValue(color, key, choice); showSettings() }
+      return card
+    }))
+    return cards
+  }
+  $("llmConstraints").replaceChildren(...blocks(color => radios(color, "llm_constraints", LLM_CONSTRAINTS, "free", 2)))
+  const enforced = color => ENFORCED.includes(value(color, "llm_constraints"))
+  const noEffect = shownColors.filter(enforced)
+  $("feedbackHint").textContent = noEffect.length === shownColors.length
     ? "No effect: under Enforced decoding the LLM can't play an illegal move."
-    : "What the LLM is told after an illegal move. It gets 3 retries, then forfeits."
-  $("feedbackLevels").replaceChildren(...Object.entries(FEEDBACK_LEVELS).map(([level, {name, description}]) => {
-    const card = document.createElement("button")
-    card.className = "radio" + (next.retry_feedback === level ? " on" : "")
-    card.disabled = enforced
-    card.setAttribute("role", "radio")
-    card.setAttribute("aria-checked", next.retry_feedback === level)
-    card.append(chip(name, "t"), ...(level === "explained" ? [chip("default", "default")] : []), chip(description, "d"))
-    card.onclick = () => { next.retry_feedback = level; showSettings() }
-    return card
-  }))
+    : `What the LLM is told after an illegal move. It gets 3 retries, then forfeits.${noEffect.length
+      ? ` No effect for ${COLOR_NAMES[noEffect[0]]}: under Enforced decoding it can't play an illegal move.` : ""}`
+  $("feedbackLevels").replaceChildren(...blocks(color => radios(color, "retry_feedback", FEEDBACK_LEVELS, "explained", 3, enforced(color))))
   // The chosen models stay listed until the list has loaded.
   const modelOptions = chosen => {
     const names = (models ?? []).map(model => model.name)
@@ -772,8 +804,26 @@ function showSettings() {
   $("whiteModel").replaceChildren(...modelOptions(next.models.white))
   $("blackModel").replaceChildren(...modelOptions(next.models.black))
   $("modelHint").textContent = modelsError ? `Could not list the models: ${modelsError}` : "The models in chessllm/models.py"
+  $("thinkingRow").hidden = customizing()
+  $("sideThinking").replaceChildren(...(customizing() ? COLORS : []).map(color => {
+    const model = next.models[color]
+    const text = div("txt")
+    text.append(div("t", `${ICON[color]} ${COLOR_NAMES[color]} thinking`), div("d", canThink(model)
+      ? `${model} reasons before answering. Slower, likely stronger play.`
+      : `${model} can't think: it reasons in its answer instead, before the move.`))
+    const toggle = document.createElement("button")
+    toggle.className = "switch" + (thinkingOn(color) ? " on" : "")
+    toggle.setAttribute("role", "switch")
+    toggle.setAttribute("aria-checked", thinkingOn(color))
+    toggle.setAttribute("aria-label", `${COLOR_NAMES[color]} thinking`)
+    toggle.disabled = !canThink(model)
+    toggle.onclick = () => { setValue(color, "thinking", !thinkingOn(color)); showSettings() }
+    const row = div("row")
+    row.append(text, toggle)
+    return row
+  }))
   const allowed = thinkingAllowed()
-  const thinking = next.thinking && allowed
+  const thinking = thinkingOn("white")
   $("thinkingSwitch").classList.toggle("on", thinking)
   $("thinkingSwitch").setAttribute("aria-checked", thinking)
   $("thinkingSwitch").disabled = !allowed
@@ -817,6 +867,24 @@ function swapModels() {
   next.models = {white: next.models.black, black: next.models.white}
 }
 
+// ⇄ in a faceoff: each LLM takes its customized settings to the other colour.
+function swapSides() {
+  swapModels()
+  next.sides = {white: next.sides.black, black: next.sides.white}
+}
+
+// On, each side starts from the shared values; off, both sides take White's.
+function toggleCustomize() {
+  if (customizing()) {
+    next.sides.black = {...next.sides.white}
+    next.custom = false
+  } else {
+    const thinking = thinkingOn("white")
+    for (const color of COLORS) next.sides[color].thinking = thinking
+    next.custom = true
+  }
+}
+
 async function openSettings() {
   $("scrim").hidden = $("settings").hidden = false
   showSettings()
@@ -840,8 +908,9 @@ document.querySelectorAll("#settings nav button").forEach(button => {
 $("model").onchange = event => { next.models[other(next.human_color)] = event.target.value; showSettings() }
 $("whiteModel").onchange = event => { next.models.white = event.target.value; showSettings() }
 $("blackModel").onchange = event => { next.models.black = event.target.value; showSettings() }
-$("swapSides").onclick = () => { swapModels(); showSettings() }
-$("thinkingSwitch").onclick = () => { next.thinking = !(next.thinking && thinkingAllowed()); showSettings() }
+$("swapSides").onclick = () => { swapSides(); showSettings() }
+$("customizeSwitch").onclick = () => { toggleCustomize(); showSettings() }
+$("thinkingSwitch").onclick = () => { setValue("white", "thinking", !thinkingOn("white")); showSettings() }
 $("openSettings").onclick = openSettings
 $("closeSettings").onclick = closeSettings
 $("scrim").onclick = closeSettings

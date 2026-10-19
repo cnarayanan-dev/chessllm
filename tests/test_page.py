@@ -100,3 +100,11 @@ def test_the_settings_modal_offers_the_mode_and_a_model_per_side_for_a_faceoff(c
     assert 'llm_faceoff: {name: "LLM faceoff"' in page
     assert 'id="whiteModel"' in page and 'id="blackModel"' in page
     assert 'id="swapSides"' in page
+
+
+def test_a_faceoff_can_customize_each_llms_constraints_retry_feedback_and_thinking(client):
+    page = client.get("/").text
+
+    assert 'id="customizeSwitch"' in page
+    assert "Customize per LLM" in page
+    assert 'id="sideThinking"' in page
