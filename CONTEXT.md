@@ -119,7 +119,7 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking, **LLM constraints**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
+An LLM together with every setting it plays a game with: model, thinking, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Rating**:
