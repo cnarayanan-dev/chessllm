@@ -98,7 +98,7 @@ def test_an_llm_playing_white_that_forfeits_its_first_move_loses_as_white(script
 
     assert (state["status"], state["result"], state["end_reason"]) == ("over", "0-1", "forfeit")
     start, *_, end = events(tmp_path / "games")
-    assert start["llm_color"] == "white"
+    assert (start["white"]["player"], start["black"]) == ("llm", {"player": "human"})
     assert (end["type"], end["result"], end["plies"]) == ("game_end", "0-1", 0)
 
 
@@ -108,7 +108,7 @@ def test_the_log_records_the_llm_as_black_when_the_human_plays_white(scripted, t
     client.post("/api/games", json={"human_color": "white"})
 
     [start] = events(tmp_path / "games")
-    assert start["llm_color"] == "black"
+    assert (start["white"], start["black"]["player"]) == ({"player": "human"}, "llm")
 
 
 def test_a_colour_other_than_white_or_black_is_refused(scripted):

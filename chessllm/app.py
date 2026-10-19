@@ -80,7 +80,8 @@ def create_app(
             raise HTTPException(400, f"{settings.model} is not in the model list")
         if settings.thinking and not model.thinking:
             raise HTTPException(400, f"{settings.model} cannot think, so thinking must be off")
-        game = GameSession(player_for(settings), settings, GameLog(games_dir, settings.model))
+        white, black = settings.side_names()
+        game = GameSession(player_for(settings), settings, GameLog(games_dir, white, black))
         return game.state()
 
     def current_game() -> GameSession:

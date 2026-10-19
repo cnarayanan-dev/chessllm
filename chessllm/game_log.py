@@ -16,14 +16,19 @@ def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def file_name_part(player: str) -> str:
+    return player.replace(":", "-").replace("/", "-")
+
+
 class GameLog:
-    """The files of one game, named by start time and model, e.g. games/2026-10-18T20-31-05_qwen3.5-9b.jsonl.
+    """The files of one game, named by start time and both sides, White first, with "human" for a human side,
+    e.g. games/2026-10-19T10-00-00_human_vs_llama3-8b.jsonl (ADR 0004).
 
     Every event is written as it happens, so a game abandoned with "New game" keeps its log so far."""
 
-    def __init__(self, games_dir: Path, model: str) -> None:
+    def __init__(self, games_dir: Path, white: str, black: str) -> None:
         games_dir.mkdir(parents=True, exist_ok=True)
-        stem = f"{datetime.now():%Y-%m-%dT%H-%M-%S}_{model.replace(':', '-').replace('/', '-')}"
+        stem = f"{datetime.now():%Y-%m-%dT%H-%M-%S}_{file_name_part(white)}_vs_{file_name_part(black)}"
         self.game_id = uuid.uuid4().hex
         self.path = games_dir / f"{stem}.jsonl"
         number = 1

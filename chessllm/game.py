@@ -34,6 +34,12 @@ class Settings:
     llm_constraints: LlmConstraints = "free"
     sampling: dict[str, float] = field(default_factory=dict)  # from the config file; empty means the model's defaults
 
+    def side_names(self) -> tuple[str, str]:
+        """Who plays White and who plays Black: "human" or the model."""
+        if self.human_color == "white":
+            return "human", self.model
+        return self.model, "human"
+
 
 def color_name(color: chess.Color) -> Color:
     return "white" if color == chess.WHITE else "black"
@@ -98,15 +104,22 @@ class GameSession:
         self._recovered_turns = 0
         self._notation_slips = 0
         self._human = chess.WHITE if settings.human_color == "white" else chess.BLACK
+        llm_side = {
+            "player": "llm",
+            "model": settings.model,
+            "thinking": settings.thinking,
+            "llm_constraints": settings.llm_constraints,
+            "retry_feedback": settings.retry_feedback,
+        }
+        sides = {color_name(self._human): {"player": "human"}, color_name(not self._human): llm_side}
         log.write(
             "game_start",
             game_id=log.game_id,
-            model=settings.model,
-            llm_color=color_name(not self._human),
-            llm_constraints=settings.llm_constraints,
-            thinking=settings.thinking,
+            log_version=2,
+            mode="play_llm",
+            white=sides["white"],
+            black=sides["black"],
             sampling=settings.sampling or "model_default",
-            retry_feedback=settings.retry_feedback,
             max_retries=MAX_ATTEMPTS - 1,
             prompt_file=str(SYSTEM_PROMPT_FILES[settings.llm_constraints]),
             started_at=now(),
@@ -131,7 +144,9 @@ class GameSession:
             raise RejectedHumanMove(f"illegal move: {uci}")
         san = board.san(move)
         board.push(move)
-        self._log.write("human_move", ply=len(board.move_stack), move=san, fen_after=board.fen())
+        self._log.write(
+            "human_move", color=color_name(self._human), ply=len(board.move_stack), move=san, fen_after=board.fen()
+        )
         self._check_end()
         if self._end is None:
             self._play_llm_turn()
@@ -142,22 +157,29 @@ class GameSession:
 
     def _write_end(self, end: GameEnd) -> None:
         board = self._board
-        stats = self._stats()
+        llm_color = color_name(not self._human)
+        stats = {"white": None, "black": None} | {llm_color: self._stats()}  # a human's side has no stats (ADR 0004)
         self._log.write(
-            "game_end", result=end.result, reason=end.reason, plies=len(board.move_stack), **stats, ended_at=now()
+            "game_end",
+            result=end.result,
+            reason=end.reason,
+            plies=len(board.move_stack),
+            stats=stats,
+            ended_at=now(),
         )
         thinking = "thinking" if self._settings.thinking else "no thinking"
-        llm = f"{self._settings.model} ({thinking})"
+        llm_name = f"{self._settings.model} ({thinking})"
         self._log.write_pgn(
             board,
             {
                 "Event": "ChessLLM",
                 "Date": f"{date.today():%Y.%m.%d}",
-                "White": "Human" if self._human == chess.WHITE else llm,
-                "Black": llm if self._human == chess.WHITE else "Human",
+                "White": "Human" if self._human == chess.WHITE else llm_name,
+                "Black": llm_name if self._human == chess.WHITE else "Human",
                 "Result": end.result,
                 "Termination": end.reason,
-                "LLMConstraints": self._settings.llm_constraints,
+                "Mode": "Play LLM",
+                f"{llm_color.capitalize()}LLMConstraints": self._settings.llm_constraints,
             },
         )
 
@@ -181,6 +203,7 @@ class GameSession:
         moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
         board = self._board
         model = self._settings.model
+        color = color_name(board.turn)
         pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
         legal_moves = [board.san(legal) for legal in board.legal_moves]
         # Enforced decoding holds the move to exactly the legal moves, rebuilt from the position every turn.
@@ -192,7 +215,7 @@ class GameSession:
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
         prompt_file = SYSTEM_PROMPT_FILES[self._settings.llm_constraints]
-        messages = turn_messages(pgn, fen, color_name(board.turn), prompt_file, listed_moves)
+        messages = turn_messages(pgn, fen, color, prompt_file, listed_moves)
         attempts: list[dict[str, Any]] = []
         turn: dict[str, Any] = {"ply": ply, "attempts": attempts, "thinking": None}
         self._llm_turns.append(turn)
@@ -212,7 +235,9 @@ class GameSession:
             except Exception as error:
                 attempt |= {"result": "error", "error": f"{model} did not reply: {error}"}
             if attempt["error"] is not None:
-                self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt)
+                self._log.write(
+                    "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt
+                )
                 break
             written, move, result = judge(board, reply.raw)
             # With thinking off, the reasoning in the answer stands in for the thinking text.
@@ -222,7 +247,9 @@ class GameSession:
                 attempt["san"] = board.san(move)
                 attempt["notation_slip"] = written != attempt["san"]
             attempt["latency_s"] = reply.latency_s
-            self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt)
+            self._log.write(
+                "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt
+            )
             turn["thinking"] = thinking
             if move is not None:
                 board.push(move)

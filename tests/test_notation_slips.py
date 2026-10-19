@@ -105,4 +105,4 @@ def test_the_log_records_each_slip_and_the_game_end_counts_them(scripted, tmp_pa
         ("Qxf7", True, "Qxf7#"),
     ]
     assert events[-1]["type"] == "game_end"
-    assert events[-1]["notation_slips"] == 2
+    assert events[-1]["stats"]["white"]["notation_slips"] == 2

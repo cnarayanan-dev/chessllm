@@ -22,6 +22,15 @@ def without(event, *keys):
     return {key: value for key, value in event.items() if key not in keys}
 
 
+QWEN_THINKING = {
+    "player": "llm",
+    "model": "qwen3.5:9b",
+    "thinking": True,
+    "llm_constraints": "free",
+    "retry_feedback": "explained",
+}
+
+
 def play(client, *ucis):
     client.post("/api/games")
     for uci in ucis:
@@ -35,22 +44,22 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
     play(client, "e2e4")
 
     [log] = logs(tmp_path / "games", ".jsonl")
-    assert log.name.endswith("_qwen3.5-9b.jsonl")
+    assert log.name.endswith("_human_vs_qwen3.5-9b.jsonl")
     start, human, attempt_1, attempt_2 = events(log)
     assert without(start, "game_id", "started_at", "prompt_file") == {
         "type": "game_start",
-        "model": "qwen3.5:9b",
-        "llm_color": "black",
-        "llm_constraints": "free",
-        "thinking": True,
+        "log_version": 2,
+        "mode": "play_llm",
+        "white": {"player": "human"},
+        "black": QWEN_THINKING,
         "sampling": "model_default",
-        "retry_feedback": "explained",
         "max_retries": 3,
     }
     assert start["prompt_file"].endswith("system.txt")
-    assert human == {"type": "human_move", "ply": 1, "move": "e4", "fen_after": E4_FEN}
+    assert human == {"type": "human_move", "color": "white", "ply": 1, "move": "e4", "fen_after": E4_FEN}
     assert without(attempt_1, "latency_s") == {
         "type": "llm_attempt",
+        "color": "black",
         "ply": 2,
         "attempt": 1,
         "pgn": "1. e4",
@@ -82,10 +91,15 @@ def test_a_finished_game_ends_its_log_with_the_summary_and_writes_a_pgn(scripted
         "result": "1-0",
         "reason": "checkmate",
         "plies": 7,
-        "legal_move_streak": 3,
-        "illegal_moves": {"invalid": 0, "illegal": 0, "ambiguous": 0},
-        "recovered_turns": 0,
-        "notation_slips": 0,
+        "stats": {
+            "white": None,
+            "black": {
+                "legal_move_streak": 3,
+                "illegal_moves": {"invalid": 0, "illegal": 0, "ambiguous": 0},
+                "recovered_turns": 0,
+                "notation_slips": 0,
+            },
+        },
     }
     [pgn_file] = logs(tmp_path / "games", ".pgn")
     assert pgn_file.stem == log.stem
@@ -94,6 +108,9 @@ def test_a_finished_game_ends_its_log_with_the_summary_and_writes_a_pgn(scripted
     assert game.headers["Black"] == "qwen3.5:9b (thinking)"
     assert game.headers["Result"] == "1-0"
     assert game.headers["Termination"] == "checkmate"
+    assert game.headers["Mode"] == "Play LLM"
+    assert game.headers["BlackLLMConstraints"] == "free"
+    assert "WhiteLLMConstraints" not in game.headers
     assert game.board().variation_san(game.mainline_moves()) == "1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#"
 
 
@@ -104,7 +121,7 @@ def test_a_forfeit_is_logged_with_its_illegal_moves_and_pgn(scripted, tmp_path):
 
     end = events(logs(tmp_path / "games", ".jsonl")[0])[-1]
     assert (end["result"], end["reason"], end["plies"]) == ("1-0", "forfeit", 1)
-    assert end["illegal_moves"] == {"invalid": 1, "illegal": 3, "ambiguous": 0}
+    assert end["stats"]["black"]["illegal_moves"] == {"invalid": 1, "illegal": 3, "ambiguous": 0}
     pgn = logs(tmp_path / "games", ".pgn")[0].read_text(encoding="utf-8")
     assert '[Termination "forfeit"]' in pgn
     assert "1. e4 1-0" in pgn
@@ -152,4 +169,32 @@ def test_the_log_records_the_retry_feedback_and_the_sampling_from_the_config(scr
 
     [log] = logs(tmp_path / "games", ".jsonl")
     [start] = events(log)
-    assert (start["retry_feedback"], start["sampling"]) == ("hinted", {"temperature": 0.2})
+    assert (start["black"]["retry_feedback"], start["sampling"]) == ("hinted", {"temperature": 0.2})
+
+
+def test_with_the_human_as_black_the_llm_is_white_in_the_log_and_the_file_names(scripted, tmp_path):
+    client, _ = scripted(["e4", "Qh5", "Bc4", "Qxf7#"])
+    client.post("/api/games", json={"human_color": "black", "llm_constraints": "listed"})
+    for uci in ["e7e5", "b8c6", "g8f6"]:
+        client.post("/api/games/current/moves", json={"uci": uci})
+
+    [log] = logs(tmp_path / "games", ".jsonl")
+    assert log.name.endswith("_qwen3.5-9b_vs_human.jsonl")
+    start, *moves, end = events(log)
+    assert (start["white"], start["black"]) == (QWEN_THINKING | {"llm_constraints": "listed"}, {"player": "human"})
+    assert [(event["type"], event["color"]) for event in moves] == [
+        ("llm_attempt", "white"),
+        ("human_move", "black"),
+        ("llm_attempt", "white"),
+        ("human_move", "black"),
+        ("llm_attempt", "white"),
+        ("human_move", "black"),
+        ("llm_attempt", "white"),
+    ]
+    assert (end["result"], end["stats"]["black"], end["stats"]["white"]["legal_move_streak"]) == ("1-0", None, 4)
+    [pgn_file] = logs(tmp_path / "games", ".pgn")
+    assert pgn_file.stem == log.stem
+    game = chess.pgn.read_game(io.StringIO(pgn_file.read_text(encoding="utf-8")))
+    assert (game.headers["White"], game.headers["Black"]) == ("qwen3.5:9b (thinking)", "Human")
+    assert (game.headers["Mode"], game.headers["WhiteLLMConstraints"]) == ("Play LLM", "listed")
+    assert "BlackLLMConstraints" not in game.headers

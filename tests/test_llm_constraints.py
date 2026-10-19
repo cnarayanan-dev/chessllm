@@ -109,7 +109,7 @@ def test_the_log_records_the_llm_constraints_the_prompt_file_and_the_list_each_a
     client.post("/api/games/current/moves", json={"uci": "e2e4"})
 
     (start, _, attempt_1, attempt_2), _ = log_events(tmp_path / "games")
-    assert start["llm_constraints"] == "listed"
+    assert start["black"]["llm_constraints"] == "listed"
     assert start["prompt_file"] == str(LISTED_SYSTEM_PROMPT_FILE)
     shown = shown_legal_moves(player.prompts[0])
     assert attempt_1["legal_moves"] == attempt_2["legal_moves"] == shown
@@ -122,7 +122,7 @@ def test_a_free_game_logs_free_and_no_legal_moves(scripted, tmp_path):
     client.post("/api/games/current/moves", json={"uci": "e2e4"})
 
     (start, _, attempt), _ = log_events(tmp_path / "games")
-    assert start["llm_constraints"] == "free"
+    assert start["black"]["llm_constraints"] == "free"
     assert start["prompt_file"] == str(SYSTEM_PROMPT_FILE)
     assert "legal_moves" not in attempt
 
@@ -134,4 +134,4 @@ def test_the_pgn_headers_name_the_llm_constraints(scripted, tmp_path):
 
     _, log = log_events(tmp_path / "games")
     game = chess.pgn.read_game(io.StringIO(log.with_suffix(".pgn").read_text(encoding="utf-8")))
-    assert game.headers["LLMConstraints"] == "listed"
+    assert game.headers["BlackLLMConstraints"] == "listed"

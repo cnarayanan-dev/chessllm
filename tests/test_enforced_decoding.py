@@ -117,7 +117,7 @@ def test_the_game_end_line_records_the_metrics_as_not_applicable(scripted, tmp_p
     assert state["end_reason"] == "forfeit"
     *_, end = log_events(tmp_path / "games")
     assert end["type"] == "game_end"
-    assert {key: end[key] for key in NOT_APPLICABLE} == NOT_APPLICABLE
+    assert end["stats"] == {"white": None, "black": NOT_APPLICABLE | {"notation_slips": 0}}
 
 
 @pytest.mark.parametrize("llm_constraints", ["blind_enforced", "listed_enforced"])
