@@ -2,6 +2,21 @@
 // (tests/e2e_server.py). Each sets the LLMs' replies, as SAN, before its game starts.
 import { expect, test, type Page } from '@playwright/test'
 
+/** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */
+async function yourMove(page: Page) {
+  await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
+  await expect(page.getByTestId('strip-white')).toContainText('You')
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByTestId('status')).toHaveCount(0)
+}
+
+/** Expects the game over at the live position: no side has the turn ring, and no move timer runs. */
+async function expectOver(page: Page) {
+  await expect(page.locator('[data-to-move]')).toHaveCount(0)
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByTestId('status')).toHaveCount(0)
+}
+
 type Script = { white?: string[]; black?: string[] }
 
 /** Scripts the LLMs, then opens the page on a new Play LLM game in which the human plays White. */
@@ -12,7 +27,7 @@ async function playLlm(page: Page, script: Script) {
   })
   expect(started.ok()).toBe(true)
   await page.goto('/')
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
 }
 
 const square = (page: Page, name: string) => page.locator(`.chessboard rect.square[data-square="${name}"]`)
@@ -36,7 +51,7 @@ async function move(page: Page, uci: string, then: string) {
 
 /** Clicks the two squares of a move, as UCI (e2e4), once it is the human's move and the board takes input. */
 async function clickMove(page: Page, uci: string) {
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
   // The board takes input once the LLM's move has been drawn.
   await expect(page.locator('.chessboard .board.input-enabled')).toBeAttached()
   await square(page, uci.slice(0, 2)).click()
@@ -54,7 +69,7 @@ test('a Play LLM game to checkmate', async ({ page }) => {
   const result = page.getByTestId('result')
   await expect(result).toContainText('White wins')
   await expect(result).toContainText('by checkmate')
-  await expect(page.getByTestId('status')).toHaveText('Game over')
+  await expectOver(page)
   await expect(page.getByTestId('moves')).toContainText('Qxf7#')
   await expectPiece(page, 'f7', 'wq')
 })
@@ -71,7 +86,7 @@ test('an illegal LLM try flashes on the board, then its legal retry is played', 
   await expect(flash).toContainText('illegal · try 1 of 5')
   await expect(page.getByTestId('moves')).toContainText('✗ Qh4 illegal · try 1')
   await expectPiece(page, 'e5', 'bp')
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
 })
 
 test('the LLM forfeits after its retries', async ({ page }) => {
@@ -83,7 +98,7 @@ test('the LLM forfeits after its retries', async ({ page }) => {
   await expect(result).toContainText('White wins')
   await expect(result).toContainText('by forfeit')
   await expect(page.locator('.center-flash')).toContainText('✗ LLM forfeits: 5 illegal moves')
-  await expect(page.getByTestId('status')).toHaveText('Game over')
+  await expectOver(page)
   await expect(page.getByTestId('moves')).toContainText('✗ Bb4 illegal · try 5')
   await expect(page.locator('.chessboard .board.input-enabled')).toHaveCount(0)
 })
@@ -119,7 +134,7 @@ test('an LLM faceoff started from the settings modal plays to its end', async ({
   await expect(result).toContainText(/\(Black\) wins/)
   await expect(result).toContainText('by checkmate')
   await expect(page.getByTestId('moves')).toContainText(/1\.\s*f3\s*e5\s*2\.\s*g4\s*Qh4#/)
-  await expect(page.getByTestId('status')).toHaveText('Game over')
+  await expectOver(page)
   await expectPiece(page, 'h4', 'bq')
 })
 
@@ -155,7 +170,7 @@ test('stepping back through the move history and returning to live', async ({ pa
   await expect(page.locator('.chessboard g[data-piece][data-square="f3"]')).toHaveCount(0)
 
   await backToLive.click()
-  await expect(status).toHaveText('Your move (White)')
+  await yourMove(page)
   await expectPiece(page, 'c6', 'bn')
   await expect(backToLive).toHaveCount(0)
   // The board takes the human's move again.
@@ -177,14 +192,91 @@ test('the move history of an LLM faceoff, stepped through after its end', async 
   await expectPiece(page, 'd8', 'bq')
 
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByTestId('status')).toHaveText('Game over')
+  await expectOver(page)
   await expectPiece(page, 'h4', 'bq')
 })
 
-test('the page at / credits the Merida pieces and the move sound', async ({ page }) => {
+test('the page at / credits the Merida pieces, the move sound and the model logos', async ({ page }) => {
   await playLlm(page, {})
 
   await expect(page.getByText('Pieces: Merida by Armando Hernandez Marroquin, GPLv2+', { exact: false })).toBeVisible()
   await expect(page.getByText('Move sound: Kenney, CC0', { exact: false })).toBeVisible()
+  await expect(page.getByText('Model logos: LobeHub Icons, MIT', { exact: false })).toBeVisible()
   await expect(page.locator('.chessboard g[data-piece="wk"]')).toHaveCount(1)
+})
+
+/** The strips above and below the board, top first, by their side, each checked to be at the board's width. */
+async function stripsAroundBoard(page: Page) {
+  const board = (await page.locator('.chessboard').boundingBox())!
+  const sides: string[] = []
+  for (const color of ['white', 'black']) {
+    const strip = (await page.getByTestId(`strip-${color}`).boundingBox())!
+    expect(Math.abs(strip.width - board.width)).toBeLessThan(2)
+    if (strip.y + strip.height <= board.y) sides.unshift(color)
+    else if (strip.y >= board.y + board.height) sides.push(color)
+  }
+  return sides
+}
+
+/** Holds every LLM turn the page asks for until it is let go, one at a time, so its move can be seen running. */
+async function holdLlmTurns(page: Page) {
+  const held: (() => void)[] = []
+  await page.route('**/api/games/current/llm-turn', async (route) => {
+    await new Promise<void>((resolve) => held.push(resolve))
+    await route.continue()
+  })
+  return async () => {
+    await expect.poll(() => held.length).toBe(1)
+    held.shift()!()
+  }
+}
+
+test('the player strips: the LLM above the board with its logo, the ring and the timer during its move', async ({ page }) => {
+  await playLlm(page, { black: ['e5'] })
+  const white = page.getByTestId('strip-white')
+  const black = page.getByTestId('strip-black')
+
+  expect(await stripsAroundBoard(page)).toEqual(['black', 'white'])
+  await expect(black).toContainText('llama3:8b')
+  await expect(black.getByRole('img', { name: 'Meta' })).toBeVisible()
+  await expect(white).toContainText('You')
+  await expect(black).not.toHaveAttribute('data-to-move')
+
+  const letGo = await holdLlmTurns(page)
+  await clickMove(page, 'e2e4')
+  await expect(black).toHaveAttribute('data-to-move')
+  await expect(white).not.toHaveAttribute('data-to-move')
+  const timer = black.getByRole('timer')
+  await expect(timer).toHaveText('0s')
+  await expect(timer).toHaveText('2s', { timeout: 5000 })
+  await expect(page.getByRole('timer')).toHaveCount(1)
+
+  await letGo()
+  await expect(lastMove(page)).toHaveText('e5')
+  await yourMove(page)
+})
+
+test('in an LLM faceoff White is at the bottom and the timer moves between the strips turn by turn', async ({ page }) => {
+  await page.request.post('/e2e/script', { data: { white: ['f3', 'g4'], black: ['e5', 'Qh4#'] } })
+  const letGo = await holdLlmTurns(page)
+  await page.request.post('/api/games', {
+    data: { mode: 'llm_faceoff', white: { player: 'llm' }, black: { player: 'llm' } },
+  })
+  await page.goto('/')
+  const timerOf = (color: string) => page.getByTestId(`strip-${color}`).getByRole('timer')
+
+  await expect(timerOf('white')).toBeVisible()
+  expect(await stripsAroundBoard(page)).toEqual(['black', 'white'])
+  await expect(timerOf('black')).toHaveCount(0)
+  await letGo()
+  await expect(timerOf('black')).toBeVisible()
+  await expect(timerOf('white')).toHaveCount(0)
+  await expect(page.getByTestId('strip-black')).toHaveAttribute('data-to-move')
+  await letGo()
+  await expect(timerOf('white')).toBeVisible()
+  await expect(timerOf('black')).toHaveCount(0)
+  await letGo()
+  await letGo()
+  await expect(page.getByTestId('result')).toContainText('by checkmate')
+  await expectOver(page)
 })

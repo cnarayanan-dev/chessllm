@@ -2,6 +2,14 @@
 /// <reference lib="dom" />
 import { expect, test, type Page } from '@playwright/test'
 
+/** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */
+async function yourMove(page: Page) {
+  await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
+  await expect(page.getByTestId('strip-white')).toContainText('You')
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByTestId('status')).toHaveCount(0)
+}
+
 /** Opens the game page on a new Play LLM game in which the human plays White. */
 async function openGame(page: Page) {
   await page.request.post('/e2e/script', { data: {} })
@@ -10,7 +18,7 @@ async function openGame(page: Page) {
   })
   expect(started.ok()).toBe(true)
   await page.goto('/')
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
 }
 
 /** The top bar's links and buttons, in order. */
@@ -88,7 +96,7 @@ test('the top bar on the Analytics page: its New game starts one on the game pag
 
   await page.getByRole('banner').getByRole('link', { name: 'New game' }).click()
 
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
   await expect.poll(async () => (await (await page.request.get('/api/games/current')).json()).game_id).not.toBe(before)
   await expect(page).toHaveURL(/\/$/)
 })

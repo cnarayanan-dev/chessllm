@@ -2,6 +2,14 @@
 // (tests/e2e_server.py). The LLMs' illegal moves are played on the board, as the backend resolves them (ADR 0006).
 import { expect, test, type Page } from '@playwright/test'
 
+/** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */
+async function yourMove(page: Page) {
+  await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
+  await expect(page.getByTestId('strip-white')).toContainText('You')
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByTestId('status')).toHaveCount(0)
+}
+
 type Script = { white?: string[]; black?: string[] }
 
 const square = (page: Page, name: string) => page.locator(`.chessboard rect.square[data-square="${name}"]`)
@@ -18,7 +26,7 @@ const lastMove = (page: Page) => moves(page).locator('.ply.last')
 
 /** The human's move, as UCI, by clicking its two squares; waits until the move list ends with `then`. */
 async function move(page: Page, uci: string, then: string) {
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
   await expect(page.locator('.chessboard .board.input-enabled')).toBeAttached()
   await square(page, uci.slice(0, 2)).click()
   await square(page, uci.slice(2, 4)).click()
@@ -33,7 +41,7 @@ async function startFromSettings(page: Page, script: Script, setUp: (settings: R
   })
   expect(started.ok()).toBe(true)
   await page.goto('/')
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
   await expect(page.getByText('Chaos rules', { exact: true })).toHaveCount(0)
 
   await page.getByRole('button', { name: /Settings/ }).click()

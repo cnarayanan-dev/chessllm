@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { modelsQuery } from '@/api/models'
-import type { GameState } from '@/api/types'
+import type { Color, GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { BoardFlashes } from '@/components/board/BoardFlashes'
 import { GameCard } from '@/components/game-card/GameCard'
 import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
+import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -23,7 +24,7 @@ import {
   type Shown,
 } from '@/game/gameLoop'
 import { useGameLoop } from '@/game/useGameLoop'
-import { faceoff, historyStatusText, llmName, statusText } from '@/game/wording'
+import { faceoff, historyStatusText, llmName } from '@/game/wording'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsModal } from '@/settings/SettingsModal'
 
@@ -31,43 +32,28 @@ const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
 
 type StatusProps = {
-  game: GameState | null
-  failed: boolean
-  running: boolean
-  /** The past position viewed in the move history, which the status names instead, with Back to live. */
-  viewing: { shown: Shown; history: History; onLive: () => void } | null
+  game: GameState
+  /** The past position viewed in the move history, which the status names, with Back to live. */
+  viewing: { shown: Shown; history: History; onLive: () => void }
 }
 
 /**
- * The status line. While an LLM turn runs, a timer ticks every second, to show the app has not frozen. While the
- * move history shows the past, it says so, with Back to live, marked once the game has moved on.
+ * The status line, only while the move history shows the past: it says so, with Back to live, marked once the game
+ * has moved on. Whose move it is and the LLM's move timer are in the player strips.
  */
-function Status({ game, failed, running, viewing }: StatusProps) {
-  const [started] = useState(() => Date.now())
-  const [seconds, setSeconds] = useState(0)
-  useEffect(() => {
-    if (!running) return
-    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
-    return () => clearInterval(timer)
-  }, [running, started])
+function Status({ game, viewing }: StatusProps) {
   return (
     <Card size="sm">
       <CardContent className="flex items-center gap-3 text-muted-foreground">
-        <span data-testid="status">
-          {viewing ? historyStatusText(viewing.shown) : statusText(game, failed, running ? seconds : null)}
-        </span>
-        {viewing && (
-          <>
-            <span className="flex-1" />
-            <Button size="sm" variant={viewing.history.news ? 'default' : 'outline'} onClick={viewing.onLive}>
-              {!viewing.history.news
-                ? 'Back to live'
-                : game?.status === 'over'
-                  ? 'Back to live · game over'
-                  : 'Back to live · new move'}
-            </Button>
-          </>
-        )}
+        <span data-testid="status">{historyStatusText(viewing.shown)}</span>
+        <span className="flex-1" />
+        <Button size="sm" variant={viewing.history.news ? 'default' : 'outline'} onClick={viewing.onLive}>
+          {!viewing.history.news
+            ? 'Back to live'
+            : game.status === 'over'
+              ? 'Back to live · game over'
+              : 'Back to live · new move'}
+        </Button>
       </CardContent>
     </Card>
   )
@@ -129,6 +115,14 @@ export default function App() {
   // the ply is, so the board doesn't draw its arrows again at every render.
   const shownPly = shown?.move ?? null
   const chaos = useMemo(() => chaosShown(shownPly), [shownPly])
+  // The player strips, by the live game; the LLM's move timer, in the strip of the side to move, restarts each turn.
+  const strip = (live: GameState, color: Color) => (
+    <PlayerStrip
+      game={live}
+      color={color}
+      timer={running && live.turn === color ? <MoveTimer key={request!.id} /> : null}
+    />
+  )
   // The next game, as set up in the Settings modal, or the default game if none could be loaded.
   const startNewGame = useCallback(() => newGame(next ? newGameRequest(next, models) : null), [newGame, next, models])
 
@@ -186,6 +180,7 @@ export default function App() {
         board={
           game && shown ? (
             <>
+              {strip(game, orientation(game) === 'white' ? 'black' : 'white')}
               <Board
                 fen={shown.fen}
                 orientation={orientation(game)}
@@ -203,6 +198,7 @@ export default function App() {
                 {/* The live turn's flashes, kept off a past position. */}
                 {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
               </Board>
+              {strip(game, orientation(game))}
               {chaos && <ChaosCaption chaos={chaos} />}
             </>
           ) : (
@@ -211,13 +207,7 @@ export default function App() {
         }
         moves={
           <>
-            <Status
-              key={running ? request!.id : 'idle'}
-              game={game}
-              failed={error !== null}
-              running={running}
-              viewing={history && shown ? { shown, history, onLive: backToLive } : null}
-            />
+            {game && history && shown && <Status game={game} viewing={{ shown, history, onLive: backToLive }} />}
             {/* In Play LLM the thinking hides as the LLM's next turn starts. */}
             {game && <Thinking game={game} hidden={running && !faceoff(game)} />}
             {game && <MovesCard game={game} viewed={history?.ply ?? null} onView={viewPly} />}
@@ -225,7 +215,7 @@ export default function App() {
         }
       />
       <footer className="px-5 pb-6 text-center text-xs text-muted-foreground">
-        Pieces: Merida by Armando Hernandez Marroquin, GPLv2+ · Move sound: Kenney, CC0
+        Pieces: Merida by Armando Hernandez Marroquin, GPLv2+ · Move sound: Kenney, CC0 · Model logos: LobeHub Icons, MIT
       </footer>
     </div>
   )

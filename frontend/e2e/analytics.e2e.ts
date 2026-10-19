@@ -3,6 +3,14 @@
 // mistral:7b in Play LLM games only.
 import { expect, test, type Page } from '@playwright/test'
 
+/** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */
+async function yourMove(page: Page) {
+  await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
+  await expect(page.getByTestId('strip-white')).toContainText('You')
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByTestId('status')).toHaveCount(0)
+}
+
 /** The table's rows below the header, each as its cells' text. */
 async function rows(page: Page): Promise<string[][]> {
   const body = page.locator('tbody tr')
@@ -127,5 +135,5 @@ test('the game and the analytics page link to each other', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible()
 
   await page.getByRole('link', { name: 'ChessLLM' }).click()
-  await expect(page.getByTestId('status')).toHaveText('Your move (White)')
+  await yourMove(page)
 })

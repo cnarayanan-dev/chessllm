@@ -25,6 +25,28 @@ function renderApp() {
 }
 
 const status = () => screen.getByTestId('status')
+const strip = (color: 'white' | 'black') => screen.getByTestId(`strip-${color}`)
+/** The strips above and below the board, top first, by their side. */
+const strips = () =>
+  within(screen.getByTestId('board-column'))
+    .getAllByTestId(/^strip-/)
+    .map((element) => element.dataset.testid!.replace('strip-', ''))
+/** The sides whose strip has the turn ring. */
+const ringed = () => (['white', 'black'] as const).filter((color) => screen.queryByTestId(`strip-${color}`)?.hasAttribute('data-to-move'))
+const timer = () => screen.queryByRole('timer')
+
+/** Waits for the human's move: the ring on their strip, and no timer running. */
+async function yourMove(color: 'white' | 'black' = 'white') {
+  await waitFor(() => expect(ringed()).toEqual([color]))
+  expect(timer()).not.toBeInTheDocument()
+}
+
+/** Waits for an LLM's move to run: the ring and the timer, from 0s, in its strip. */
+async function llmMoving(color: 'white' | 'black') {
+  await waitFor(() => expect(within(strip(color)).getByRole('timer')).toHaveTextContent('0s'))
+  expect(ringed()).toEqual([color])
+  expect(screen.getAllByRole('timer')).toHaveLength(1)
+}
 const topBar = () => screen.getByRole('banner')
 const gameCard = () => screen.getByRole('region', { name: 'Game' })
 /** The Game card's players, White first, each as its side and name. */
@@ -49,12 +71,18 @@ const llmPlaysWhite = (overrides: Partial<GameState> = {}) =>
     ...overrides,
   })
 
-test('shows the current game: the Game card, the status and the board', async () => {
+test('shows the current game: the Game card, the player strips and the board', async () => {
   fakeBackend().on('GET /api/games/current', Response.json(aGame()))
 
   renderApp()
 
-  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  await yourMove()
+  // The LLM above the board, you below, with no status line.
+  expect(strips()).toEqual(['black', 'white'])
+  expect(strip('black')).toHaveTextContent('qwen3.5:9b')
+  expect(within(strip('black')).getByRole('img', { name: 'Qwen' })).toBeInTheDocument()
+  expect(strip('white')).toHaveTextContent('You')
+  expect(screen.queryByTestId('status')).not.toBeInTheDocument()
   expect(within(gameCard()).getByText('Play LLM')).toBeInTheDocument()
   expect(settingsItems()).toEqual(['Free', 'Standard rules', 'explained feedback', 'thinking off'])
   expect(players()).toEqual(['White You', 'Black qwen3.5:9b'])
@@ -68,13 +96,14 @@ test('shows the current game: the Game card, the status and the board', async ()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('credits the Merida pieces and the move sound', async () => {
+test('credits the Merida pieces, the move sound and the model logos', async () => {
   fakeBackend().on('GET /api/games/current', Response.json(aGame()))
 
   renderApp()
 
   expect(await screen.findByText(/Pieces: Merida by Armando Hernandez Marroquin, GPLv2\+/)).toBeVisible()
   expect(screen.getByText(/Move sound: Kenney, CC0/)).toBeVisible()
+  expect(screen.getByText(/Model logos: LobeHub Icons, MIT/)).toBeVisible()
 })
 
 test('starts a game with the default settings when there is none', async () => {
@@ -84,7 +113,7 @@ test('starts a game with the default settings when there is none', async () => {
 
   renderApp()
 
-  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  await yourMove()
   expect(backend.sentTo('POST /api/games')).toEqual([{ method: 'POST', path: '/api/games', body: undefined }])
 })
 
@@ -95,11 +124,11 @@ test('says so when no game can be started', async () => {
 
   renderApp()
 
-  expect(await screen.findByText('Could not start a game')).toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('Ollama is not running')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Ollama is not running')
+  expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
 })
 
-test("the human's move lands at once, then the LLM's turn runs and its move lands", async () => {
+test("the human's move lands at once, then the LLM's turn runs, timed in its strip, and its move lands", async () => {
   const turn = later()
   const backend = fakeBackend()
     .on('GET /api/games/current', Response.json(aGame()))
@@ -109,7 +138,7 @@ test("the human's move lands at once, then the LLM's turn runs and its move land
 
   await drop('e2', 'e4')
 
-  expect(await screen.findByText('qwen3.5:9b is choosing a move… 0s')).toBeInTheDocument()
+  await llmMoving('black')
   expect(backend.sentTo('POST /api/games/current/moves')[0].body).toEqual({ uci: 'e2e4' })
   const board = theBoard()
   await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR'))
@@ -119,13 +148,13 @@ test("the human's move lands at once, then the LLM's turn runs and its move land
 
   await act(async () => turn.resolve(Response.json(afterE5())))
 
-  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  await yourMove()
   await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
   await waitFor(() => expect(board.input?.color).toBe('w'))
   expect(playMoveSound).toHaveBeenCalledTimes(2)
 })
 
-test("a thinking LLM's status says so, and its thinking can be shown once its move lands", async () => {
+test("a thinking LLM's move is timed too, and its thinking can be shown once its move lands", async () => {
   const thinking = (game: GameState) => ({
     ...game,
     settings: { ...game.settings, black: { ...afterE4().settings.black, thinking: true } },
@@ -136,7 +165,7 @@ test("a thinking LLM's status says so, and its thinking can be shown once its mo
     .on('POST /api/games/current/llm-turn', turn.promise)
   renderApp()
 
-  expect(await screen.findByText('qwen3.5:9b is thinking… 0s')).toBeInTheDocument()
+  await llmMoving('black')
   expect(screen.getByText('Show thinking')).not.toBeVisible()
 
   const landed = aTurn('e5', { thinking: 'The king pawn, to fight for the centre.' })
@@ -158,11 +187,11 @@ test('a rejected move shows the error and snaps the piece back', async () => {
   const board = theBoard()
   await waitFor(() => expect(board.input?.color).toBe('w'))
   expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
-  expect(status()).toHaveTextContent('Your move (White)')
+  await yourMove()
   expect(playMoveSound).not.toHaveBeenCalled()
 })
 
-test('an LLM turn that fails shows the error, and the status says who is to move', async () => {
+test('an LLM turn that fails shows the error, and the ring stays on the LLM with no timer running', async () => {
   fakeBackend()
     .on('GET /api/games/current', Response.json(afterE4()))
     .on('POST /api/games/current/llm-turn', new TypeError('Failed to fetch'))
@@ -170,7 +199,8 @@ test('an LLM turn that fails shows the error, and the status says who is to move
 
   const card = await screen.findByRole('region', { name: 'Game' })
   expect(await within(card).findByRole('alert')).toHaveTextContent('Failed to fetch')
-  expect(status()).toHaveTextContent('Waiting for Black…')
+  expect(ringed()).toEqual(['black'])
+  expect(timer()).not.toBeInTheDocument()
 })
 
 test('at the end of the game the Game card shows the result line and a New game button', async () => {
@@ -183,7 +213,8 @@ test('at the end of the game the Game card shows the result line and a New game 
   expect(within(gameCard()).getByTestId('result')).toBeInTheDocument()
   expect(within(gameCard()).getByRole('button', { name: 'New game' })).toBeInTheDocument()
   expect(screen.queryByTestId('banner')).not.toBeInTheDocument()
-  expect(status()).toHaveTextContent('Game over')
+  expect(ringed()).toEqual([])
+  expect(timer()).not.toBeInTheDocument()
   await waitFor(() => expect(theBoard().position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
   expect(theBoard().input).toBeNull()
 })
@@ -227,7 +258,8 @@ test('playing Black: the board turns, with the human at the bottom, and the LLM 
 
   renderApp()
 
-  expect(await screen.findByText('qwen3.5:9b is choosing a move… 0s')).toBeInTheDocument()
+  await llmMoving('white')
+  expect(strips()).toEqual(['white', 'black'])
   expect(players()).toEqual(['White qwen3.5:9b', 'Black You'])
   await waitFor(() => expect(theBoard().orientation).toBe('b'))
   expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(1)
@@ -240,10 +272,10 @@ test("New game starts a game with the running game's settings and drops the aban
     .on('POST /api/games/current/llm-turn', abandoned.promise)
     .on('POST /api/games', Response.json(aGame({ game_id: 'game-2' })))
   renderApp()
-  expect(await screen.findByText('qwen3.5:9b is choosing a move… 0s')).toBeInTheDocument()
+  await llmMoving('black')
 
   await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
-  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  await yourMove()
   await act(async () => abandoned.resolve(Response.json(afterE5())))
 
   expect(backend.sentTo('POST /api/games')[0].body).toEqual({
@@ -253,7 +285,7 @@ test("New game starts a game with the running game's settings and drops the aban
     rules: 'standard',
     max_attempts: 5,
   })
-  expect(status()).toHaveTextContent('Your move (White)')
+  await yourMove()
   await waitFor(() => expect(theBoard().position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
   expect(playMoveSound).not.toHaveBeenCalled()
 })
@@ -268,7 +300,7 @@ test("New game in the Game card starts the next game", async () => {
   expect(await screen.findByTestId('result')).toHaveTextContent('Draw by stalemate')
   await userEvent.click(within(gameCard()).getByRole('button', { name: 'New game' }))
 
-  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  await yourMove()
   expect(screen.queryByTestId('result')).not.toBeInTheDocument()
 })
 
@@ -279,7 +311,7 @@ describe('settings', () => {
   test('the settings button opens the modal; a change is pending in the Game card, and the running game keeps its settings', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models))
     renderApp()
-    await screen.findByText('Your move (White)')
+    await yourMove()
     expect(within(gameCard()).queryByText(pendingNote)).not.toBeInTheDocument()
 
     await userEvent.click(within(topBar()).getByRole('button', { name: /Settings/ }))
@@ -290,7 +322,7 @@ describe('settings', () => {
 
     expect(within(gameCard()).getByText(pendingNote)).toBeInTheDocument()
     expect(players()).toEqual(['White You', 'Black qwen3.5:9b'])
-    expect(status()).toHaveTextContent('Your move (White)')
+    await yourMove()
   })
 
   test('New game starts the next game, after which no change is pending', async () => {
@@ -300,7 +332,7 @@ describe('settings', () => {
       .on('POST /api/games', Response.json(llmPlaysWhite({ game_id: 'game-2' })))
       .on('POST /api/games/current/llm-turn', later().promise)
     renderApp()
-    await screen.findByText('Your move (White)')
+    await yourMove()
 
     await userEvent.keyboard('{Meta>}k{/Meta}')
     await userEvent.click(await screen.findByRole('radio', { name: /^Black/ }))
@@ -329,7 +361,7 @@ describe('settings', () => {
 
       expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
       expect(window.location.search).toBe('')
-      expect(status()).toHaveTextContent('Your move (White)')
+      await yourMove()
     })
 
     test('its New game starts the next game, set up as the game shown', async () => {
@@ -352,6 +384,7 @@ describe('settings', () => {
       aGame({ game_id: 'game-2', human_legal_moves: [], settings, ...overrides })
     const white = aTurn('e4', { ply: 1, color: 'white' })
     const black = aTurn('e5', { ply: 2, color: 'black' })
+    const second = later()
     const third = later()
     const backend = fakeBackend()
       .on('GET /api/games/current', Response.json(aGame()))
@@ -360,19 +393,25 @@ describe('settings', () => {
       .on(
         'POST /api/games/current/llm-turn',
         Response.json(faceoff({ fen: afterE4().fen, turn: 'black', last_move: 'e2e4', llm_turn: white, llm_turns: [white] })),
-        Response.json(faceoff({ fen: afterE5().fen, last_move: 'e7e5', llm_turn: black, llm_turns: [white, black] })),
+        second.promise,
         third.promise,
       )
     renderApp()
-    await screen.findByText('Your move (White)')
+    await yourMove()
 
     await userEvent.keyboard('{Meta>}k{/Meta}')
     await userEvent.click(await screen.findByRole('radio', { name: /^LLM faceoff/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Start new game' }))
 
-    // Each turn is asked for as soon as the last one lands: the third runs.
+    // Each turn is asked for as soon as the last one lands, its timer in the strip of the side to move.
+    await waitFor(() => expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(2))
+    await llmMoving('black')
+    await act(async () =>
+      second.resolve(Response.json(faceoff({ fen: afterE5().fen, last_move: 'e7e5', llm_turn: black, llm_turns: [white, black] }))),
+    )
     await waitFor(() => expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(3))
-    expect(status()).toHaveTextContent('♔ White · qwen3.5:9b is choosing a move… 0s')
+    await llmMoving('white')
+    expect(strips()).toEqual(['black', 'white'])
     expect(backend.sentTo('POST /api/games')[0].body).toMatchObject({ mode: 'llm_faceoff', white: llm, black: llm })
     expect(within(gameCard()).getByText('LLM faceoff')).toBeInTheDocument()
     expect(players()).toEqual(['White qwen3.5:9b', 'Black qwen3.5:9b'])
@@ -427,7 +466,7 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   expect(screen.queryByText('✗ LLM move illegal')).not.toBeInTheDocument()
 
   await act(async () => starting.resolve(Response.json(aGame({ game_id: 'game-2' }))))
-  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  await yourMove()
   expect(within(screen.getByTestId('moves')).queryByText('e4')).not.toBeInTheDocument()
 })
 
@@ -453,13 +492,15 @@ describe('the move history', () => {
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
 
     await userEvent.keyboard('{ArrowRight}{ArrowRight}')
-    expect(status()).toHaveTextContent('Your move (White)')
+    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
+    await yourMove()
     await waitFor(() => expect(board.input?.color).toBe('w'))
     expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR')
 
     await userEvent.keyboard('{ArrowLeft}')
     await userEvent.click(backToLive()!)
-    expect(status()).toHaveTextContent('Your move (White)')
+    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
+    await yourMove()
     expect(backToLive()).not.toBeInTheDocument()
     await waitFor(() => expect(board.input?.color).toBe('w'))
   })
@@ -476,29 +517,31 @@ describe('the move history', () => {
     expect(within(screen.getByTestId('moves')).getByRole('button', { name: 'e4' })).toHaveClass('viewed')
   })
 
-  test("an LLM move landing while viewing the past doesn't pull the view; Back to live says so and shows it", async () => {
+  test("an LLM move landing while viewing the past doesn't pull the view, though the ring and timer follow the live game", async () => {
     const turn = later()
     fakeBackend()
       .on('GET /api/games/current', Response.json(afterE4()))
       .on('POST /api/games/current/llm-turn', turn.promise)
     renderApp()
     const board = await waitFor(theBoard)
-    await screen.findByText(/is choosing a move/)
+    await llmMoving('black')
 
     await userEvent.keyboard('{ArrowLeft}')
     expect(status()).toHaveTextContent('Viewing the start position')
     expect(backToLive()).toHaveAccessibleName('Back to live')
+    await llmMoving('black')
 
     await act(async () => turn.resolve(Response.json(afterE5())))
 
     expect(await screen.findByRole('button', { name: 'Back to live · new move' })).toBeInTheDocument()
     expect(status()).toHaveTextContent('Viewing the start position')
+    await yourMove()
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'))
     expect(board.input).toBeNull()
 
     await userEvent.click(backToLive()!)
 
-    expect(status()).toHaveTextContent('Your move (White)')
+    await yourMove()
     await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
     await waitFor(() => expect(board.input?.color).toBe('w'))
   })
@@ -506,13 +549,14 @@ describe('the move history', () => {
   test('the arrow keys leave the settings modal alone', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(afterE5())).on('GET /api/models', Response.json([]))
     renderApp()
-    await screen.findByText('Your move (White)')
+    await yourMove()
 
     await userEvent.keyboard('{Meta>}k{/Meta}')
     await screen.findByRole('dialog', { name: 'Settings' })
     await userEvent.keyboard('{ArrowLeft}')
 
-    expect(status()).toHaveTextContent('Your move (White)')
+    expect(screen.queryByTestId('status')).not.toBeInTheDocument()
+    expect(theBoard().position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR')
   })
 })
 

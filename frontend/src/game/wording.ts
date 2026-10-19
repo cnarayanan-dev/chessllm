@@ -1,4 +1,4 @@
-// The words around the board: the Game card's settings line and result, and the status line.
+// The words around the board: the Game card's settings line and result, and the status line in the move history.
 import type { Color, GameSettings, GameState } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
 import { humanColor, type Shown } from '@/game/gameLoop'
@@ -34,23 +34,10 @@ export const faceoff = (game: GameState) => game.settings.mode === 'llm_faceoff'
 export const llmColors = (game: GameState) => COLORS.filter((color) => game.settings[color].player === 'llm')
 const llmSide = (game: GameState, color: Color) => game.settings[color] as LlmSide
 
-/** The LLM as the status names it: the model, and in a faceoff its side too, as two LLMs can share a model. */
+/** The LLM as Show thinking names it: the model, and in a faceoff its side too, as two LLMs can share a model. */
 export function llmName(game: GameState, color: Color): string {
   const model = llmSide(game, color).model
   return faceoff(game) ? `${ICON[color]} ${COLOR_NAMES[color]} · ${model}` : model
-}
-
-/** The status line, `seconds` into the LLM's turn while one is running. */
-export function statusText(game: GameState | null, failed: boolean, seconds: number | null): string {
-  if (!game) return failed ? 'Could not start a game' : 'Loading…'
-  if (game.status === 'over') return 'Game over'
-  const human = humanColor(game)
-  if (game.turn === human) return `Your move (${COLOR_NAMES[human]})`
-  if (seconds !== null) {
-    const doing = llmSide(game, game.turn).thinking ? 'is thinking…' : 'is choosing a move…'
-    return `${llmName(game, game.turn)} ${doing} ${seconds}s`
-  }
-  return `Waiting for ${faceoff(game) ? llmName(game, game.turn) : COLOR_NAMES[game.turn]}…`
 }
 
 /** The status line while viewing a past position in the move history, e.g. "Viewing 12… Nf6 · → or Back to live". */
