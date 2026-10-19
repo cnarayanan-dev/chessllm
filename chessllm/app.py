@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from chessllm.analysis import analyse_game
+from chessllm.evaluator import Evaluator
 from chessllm.game import (
     AnchorSide,
     Color,
@@ -171,27 +172,28 @@ def create_app(
     dist_dir: Path = DIST_DIR,
     move_model: MoveModel | None = None,
     move_quality_validation: Path = VALIDATION_FILE,
+    evaluator: Evaluator | None = None,
 ) -> FastAPI:
     """player_for builds the LLM player of each LLM side of a game, from that game's settings and the side's colour.
 
     models are the models the game can be played against, and sampling_defaults gives a model's own sampling.
-    With a move_model, each game is analysed into its analysis file when it ends, after the response is sent."""
+    With a move_model or an evaluator, each game is analysed into its analysis file when it ends, after the response
+    is sent: its Move-quality estimate with the move_model, and its centipawn loss and accuracy with the evaluator."""
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
     game_logs: weakref.WeakKeyDictionary[GameSession, Path] = weakref.WeakKeyDictionary()
 
     def analyse(log: Path) -> None:
-        assert move_model is not None
         try:
-            analyse_game(log, move_model)
+            analyse_game(log, move_model, evaluator)
         except Exception:  # the game is over and logged either way; `python -m chessllm.analysis` can redo it
             logging.getLogger(__name__).exception("could not analyse %s", log)
 
     def respond(session: GameSession, background: BackgroundTasks) -> GameState:
         """The game's state, and its analysis started if this request ended it."""
         state = GameState.model_validate(session.state())
-        if state.status == "over" and move_model is not None:
+        if state.status == "over" and (move_model is not None or evaluator is not None):
             background.add_task(analyse, game_logs[session])
         return state
 

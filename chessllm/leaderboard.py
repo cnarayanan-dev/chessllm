@@ -66,6 +66,9 @@ class LeaderboardEntry(BaseModel):
     attempts: int | None  # every attempt, legal or not; None under Enforced decoding (ADR 0003)
     average_legal_move_streak: float | None  # None under Enforced decoding (ADR 0003)
     opponents: list[OpponentResults]  # sorted by opponent
+    # Stockfish diagnostics over every analysed legal move, never an Elo (ADR 0005); None without analysed moves.
+    average_centipawn_loss: float | None
+    average_accuracy: float | None  # lichess's move accuracy, 0-100
     # Pooled from the analysis files of all its games, Play LLM included; None without an analysed move (ADR 0005)
     move_quality: MoveQuality | None
 
@@ -100,6 +103,8 @@ class ConfigurationTally:
     attempts: int = 0
     streaks: list[int] = field(default_factory=list)
     opponents: dict[str, Tally] = field(default_factory=lambda: defaultdict(Tally))
+    centipawn_losses: list[float] = field(default_factory=list)
+    accuracies: list[float] = field(default_factory=list)
 
     def entry(self, move_quality: MoveQuality | None) -> LeaderboardEntry:
         results = self.results
@@ -121,8 +126,14 @@ class ConfigurationTally:
             opponents=[
                 OpponentResults(opponent=opponent, **vars(tally)) for opponent, tally in sorted(self.opponents.items())
             ],
+            average_centipawn_loss=mean(self.centipawn_losses),
+            average_accuracy=mean(self.accuracies),
             move_quality=move_quality,
         )
+
+
+def mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
 
 
 def leaderboard(games_dir: Path, move_quality_validation: Path = VALIDATION_FILE) -> Leaderboard:
@@ -133,6 +144,7 @@ def leaderboard(games_dir: Path, move_quality_validation: Path = VALIDATION_FILE
         if events is not None:
             add_game(tallies, events)
             add_analysed_moves(analysed, path, events)
+            add_centipawn_loss_and_accuracy(tallies, events, analysis_path(path))
     validated_for = read_validation(move_quality_validation)
     entries = [tally.entry(move_quality(analysed[key], validated_for)) for key, tally in tallies.items()]
     return Leaderboard(configurations=sorted(entries, key=lambda entry: (entry.configuration.model, entry.id)))
@@ -188,6 +200,26 @@ def add_analysed_moves(analysed: dict[str, ConfigurationMoves], log: Path, event
         if colour in analysed_sides and side["player"] == "llm":
             key, moves = analysed_sides[colour]
             analysed[llm_configuration(start, colour, side).id()].add(key, moves)
+
+
+def add_centipawn_loss_and_accuracy(
+    tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]], analysis_file: Path
+) -> None:
+    """Add each LLM side's moves analysed by Stockfish, if the game's analysis file has any (chessllm.analysis)."""
+    try:
+        analysis = json.loads(analysis_file.read_text(encoding="utf-8"))
+        sides = analysis["centipawn_loss_and_accuracy"]["sides"]
+    except (OSError, ValueError, TypeError, KeyError):  # not analysed, not by Stockfish, or not an analysis file
+        return
+    start = events[0]
+    for color, side in read_sides(start, events[-1])[0].items():
+        analysed = sides.get(color) if isinstance(sides, dict) else None
+        if side["player"] != "llm" or not isinstance(analysed, dict):
+            continue
+        tally = tallies[llm_configuration(start, color, side).id()]
+        for move in analysed.get("moves", []):
+            tally.centipawn_losses.append(move["centipawn_loss"])
+            tally.accuracies.append(move["accuracy"])
 
 
 def read_sides(start: dict[str, Any], end: dict[str, Any]) -> tuple[dict[Color, dict[str, Any]], dict[str, Any]]:
