@@ -1,8 +1,8 @@
-"""One game between the human (White) and the LLM player (Black)."""
+"""One game between the human and the LLM player, each playing the colour the settings give them."""
 
 from dataclasses import asdict, dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 import chess
 from pydantic import ValidationError
@@ -10,6 +10,8 @@ from pydantic import ValidationError
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
 from chessllm.prompt import SYSTEM_PROMPT_FILE, RetryFeedback, retry_feedback, turn_messages
+
+Color = Literal["white", "black"]
 
 
 @dataclass(frozen=True)
@@ -19,7 +21,12 @@ class Settings:
     model: str = "qwen3.5:9b"
     thinking: bool = True
     retry_feedback: RetryFeedback = "explained"
+    human_color: Color = "white"  # the LLM plays the other colour
     sampling: dict[str, float] = field(default_factory=dict)  # from the config file; empty means the model's defaults
+
+
+def color_name(color: chess.Color) -> Color:
+    return "white" if color == chess.WHITE else "black"
 
 
 class RejectedHumanMove(Exception):
@@ -62,7 +69,7 @@ def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, str]:
         return san, None, "illegal"
     except chess.InvalidMoveError:
         return san, None, "invalid"
-    if not move:  # python-chess reads "--", "0000" and "Z0" as a null move, which would let Black pass
+    if not move:  # python-chess reads "--", "0000" and "Z0" as a null move, which would let the LLM pass
         return san, None, "invalid"
     return san, move, "legal"
 
@@ -79,11 +86,12 @@ class GameSession:
         self._streak_broken = False
         self._illegal_moves = dict.fromkeys(ILLEGAL_KINDS, 0)
         self._recovered_turns = 0
+        self._human = chess.WHITE if settings.human_color == "white" else chess.BLACK
         log.write(
             "game_start",
             game_id=log.game_id,
             model=settings.model,
-            llm_color="black",
+            llm_color=color_name(not self._human),
             mode="free",
             thinking=settings.thinking,
             sampling=settings.sampling or "model_default",
@@ -92,9 +100,13 @@ class GameSession:
             prompt_file=str(SYSTEM_PROMPT_FILE),
             started_at=now(),
         )
+        if self._human == chess.BLACK:  # the LLM plays White, so it opens the game
+            self._play_llm_turn()
+            if self._end is not None:  # it forfeited its first move
+                self._write_end(self._end)
 
     def play_human_move(self, uci: str) -> None:
-        """Apply the human's move (White) and let the LLM reply.
+        """Apply the human's move and let the LLM reply.
 
         Raises RejectedHumanMove and leaves the game unchanged."""
         board = self._board
@@ -104,7 +116,7 @@ class GameSession:
             move = chess.Move.from_uci(uci)
         except ValueError:
             raise RejectedHumanMove(f"not a UCI move: {uci!r}") from None
-        if board.turn != chess.WHITE or not board.is_legal(move):
+        if board.turn != self._human or not board.is_legal(move):
             raise RejectedHumanMove(f"illegal move: {uci}")
         san = board.san(move)
         board.push(move)
@@ -124,13 +136,14 @@ class GameSession:
             "game_end", result=end.result, reason=end.reason, plies=len(board.move_stack), **stats, ended_at=now()
         )
         thinking = "thinking" if self._settings.thinking else "no thinking"
+        llm = f"{self._settings.model} ({thinking})"
         self._log.write_pgn(
             board,
             {
                 "Event": "ChessLLM",
                 "Date": f"{date.today():%Y.%m.%d}",
-                "White": "Human",
-                "Black": f"{self._settings.model} ({thinking})",
+                "White": "Human" if self._human == chess.WHITE else llm,
+                "Black": llm if self._human == chess.WHITE else "Human",
                 "Result": end.result,
                 "Termination": end.reason,
             },
@@ -157,7 +170,7 @@ class GameSession:
         board = self._board
         model = self._settings.model
         pgn, fen, ply = self._pgn(), board.fen(), len(board.move_stack) + 1
-        messages = turn_messages(pgn, fen)
+        messages = turn_messages(pgn, fen, color_name(board.turn))
         attempts: list[dict[str, Any]] = []
         turn: dict[str, Any] = {"ply": ply, "attempts": attempts, "thinking": None}
         self._llm_turns.append(turn)
@@ -196,14 +209,14 @@ class GameSession:
             legal_moves = [board.san(legal) for legal in board.legal_moves]
             feedback = retry_feedback(self._settings.retry_feedback, written, result, number, MAX_ATTEMPTS, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
-        self._end = GameEnd("1-0", "forfeit")
+        self._end = GameEnd("1-0" if self._human == chess.WHITE else "0-1", "forfeit")
 
     def state(self) -> dict[str, Any]:
         board = self._board
         return {
             "fen": board.fen(),
             "pgn": self._pgn(),
-            "turn": "white" if board.turn == chess.WHITE else "black",
+            "turn": color_name(board.turn),
             "human_legal_moves": self._human_legal_moves(),
             "last_move": board.peek().uci() if board.move_stack else None,
             "llm_turn": self._llm_turns[-1] if self._llm_turns else None,
@@ -224,7 +237,7 @@ class GameSession:
 
     def _human_legal_moves(self) -> list[str]:
         board = self._board
-        if self._end is not None or board.turn != chess.WHITE:
+        if self._end is not None or board.turn != self._human:
             return []
         return [move.uci() for move in board.legal_moves]
 

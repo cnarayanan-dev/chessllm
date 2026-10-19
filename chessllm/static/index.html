@@ -169,7 +169,8 @@
     <button class="ghost close" id="closeSettings" aria-label="Close">✕</button>
     <section data-section="game">
       <h2>Game</h2>
-      <div class="row"><div class="txt"><div class="t">Your colour</div><div class="d">Fixed in v1: you play White, the LLM plays Black</div></div><span class="chip">White</span></div>
+      <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Your colour</div><div class="d">The LLM plays the other colour. White moves first.</div></div></div>
+      <div class="radios" id="colors" style="grid-template-columns:repeat(2, 1fr)"></div>
       <div class="row"><div class="txt"><div class="t">Mode</div><div class="d">Free mode: the LLM is not shown the legal moves</div></div><span class="chip">Free</span></div>
       <div class="row" style="border:0;padding-bottom:0"><div class="txt"><div class="t">Retry feedback</div><div class="d">What the LLM is told after an illegal move. It gets 3 retries, then forfeits.</div></div></div>
       <div class="radios" id="feedbackLevels"></div>
@@ -281,7 +282,9 @@ async function show(next) {
   const animate = state !== null // the first position appears at once instead of fading in from an empty board
   state = next
   showMoves()
-  $("status").textContent = state.status === "over" ? "Game over" : state.turn === "white" ? "Your move (White)" : "Waiting for Black…"
+  const human = state.settings.human_color
+  $("status").textContent = state.status === "over" ? "Game over"
+    : state.turn === human ? `Your move (${COLOR_NAMES[human]})` : `Waiting for ${COLOR_NAMES[other(human)]}…`
   showBanner()
   showSettings()
   const thinking = state.llm_turn?.thinking
@@ -292,13 +295,17 @@ async function show(next) {
     board.addMarker(MARKER_TYPE.square, state.last_move.slice(0, 2))
     board.addMarker(MARKER_TYPE.square, state.last_move.slice(2, 4))
   }
-  await board.setPosition(state.fen, animate)
+  // The human's pieces at the bottom. The board turns after the position is set: an animated turn redraws a stale position.
+  const turn = board.getOrientation() !== COLOR[human]
+  await board.setPosition(state.fen, animate && !turn)
+  if (turn) await board.setOrientation(COLOR[human])
   board.disableMoveInput() // stays locked once the game is over, until "New game"
-  if (state.status === "playing" && state.human_legal_moves.length) board.enableMoveInput(onMoveInput, COLOR.white)
+  if (state.status === "playing" && state.human_legal_moves.length) board.enableMoveInput(onMoveInput, COLOR[human])
 }
 
 // The board stays locked while the LLM thinks, and a running timer shows the app has not frozen.
-async function play(uci) {
+// settings are those of the game the LLM is moving in. Returns the next state, or null on an error.
+async function whileLlmMoves(settings, request) {
   board.disableMoveInput()
   waiting = true
   $("newGame").disabled = $("startNext").disabled = true
@@ -307,23 +314,27 @@ async function play(uci) {
   const started = Date.now()
   const tick = () => {
     const seconds = Math.floor((Date.now() - started) / 1000)
-    const doing = state.settings.thinking ? "is thinking…" : "is choosing a move…"
-    $("status").textContent = `${state.settings.model} ${doing} ${seconds}s`
+    const doing = settings.thinking ? "is thinking…" : "is choosing a move…"
+    $("status").textContent = `${settings.model} ${doing} ${seconds}s`
   }
   tick()
   const timer = setInterval(tick, 1000)
-  let next = state // on an error, snap the piece back to the backend's position
   try {
-    next = await api("POST", "/api/games/current/moves", {uci})
+    return await request()
   } catch (error) {
     $("error").textContent = error.message
     $("error").hidden = false
+    return null
   } finally {
     clearInterval(timer)
     waiting = false
     $("newGame").disabled = $("startNext").disabled = false
   }
-  await show(next)
+}
+
+async function play(uci) {
+  const next = await whileLlmMoves(state.settings, () => api("POST", "/api/games/current/moves", {uci}))
+  await show(next ?? state) // on an error, snap the piece back to the backend's position
 }
 
 function onMoveInput(event) {
@@ -338,7 +349,7 @@ function onMoveInput(event) {
         return true
       }
       if (legal.includes(uci + "q")) {
-        board.showPromotionDialog(event.squareTo, COLOR.white, result => {
+        board.showPromotionDialog(event.squareTo, COLOR[state.settings.human_color], result => {
           if (result.type === PROMOTION_DIALOG_RESULT_TYPE.pieceSelected) play(uci + result.piece.charAt(1))
           else show(state)
         })
@@ -355,12 +366,14 @@ const FEEDBACK_LEVELS = {
   bare: {name: "Bare", description: "Only that it was illegal"},
   hinted: {name: "Hinted", description: "Also lists the legal moves (muddies free mode)"},
 }
-let next = null // {model, thinking, retry_feedback} for the next game
+const COLOR_NAMES = {white: "White", black: "Black"}
+const other = color => color === "white" ? "black" : "white"
+let next = null // {model, thinking, retry_feedback, human_color} for the next game
 let models = null // the model list, [{name, thinking, sampling}], or null until listed
 let modelsError = null // why they could not be listed
 let section = "game"
 
-const pending = () => ["model", "thinking", "retry_feedback"].some(key => next[key] !== state.settings[key])
+const pending = () => ["model", "thinking", "retry_feedback", "human_color"].some(key => next[key] !== state.settings[key])
 
 function chip(text, className = "chip") {
   const element = document.createElement("span")
@@ -371,8 +384,9 @@ function chip(text, className = "chip") {
 
 function showSettings() {
   const settings = state.settings
-  next ??= {model: settings.model, thinking: settings.thinking, retry_feedback: settings.retry_feedback}
+  next ??= {model: settings.model, thinking: settings.thinking, retry_feedback: settings.retry_feedback, human_color: settings.human_color}
   $("chips").replaceChildren(
+    chip(`you play ${COLOR_NAMES[settings.human_color]}`),
     chip(settings.model),
     chip(`thinking ${settings.thinking ? "on" : "off"}`),
     chip(`${FEEDBACK_LEVELS[settings.retry_feedback].name.toLowerCase()} feedback`),
@@ -387,6 +401,15 @@ function showSettings() {
     if (element.tagName === "BUTTON") element.classList.toggle("on", element.dataset.section === section)
     else element.hidden = element.dataset.section !== section
   })
+  $("colors").replaceChildren(...Object.entries(COLOR_NAMES).map(([color, name]) => {
+    const card = document.createElement("button")
+    card.className = "radio" + (next.human_color === color ? " on" : "")
+    card.setAttribute("role", "radio")
+    card.setAttribute("aria-checked", next.human_color === color)
+    card.append(chip(name, "t"), ...(color === "white" ? [chip("default", "default")] : []))
+    card.onclick = () => { next.human_color = color; showSettings() }
+    return card
+  }))
   $("feedbackLevels").replaceChildren(...Object.entries(FEEDBACK_LEVELS).map(([level, {name, description}]) => {
     const card = document.createElement("button")
     card.className = "radio" + (next.retry_feedback === level ? " on" : "")
@@ -469,6 +492,11 @@ async function newGame() {
   if (waiting) return
   $("error").hidden = true
   closeSettings()
+  if (next.human_color === "black") { // the LLM plays White, so the new game starts with its move
+    const started = await whileLlmMoves(next, () => api("POST", "/api/games", next))
+    await show(started ?? state)
+    return
+  }
   try {
     await show(await api("POST", "/api/games", next))
   } catch (error) {

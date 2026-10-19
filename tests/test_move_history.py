@@ -30,6 +30,15 @@ def test_a_forfeited_turn_is_kept_at_the_ply_the_llm_failed_to_play(scripted):
     ]
 
 
+def test_the_llm_playing_white_has_its_turns_at_odd_plies(scripted):
+    client, _ = scripted(["Kd3", "e4", "Nf3"])
+    client.post("/api/games", json={"human_color": "black"})
+
+    state = client.post("/api/games/current/moves", json={"uci": "e7e5"}).json()
+
+    assert turns(state) == [(1, [("Kd3", "illegal"), ("e4", "legal")]), (3, [("Nf3", "legal")])]
+
+
 def test_a_new_game_starts_with_no_llm_turns(scripted):
     client, _ = scripted(["Qh4", "e5"])
     client.post("/api/games")

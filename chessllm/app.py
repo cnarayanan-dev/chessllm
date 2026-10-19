@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from chessllm.game import GameSession, RejectedHumanMove, Settings
+from chessllm.game import Color, GameSession, RejectedHumanMove, Settings
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
@@ -28,6 +28,7 @@ class NewGame(BaseModel):
     model: str = Settings.model
     thinking: bool = Settings.thinking
     retry_feedback: RetryFeedback = Settings.retry_feedback
+    human_color: Color = Settings.human_color
 
 
 def create_app(

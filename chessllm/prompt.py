@@ -1,7 +1,11 @@
 """Prompt builder: the system prompt from an editable file and the message for each turn."""
 
+import random
 from pathlib import Path
+from string import Template
 from typing import Literal
+
+import chess
 
 from chessllm.players import Message
 
@@ -10,14 +14,40 @@ RetryFeedback = Literal["explained", "bare", "hinted"]
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system.txt"
 
+# The example move shown in the system prompt for each colour the LLM can play: the first move of each side.
+EXAMPLE_MOVES = {"white": [], "black": ["e4"]}
+EXAMPLE_ANSWERS = {"white": "e4", "black": "e5"}
+NO_MOVES_YET = "(no moves yet)"
 
-def turn_messages(pgn: str, fen: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE) -> list[Message]:
+
+def system_prompt(llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE) -> str:
+    """The system prompt for the LLM playing llm_color ("white" or "black").
+
+    The file is a template: $color and $opponent are the two colours, and $example_pgn, $example_fen,
+    $example_legal_moves and $example_move make up a worked example of a first move for that colour."""
+    board = chess.Board()
+    for san in EXAMPLE_MOVES[llm_color]:
+        board.push_san(san)
+    legal_moves = [board.san(move) for move in board.legal_moves]
+    random.Random(0).shuffle(legal_moves)  # the prompt says the order is random; a fixed seed keeps it stable
+    opponent = "black" if llm_color == "white" else "white"
+    return Template(system_prompt_file.read_text(encoding="utf-8")).substitute(
+        color=llm_color.capitalize(),
+        opponent=opponent.capitalize(),
+        example_pgn=chess.Board().variation_san(board.move_stack) or NO_MOVES_YET,
+        example_fen=board.fen(),
+        example_legal_moves=" ".join(legal_moves),
+        example_move=EXAMPLE_ANSWERS[llm_color],
+    )
+
+
+def turn_messages(pgn: str, fen: str, llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE) -> list[Message]:
     """A fresh prompt for one turn: the system prompt plus the game so far, with no earlier turns.
 
     The file is read every turn, so edits apply without restarting the app."""
     return [
-        Message("system", system_prompt_file.read_text(encoding="utf-8")),
-        Message("user", f"PGN: {pgn}\nFEN: {fen}"),
+        Message("system", system_prompt(llm_color, system_prompt_file)),
+        Message("user", f"PGN: {pgn or NO_MOVES_YET}\nFEN: {fen}"),
     ]
 
 
