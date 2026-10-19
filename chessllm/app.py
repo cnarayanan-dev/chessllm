@@ -21,6 +21,7 @@ from chessllm.game import (
     Settings,
 )
 from chessllm.game_log import GAMES_DIR, GameLog
+from chessllm.leaderboard import Leaderboard, leaderboard
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
 
@@ -247,5 +248,10 @@ def create_app(
         except RefusedLlmTurn as error:
             raise HTTPException(409, str(error)) from None
         return GameState.model_validate(session.state())
+
+    @app.get("/api/leaderboard")
+    def get_leaderboard() -> Leaderboard:
+        """Every finished game's results, grouped by Player configuration, read from the game logs."""
+        return leaderboard(games_dir)
 
     return app
