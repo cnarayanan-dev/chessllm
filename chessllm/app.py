@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +24,8 @@ from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
 
 STATIC_DIR = Path(__file__).parent / "static"
+# The React app's build (frontend/, `pnpm build`), git-ignored. Its files are served under /static/dist/.
+DIST_DIR = STATIC_DIR / "dist"
 
 
 class HumanMove(BaseModel):
@@ -50,6 +52,7 @@ def create_app(
     models: list[LlmModel] = LLM_MODELS,
     sampling_defaults: Callable[[str], dict[str, float]] = lambda model: {},
     sampling_file: Path = SAMPLING_FILE,
+    dist_dir: Path = DIST_DIR,
 ) -> FastAPI:
     """player_for builds the LLM player of each LLM side of a game, from that game's settings and the side's colour.
 
@@ -61,6 +64,18 @@ def create_app(
     @app.get("/", include_in_schema=False)
     def page() -> FileResponse:
         return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/next", include_in_schema=False, response_model=None)
+    def next_page() -> FileResponse | PlainTextResponse:
+        """The React app, served here while the old page stays at /."""
+        index = dist_dir / "index.html"
+        if not index.is_file():
+            return PlainTextResponse(
+                f"The frontend isn't built: {index} is missing. Run `pnpm install && pnpm build` in frontend/, "
+                "then reload this page.",
+                status_code=503,
+            )
+        return FileResponse(index)
 
     @app.get("/api/models")
     def list_models() -> list[dict[str, Any]]:

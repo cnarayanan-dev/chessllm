@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 .idea/
 games/
+frontend/node_modules/
+chessllm/static/dist/
