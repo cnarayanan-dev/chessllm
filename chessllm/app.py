@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from chessllm.analysis import analyse_game
 from chessllm.game import (
+    AnchorSide,
     Color,
     GameSession,
     HumanSide,
@@ -39,7 +40,11 @@ class HumanMove(BaseModel):
     uci: str
 
 
+# The app starts Play LLM games and LLM faceoffs; an Anchor match is started from the command line
+# (python -m chessllm.anchor_match), so no Anchor side is taken here.
+AppMode = Literal["play_llm", "llm_faceoff"]
 SideIn = Annotated[HumanSide | LlmSide, Field(discriminator="player")]
+SideOut = Annotated[HumanSide | LlmSide | AnchorSide, Field(discriminator="player")]
 
 
 class NewGame(BaseModel):
@@ -48,9 +53,9 @@ class NewGame(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Mode = Settings.mode
-    white: SideIn = Settings.white
-    black: SideIn = Settings.black
+    mode: AppMode = "play_llm"
+    white: SideIn = HumanSide()
+    black: SideIn = LlmSide()
     rules: Rules = Settings.rules  # refused unless every LLM side is under Free or Listed
 
 
@@ -131,8 +136,8 @@ class Stats(BaseModel):
 
 class GameSettings(BaseModel):
     mode: Mode
-    white: SideIn
-    black: SideIn
+    white: SideOut
+    black: SideOut
     sampling: Sampling  # from the config file; empty means the models' defaults
     # Left out under Standard rules, so a Standard rules game reads as it did before Chaos rules existed.
     rules: Rules | None = Field(None, exclude_if=lambda rules: rules in (None, "standard"))

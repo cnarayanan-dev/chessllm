@@ -20,12 +20,13 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-# Live tests against a real Ollama model or Maia-2 are left out unless asked for with `pytest -m ollama` or
-# `pytest -m maia2`.
-addopts = "-m 'not ollama and not maia2'"
+# Live tests against a real Ollama model, Maia-2 or Dragon are left out unless asked for with `pytest -m ollama`,
+# `pytest -m maia2` or `pytest -m dragon`.
+addopts = "-m 'not ollama and not maia2 and not dragon'"
 markers = [
     "ollama: live test against a real Ollama model",
     "maia2: live test against the real Maia-2 model, run by uv in an environment of its own",
+    "dragon: live test against the real Komodo Dragon 1 (set CHESSLLM_DRAGON)",
 ]
 
 [tool.mypy]

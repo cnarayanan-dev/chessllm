@@ -1,5 +1,6 @@
 import json
 
+import chess
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -98,3 +99,20 @@ def faceoff(tmp_path):
         return client, response.json(), players
 
     return make
+
+
+class ScriptedAnchor:
+    """Test fake for the Anchor port: plays the scripted SAN moves in order, and records every position it was
+    asked to move in (as FEN) and whether it was closed."""
+
+    def __init__(self, moves: list[str]) -> None:
+        self.moves = list(moves)
+        self.positions: list[str] = []
+        self.closed = False
+
+    def move(self, board: chess.Board) -> chess.Move:
+        self.positions.append(board.fen())
+        return board.parse_san(self.moves.pop(0))
+
+    def close(self) -> None:
+        self.closed = True

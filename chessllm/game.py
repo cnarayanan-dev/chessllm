@@ -1,4 +1,4 @@
-"""One game, each side played by a human or an LLM player as the settings' Mode says."""
+"""One game, each side played by a human, an LLM player or an Anchor as the settings' Mode says."""
 
 import random
 import threading
@@ -10,6 +10,7 @@ import chess
 from pydantic import ValidationError
 
 from chessllm import chaos
+from chessllm.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable
 from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
 from chessllm.models import LlmModel
@@ -25,11 +26,12 @@ from chessllm.prompt import (
 
 Color = Literal["white", "black"]
 COLORS: tuple[Color, Color] = ("white", "black")
-# Play LLM: a human plays one side and an LLM the other. LLM faceoff: an LLM plays each side.
-Mode = Literal["play_llm", "llm_faceoff"]
-MODE_NAMES: dict[Mode, str] = {"play_llm": "Play LLM", "llm_faceoff": "LLM faceoff"}
+# Play LLM: a human plays one side and an LLM the other. LLM faceoff: an LLM plays each side. Anchor match: an LLM
+# plays an Anchor, started from the command line.
+Mode = Literal["play_llm", "llm_faceoff", "anchor_match"]
+MODE_NAMES: dict[Mode, str] = {"play_llm": "Play LLM", "llm_faceoff": "LLM faceoff", "anchor_match": "Anchor match"}
 # Unattended games, with no human to stop them, end as a draw after MOVE_CAP moves per side (the Move cap, ADR 0005).
-UNATTENDED_MODES: tuple[Mode, ...] = ("llm_faceoff",)
+UNATTENDED_MODES: tuple[Mode, ...] = ("llm_faceoff", "anchor_match")
 MOVE_CAP = 150
 # Standard rules never play an illegal move; Chaos rules play an LLM's rule-breaking or ambiguous move (ADR 0006).
 Rules = Literal["standard", "chaos"]
@@ -55,7 +57,31 @@ class LlmSide:
         return f"{self.model} ({'thinking' if self.thinking else 'no thinking'})"
 
 
-Side = HumanSide | LlmSide
+@dataclass(frozen=True)
+class AnchorSide:
+    """An Anchor side: Komodo Dragon 1 at a Skill level, in the game log's shape."""
+
+    player: Literal["anchor"] = "anchor"
+    engine: Literal["dragon"] = "dragon"
+    skill: int = 1
+
+    def name(self) -> str:
+        """The side's name in the PGN, e.g. "Dragon (Skill 1)"."""
+        return f"Dragon (Skill {self.skill})"
+
+    def file_name(self) -> str:
+        """The side's part of the game log's file name, e.g. "dragon-skill1"."""
+        return f"dragon-skill{self.skill}"
+
+
+Side = HumanSide | LlmSide | AnchorSide
+# How many sides of each kind each Mode has.
+MODE_SIDES: dict[Mode, dict[str, int]] = {
+    "play_llm": {"human": 1, "llm": 1, "anchor": 0},
+    "llm_faceoff": {"human": 0, "llm": 2, "anchor": 0},
+    "anchor_match": {"human": 0, "llm": 1, "anchor": 1},
+}
+SIDE_KINDS = {"human": "human side", "llm": "LLM side", "anchor": "Anchor side"}
 
 
 @dataclass(frozen=True)
@@ -74,17 +100,32 @@ class Settings:
     def llm_sides(self) -> dict[Color, LlmSide]:
         return {color: side for color in COLORS if isinstance(side := self.side(color), LlmSide)}
 
+    def anchor_sides(self) -> dict[Color, AnchorSide]:
+        return {color: side for color in COLORS if isinstance(side := self.side(color), AnchorSide)}
+
     def side_names(self) -> tuple[str, str]:
-        """Who plays White and who plays Black: "human" or the model."""
-        white, black = (side.model if isinstance(side, LlmSide) else "human" for side in (self.white, self.black))
-        return white, black
+        """Who plays White and who plays Black, as the game log's file name has them: "human", the model, or the
+        Anchor, e.g. "dragon-skill1"."""
+
+        def name(side: Side) -> str:
+            if isinstance(side, LlmSide):
+                return side.model
+            return side.file_name() if isinstance(side, AnchorSide) else "human"
+
+        return name(self.white), name(self.black)
 
     def problem(self, models: list[LlmModel]) -> str | None:
         """Why a game can't be played with these settings, or None if it can."""
-        humans = sum(isinstance(self.side(color), HumanSide) for color in COLORS)
-        if humans != {"play_llm": 1, "llm_faceoff": 0}[self.mode]:
-            wanted = "one human side" if self.mode == "play_llm" else "no human side"
-            return f"{MODE_NAMES[self.mode]} needs {wanted}, not {humans}"
+        for kind, needed in MODE_SIDES[self.mode].items():
+            count = sum(side.player == kind for side in (self.white, self.black))
+            if count != needed:
+                number = {0: "no", 1: "one", 2: "two"}[needed]
+                return f"{MODE_NAMES[self.mode]} needs {number} {SIDE_KINDS[kind]}{'s' * (needed == 2)}, not {count}"
+        for color, anchor in self.anchor_sides().items():
+            if anchor.skill not in DRAGON_SKILLS:
+                return f"Dragon ({color}) plays at Skill {DRAGON_SKILLS[0]}-{DRAGON_SKILLS[-1]}, not {anchor.skill}"
+        if self.mode == "anchor_match" and self.rules == "chaos":
+            return "An Anchor match is always under Standard rules: Anchors never play under Chaos rules"
         for color, side in self.llm_sides().items():
             model = next((model for model in models if model.name == side.model), None)
             if model is None:
@@ -107,6 +148,10 @@ class RejectedHumanMove(Exception):
 
 class RefusedLlmTurn(Exception):
     """An LLM turn can't start: it isn't an LLM's turn, the game is over, or a turn is already running."""
+
+
+class RefusedAnchorTurn(Exception):
+    """An Anchor turn can't start: it isn't an Anchor's turn, or the game is over."""
 
 
 @dataclass(frozen=True)
@@ -183,9 +228,16 @@ class SideStats:
 
 
 class GameSession:
-    def __init__(self, players: dict[Color, LlmPlayer], settings: Settings, log: GameLog) -> None:
-        """players holds the LLM player of each LLM side."""
+    def __init__(
+        self,
+        players: dict[Color, LlmPlayer],
+        settings: Settings,
+        log: GameLog,
+        anchors: dict[Color, Anchor] | None = None,
+    ) -> None:
+        """players holds the LLM player of each LLM side, and anchors the Anchor of each Anchor side."""
         self._players = players
+        self._anchors = anchors or {}
         self._settings = settings
         self._llm_sides = settings.llm_sides()
         self._chaos = settings.rules == "chaos"
@@ -206,7 +258,8 @@ class GameSession:
         # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
         self._llm_turn_running = threading.Lock()
         prompt_files = {color: str(SYSTEM_PROMPT_FILES[side.llm_constraints]) for color, side in self._llm_sides.items()}
-        # Play LLM has one LLM side, so one prompt file; a faceoff logs the file of each side, even when shared.
+        # Play LLM and an Anchor match have one LLM side, so one prompt file; a faceoff logs the file of each side,
+        # even when shared.
         logged_prompts: dict[str, Any] = (
             {"prompt_files": prompt_files}
             if settings.mode == "llm_faceoff"
@@ -233,8 +286,8 @@ class GameSession:
         board = self._board
         if self._end is not None:
             raise RejectedHumanMove("the game is over")
-        if self._settings.mode == "llm_faceoff":
-            raise RejectedHumanMove("an LLM faceoff takes no human moves")
+        if self._settings.mode != "play_llm":
+            raise RejectedHumanMove(f"an {MODE_NAMES[self._settings.mode]} takes no human moves")
         try:
             move = chess.Move.from_uci(uci)
         except ValueError:
@@ -244,6 +297,27 @@ class GameSession:
             raise RejectedHumanMove(f"illegal move: {uci}")
         san = self._play_legal(move)
         self._log.write("human_move", color=color, ply=len(self._moves), move=san, fen_after=self._board.fen())
+        self._check_end()
+        if self._end is not None:
+            self._write_end(self._end)
+
+    def play_anchor_turn(self) -> None:
+        """Ask the Anchor to move for its move and play it, like a human's move but without a request.
+
+        Raises RefusedAnchorTurn and leaves the game unchanged if it isn't an Anchor's turn or the game is over,
+        and AnchorUnavailable if the Anchor fails or answers with an illegal move."""
+        board = self._board
+        if self._end is not None:
+            raise RefusedAnchorTurn("the game is over")
+        color = color_name(board.turn)
+        anchor = self._anchors.get(color)
+        if anchor is None:
+            raise RefusedAnchorTurn("it is not an Anchor's turn")
+        move = anchor.move(board.copy())
+        if not board.is_legal(move):
+            raise AnchorUnavailable(f"{self._pgn_name(color)} played an illegal move: {move.uci()}")
+        san = self._play_legal(move)
+        self._log.write("anchor_move", color=color, ply=len(self._moves), move=san, fen_after=self._board.fen())
         self._check_end()
         if self._end is not None:
             self._write_end(self._end)
@@ -301,8 +375,8 @@ class GameSession:
         self._log.write_pgn(standard, headers)
 
     def _pgn_name(self, color: Color) -> str:
-        side = self._llm_sides.get(color)
-        return side.name() if side else "Human"
+        side = self._settings.side(color)
+        return "Human" if isinstance(side, HumanSide) else side.name()
 
     def _check_end(self) -> None:
         """End the game if the position is over, counting claimable draws (threefold repetition, fifty moves), or

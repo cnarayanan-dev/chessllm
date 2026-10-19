@@ -8,7 +8,8 @@ Play chess against a small local LLM in the browser. See `CONTEXT.md` for the do
 - Run the frontend tests: `pnpm test` in `frontend/`. Typecheck it: `pnpm typecheck`
 - Edit the LLM's system prompt: `chessllm/prompts/system.txt`. It is a template: `$color` and `$opponent` are filled in with the colours the LLM and the human play, and the `$example_...` placeholders with a worked first move for that colour
 - Every game is saved in `games/`: a JSON Lines log of every move and LLM attempt, and a PGN file when the game ends
-- Run the tests: `uv run pytest`
+- Play an Anchor match (an LLM against Komodo Dragon 1, unattended): `uv run python -m chessllm.anchor_match --model llama3:8b --skill 1 --color white --dragon PATH`; `--help` lists the LLM's settings. Dragon isn't bundled: download `dragon.zip` from komodochess.com and pass the executable with `--dragon` or set `CHESSLLM_DRAGON`. Its macOS build is x86_64 only and runs under Rosetta 2 on Apple silicon
+- Run the tests: `uv run pytest`. The live tests are left out: `uv run pytest -m ollama` (Ollama with llama3:8b) and `uv run pytest -m dragon` (needs `CHESSLLM_DRAGON`)
 - Typecheck: `uv run mypy`
 - Rebuild the merida piece sprite: `uv run python scripts/build_merida_sprite.py`
 

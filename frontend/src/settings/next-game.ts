@@ -1,9 +1,9 @@
 import type { components } from '@/api/schema'
+import type { GameSettings, ModelInfo, NewGame } from '@/api/types'
+
+export type { GameSettings, ModelInfo, NewGame }
 
 type Schemas = components['schemas']
-export type GameSettings = Schemas['GameSettings']
-export type ModelInfo = Schemas['ModelInfo']
-export type NewGame = Schemas['NewGame']
 type LlmSide = Schemas['LlmSide-Input']
 type Side = Schemas['HumanSide-Input'] | LlmSide
 
