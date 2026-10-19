@@ -1,0 +1,18 @@
+/* The board's look, ported as it is from the old page (chessllm/static/index.html). */
+
+/* The old page's font, which the coordinates inherit. */
+.board-wrap { position: relative; font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Helvetica, sans-serif; }
+.board-wrap .chessboard { width: 100%; aspect-ratio: 1 / 1; }
+/* The Lichess look: brown squares, coordinates in the opposite square's colour, and tints instead of frames. */
+.cm-chessboard.lichess .board .square.white { fill: #f0d9b5; }
+.cm-chessboard.lichess .board .square.black { fill: #b58863; }
+.cm-chessboard.lichess .board .border { stroke-width: 0; fill: #b58863; }
+.cm-chessboard.lichess .coordinates { pointer-events: none; user-select: none; }
+.cm-chessboard.lichess .coordinates .coordinate { font-size: 7px; font-weight: 600; cursor: default; }
+.cm-chessboard.lichess .coordinates .coordinate.black { fill: #f0d9b5; }
+.cm-chessboard.lichess .coordinates .coordinate.white { fill: #b58863; }
+.cm-chessboard .markers .marker.last-move { fill: rgb(155, 199, 0); opacity: .41; }
+.cm-chessboard .markers .marker.selected { fill: rgb(20, 85, 30); opacity: .5; }
+.cm-chessboard .markers .marker.target-dot { fill: rgb(20, 85, 30); opacity: .5; }
+.cm-chessboard .markers .marker.target-ring { fill: none; stroke: rgb(20, 85, 30); stroke-width: 4px; opacity: .5; }
+.cm-chessboard .markers .marker.check { fill: url(#check-glow); }
