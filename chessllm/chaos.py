@@ -5,7 +5,7 @@ resolved here and applied by editing the board by hand."""
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import chess
 
@@ -23,6 +23,30 @@ class Resolution:
     piece: chess.Piece | None = None  # the piece that ends up on to_square, after any promotion
     rook: tuple[chess.Square, chess.Square] | None = None  # the rook's from and to in a castle
     move: chess.Move | None = None  # the legal move, for a legal resolution only
+
+    def as_dict(self) -> dict[str, Any]:
+        """The resolution as the game log and the page get it, with square names and the piece's symbol, so a
+        replay never has to resolve the move again."""
+        def name(square: chess.Square | None) -> str | None:
+            return chess.square_name(square) if square is not None else None
+
+        return {
+            "kind": self.kind,
+            "from": name(self.from_square),
+            "to": name(self.to_square),
+            "piece": self.piece.symbol() if self.piece else None,
+            "rook": [name(square) for square in self.rook] if self.rook else None,
+            "reason": self.reason,
+        }
+
+    def uci(self, board: chess.Board) -> str:
+        """The resolved move in UCI, given the board it is played on: a spawn as a drop, e.g. "Q@d5", and a pawn
+        that becomes another piece with its promotion. Only for a move that isn't invalid."""
+        assert self.to_square is not None and self.piece is not None
+        if self.from_square is None:
+            return chess.Move(self.to_square, self.to_square, drop=self.piece.piece_type).uci()
+        promotion = self.piece.piece_type if board.piece_type_at(self.from_square) != self.piece.piece_type else None
+        return chess.Move(self.from_square, self.to_square, promotion).uci()
 
 
 def invalid(reason: str) -> Resolution:

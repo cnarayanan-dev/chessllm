@@ -15,6 +15,7 @@ from chessllm.game import (
     HumanSide,
     LlmSide,
     Mode,
+    Rules,
     RefusedLlmTurn,
     RejectedHumanMove,
     Settings,
@@ -37,13 +38,14 @@ SideIn = Annotated[HumanSide | LlmSide, Field(discriminator="player")]
 
 class NewGame(BaseModel):
     """The settings chosen in the settings modal: the Mode and who plays each side, with the settings of each LLM
-    side. Sampling isn't one of them: it comes from the config file."""
+    side, and the rules for every LLM in the game. Sampling isn't one of them: it comes from the config file."""
 
     model_config = ConfigDict(extra="forbid")
 
     mode: Mode = Settings.mode
     white: SideIn = Settings.white
     black: SideIn = Settings.black
+    rules: Rules = Settings.rules  # refused unless every LLM side is under Free or Listed
 
 
 # Sampling options keep the type they were given in: an int stays an int in the JSON (top_k 40, not 40.0).
@@ -58,6 +60,21 @@ class ModelInfo(BaseModel):
     sampling: Sampling | None  # None when Ollama can't show the model
 
 
+def is_none(value: object) -> bool:
+    return value is None
+
+
+class Resolution(BaseModel):
+    """How the resolver read an LLM's move under Chaos rules (ADR 0006), so a replay never resolves it again."""
+
+    kind: Literal["legal", "chaos", "spawn", "invalid"]
+    from_square: str | None = Field(alias="from")  # None for a spawn
+    to: str | None
+    piece: str | None  # the symbol of the piece that ends up on to, e.g. "q" for a black queen
+    rook: list[str] | None  # a castling rook's from and to
+    reason: str
+
+
 class Attempt(BaseModel):
     """One try of an LLM turn, as the game log has it. Most fields are None until the LLM has answered."""
 
@@ -70,6 +87,8 @@ class Attempt(BaseModel):
     thinking: str | None
     error: str | None  # why the call failed or timed out
     latency_s: float | None
+    # Only under Chaos rules, and only when there was a move to resolve; a chaos move or spawn was played.
+    resolution: Resolution | None = Field(None, exclude_if=is_none)
 
 
 class LlmTurn(BaseModel):
@@ -92,6 +111,9 @@ class LlmSideStats(BaseModel):
     illegal_moves: IllegalMoves | None
     recovered_turns: int | None
     notation_slips: int
+    # Only under Chaos rules: the chaos moves played, spawns included, and the spawns among them.
+    chaos_moves: int | None = Field(None, exclude_if=is_none)
+    spawns: int | None = Field(None, exclude_if=is_none)
 
 
 class Stats(BaseModel):
@@ -106,6 +128,8 @@ class GameSettings(BaseModel):
     white: SideIn
     black: SideIn
     sampling: Sampling  # from the config file; empty means the models' defaults
+    # Left out under Standard rules, so a Standard rules game reads as it did before Chaos rules existed.
+    rules: Rules | None = Field(None, exclude_if=lambda rules: rules in (None, "standard"))
 
 
 class GameState(BaseModel):
@@ -123,7 +147,7 @@ class GameState(BaseModel):
     settings: GameSettings
     status: Literal["playing", "over"]
     result: Literal["1-0", "0-1", "1/2-1/2"] | None
-    end_reason: str | None
+    end_reason: str | None  # "checkmate", "forfeit", "king_capture", ...
     stats: Stats
 
 
@@ -183,7 +207,9 @@ def create_app(
     def start_game(new_game: NewGame | None = None) -> GameState:
         nonlocal game
         new_game = new_game or NewGame()
-        settings = Settings(new_game.mode, new_game.white, new_game.black, sampling=sampling_config())
+        settings = Settings(
+            new_game.mode, new_game.white, new_game.black, sampling=sampling_config(), rules=new_game.rules
+        )
         problem = settings.problem(models)
         if problem is not None:
             raise HTTPException(400, problem)
