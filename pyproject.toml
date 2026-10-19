@@ -20,10 +20,19 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-# Live tests against a real Ollama model are left out unless asked for with `pytest -m ollama`.
-addopts = "-m 'not ollama'"
-markers = ["ollama: live test against a real Ollama model"]
+# Live tests against a real Ollama model or Maia-2 are left out unless asked for with `pytest -m ollama` or
+# `pytest -m maia2`.
+addopts = "-m 'not ollama and not maia2'"
+markers = [
+    "ollama: live test against a real Ollama model",
+    "maia2: live test against the real Maia-2 model, run by uv in an environment of its own",
+]
 
 [tool.mypy]
 strict = true
 packages = ["chessllm"]
+
+# The Maia-2 worker runs in its own environment (see chessllm/maia2_model.py), so maia2 and torch aren't here.
+[[tool.mypy.overrides]]
+module = ["maia2.*", "torch"]
+ignore_missing_imports = true

@@ -1,14 +1,17 @@
 """HTTP API and static page."""
 
+import logging
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from chessllm.analysis import analyse_game
 from chessllm.game import (
     Color,
     GameSession,
@@ -22,6 +25,7 @@ from chessllm.game import (
 )
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.leaderboard import Leaderboard, leaderboard
+from chessllm.move_model import MoveModel
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
 
@@ -159,13 +163,30 @@ def create_app(
     sampling_defaults: Callable[[str], dict[str, float]] = lambda model: {},
     sampling_file: Path = SAMPLING_FILE,
     dist_dir: Path = DIST_DIR,
+    move_model: MoveModel | None = None,
 ) -> FastAPI:
     """player_for builds the LLM player of each LLM side of a game, from that game's settings and the side's colour.
 
-    models are the models the game can be played against, and sampling_defaults gives a model's own sampling."""
+    models are the models the game can be played against, and sampling_defaults gives a model's own sampling.
+    With a move_model, each game is analysed into its analysis file when it ends, after the response is sent."""
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
+    game_logs: weakref.WeakKeyDictionary[GameSession, Path] = weakref.WeakKeyDictionary()
+
+    def analyse(log: Path) -> None:
+        assert move_model is not None
+        try:
+            analyse_game(log, move_model)
+        except Exception:  # the game is over and logged either way; `python -m chessllm.analysis` can redo it
+            logging.getLogger(__name__).exception("could not analyse %s", log)
+
+    def respond(session: GameSession, background: BackgroundTasks) -> GameState:
+        """The game's state, and its analysis started if this request ended it."""
+        state = GameState.model_validate(session.state())
+        if state.status == "over" and move_model is not None:
+            background.add_task(analyse, game_logs[session])
+        return state
 
     @app.get("/", include_in_schema=False)
     def page() -> FileResponse:
@@ -215,7 +236,9 @@ def create_app(
         if problem is not None:
             raise HTTPException(400, problem)
         players = {color: player_for(settings, color) for color in settings.llm_sides()}
-        game = GameSession(players, settings, GameLog(games_dir, *settings.side_names()))
+        log = GameLog(games_dir, *settings.side_names())
+        game = GameSession(players, settings, log)
+        game_logs[game] = log.path
         return GameState.model_validate(game.state())
 
     def current_game() -> GameSession:
@@ -228,16 +251,16 @@ def create_app(
         return GameState.model_validate(current_game().state())
 
     @app.post("/api/games/current/moves")
-    def play_move(move: HumanMove) -> GameState:
+    def play_move(move: HumanMove, background: BackgroundTasks) -> GameState:
         session = current_game()
         try:
             session.play_human_move(move.uci)
         except RejectedHumanMove as error:
             raise HTTPException(400, str(error)) from None
-        return GameState.model_validate(session.state())
+        return respond(session, background)
 
     @app.post("/api/games/current/llm-turn")
-    def play_llm_turn() -> GameState:
+    def play_llm_turn(background: BackgroundTasks) -> GameState:
         """The only way an LLM turn starts. The page asks for one whenever a state says it is an LLM's turn, which
         in an LLM faceoff is every turn until the game ends.
 
@@ -247,7 +270,7 @@ def create_app(
             session.play_llm_turn()
         except RefusedLlmTurn as error:
             raise HTTPException(409, str(error)) from None
-        return GameState.model_validate(session.state())
+        return respond(session, background)
 
     @app.get("/api/leaderboard")
     def get_leaderboard() -> Leaderboard:
