@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { modelsQuery } from '@/api/models'
 import type { GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
+import { BoardFlashes } from '@/components/board/BoardFlashes'
+import { MovesCard } from '@/components/moves/MovesCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -121,7 +123,9 @@ export default function App() {
             input={phase(state) === 'human' ? human : null}
             legalMoves={legalMoves}
             onMove={humanMove}
-          />
+          >
+            <BoardFlashes flash={state.flash} />
+          </Board>
         ) : (
           <div className="aspect-square w-full" />
         )}
@@ -135,6 +139,7 @@ export default function App() {
           )}
           {/* In Play LLM the thinking hides as the LLM's next turn starts. */}
           {game && <Thinking game={game} hidden={running && !faceoff(game)} />}
+          {game && <MovesCard game={game} />}
         </div>
       </main>
       <footer className="px-5 pb-6 text-center text-xs text-muted-foreground">

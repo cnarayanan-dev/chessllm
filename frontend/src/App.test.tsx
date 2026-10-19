@@ -355,3 +355,31 @@ describe('settings', () => {
     expect(theBoard().input).toBeNull()
   })
 })
+
+test("an LLM turn's mistakes land in the moves card and flash on the board until New game", async () => {
+  const turn = aTurn('e5', {
+    attempts: [{ ...aTurn('Ke7').attempts[0], san: null, result: 'illegal' }, aTurn('e5').attempts[0]],
+  })
+  const landed = afterE5({ llm_turn: turn, llm_turns: [turn] })
+  const starting = later()
+  fakeBackend()
+    .on('GET /api/games/current', Response.json(afterE4()))
+    .on('POST /api/games/current/llm-turn', Response.json(landed))
+    .on('POST /api/games', starting.promise)
+  renderApp()
+
+  expect(await screen.findByText('✗ LLM move illegal')).toBeInTheDocument()
+  expect(screen.getByText('illegal · try 1 of 4')).toBeInTheDocument()
+  const moves = screen.getByTestId('moves')
+  expect(within(moves).getByText('e4')).toBeInTheDocument()
+  expect(within(moves).getByText('illegal · try 1', { exact: false })).toHaveClass('mistake', 'illegal')
+  expect(screen.getByTestId('totals')).toHaveTextContent('✗ 1 illegal try · ⚑ 0 notation slips')
+
+  // The flashes go at the click, before the new game has arrived.
+  await userEvent.click(screen.getByRole('button', { name: 'New game' }))
+  expect(screen.queryByText('✗ LLM move illegal')).not.toBeInTheDocument()
+
+  await act(async () => starting.resolve(Response.json(aGame({ game_id: 'game-2' }))))
+  expect(await screen.findByText('Your move (White)')).toBeInTheDocument()
+  expect(within(screen.getByTestId('moves')).queryByText('e4')).not.toBeInTheDocument()
+})

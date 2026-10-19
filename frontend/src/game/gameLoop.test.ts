@@ -373,3 +373,54 @@ describe('when no game can be loaded or started', () => {
     expect(state.error).toBeNull()
   })
 })
+
+describe('board flashes', () => {
+  const waiting = run(received(initialGameLoop, afterE4()))
+
+  test('none until an LLM turn lands', () => {
+    expect(initialGameLoop.flash).toBeNull()
+    expect(waiting.flash).toBeNull()
+  })
+
+  test("an LLM turn that lands flashes that turn, with the square its move landed on", () => {
+    const state = gameLoop(waiting, received(waiting, afterE5()))
+
+    expect(state.flash).toEqual({ id: waiting.request!.id, turn: aTurn('e5'), landedOn: 'e5' })
+  })
+
+  test('a forfeit flashes too', () => {
+    const forfeit = aTurn('Ke2', {
+      attempts: [{ ...aTurn('Ke2').attempts[0], move: null, san: null, result: 'error', error: 'timed out' }],
+    })
+    const over = afterE4({ llm_turn: forfeit, llm_turns: [forfeit], status: 'over', result: '1-0', end_reason: 'forfeit' })
+
+    const state = gameLoop(waiting, received(waiting, over))
+
+    expect(state.flash).toEqual({ id: waiting.request!.id, turn: forfeit, landedOn: 'e4' })
+  })
+
+  test('a state in which no turn has landed flashes nothing', () => {
+    const state = gameLoop(waiting, received(waiting, aGame({ game_id: 'game-2' })))
+
+    expect(state.flash).toBeNull()
+  })
+
+  test("stays up through the human's move, until the next turn lands", () => {
+    const landed = gameLoop(waiting, received(waiting, afterE5()))
+    const sent = gameLoop(landed, { type: 'human-move', uci: 'g1f3' })
+    const moved = gameLoop(sent, received(sent, afterE5({ turn: 'black', pgn: '1. e4 e5 2. Nf3', last_move: 'g1f3' })))
+
+    expect(moved.flash).toBe(landed.flash)
+
+    const next = aTurn('Nc6', { ply: 4 })
+    const state = gameLoop(moved, received(moved, afterE5({ pgn: '1. e4 e5 2. Nf3 Nc6', last_move: 'b8c6', llm_turn: next, llm_turns: [aTurn('e5'), next] })))
+
+    expect(state.flash).toEqual({ id: moved.request!.id, turn: next, landedOn: 'c6' })
+  })
+
+  test('New game clears them at once', () => {
+    const landed = gameLoop(waiting, received(waiting, afterE5()))
+
+    expect(gameLoop(landed, { type: 'new-game', newGame: null }).flash).toBeNull()
+  })
+})

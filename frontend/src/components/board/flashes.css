@@ -1,0 +1,19 @@
+/* Board flashes, ported as they are from the old page (chessllm/static/index.html): an LLM turn's mistakes, shown when
+   the turn comes back whatever the "Show LLM mistakes" switch says. No close button: each fades out after 7 s and is
+   then removed. */
+.flash { --bg: #ffffff; --muted: #787774; --red: #e03e3e; --amber: #c77d00; }
+.flash { animation: flash-in .2s ease-out, flash-out .4s ease-in 7s forwards; pointer-events: none; z-index: 5; }
+@keyframes flash-in { from { opacity: 0; } }
+@keyframes flash-out { to { opacity: 0; visibility: hidden; } }
+.center-flash { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); min-width: 230px;
+  background: var(--bg); border: 1px solid var(--red); border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.22); overflow: hidden; }
+.center-flash .head { background: var(--red); color: #fff; font-weight: 600; font-size: 13px; padding: 6px 12px; }
+.center-flash .line { font-family: ui-monospace, monospace; font-size: 13px; padding: 4px 12px; }
+.center-flash .line:first-of-type { padding-top: 8px; }
+.center-flash .line:last-of-type { padding-bottom: 8px; }
+.center-flash .kind { color: var(--muted); }
+.bubble { position: absolute; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; padding: 5px 9px;
+  background: var(--amber); color: #fff; border-radius: 6px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+.bubble code { font-family: ui-monospace, monospace; }
+.bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: var(--amber); }
+.square-ring { position: absolute; border: 3px solid var(--amber); border-radius: 3px; }

@@ -8,7 +8,7 @@
   the running game's requests (an LLM turn of an abandoned game still lands in that game's log, but nothing follows
   it here). It runs no chess logic (ADR 0001): who is to move and whether the game is over come from the backend.
 */
-import type { Color, GameState, NewGame } from '@/api/types'
+import type { Color, GameState, LlmTurn, NewGame } from '@/api/types'
 import { nextGameFrom, type NextGame } from '@/settings/next-game'
 
 /** The one request to the backend in flight. */
@@ -33,8 +33,13 @@ export type GameLoop = {
   next: NextGame | null
   /** Counts the moves that have landed and play the move sound: the human's, and each LLM move (not a forfeit). */
   moveSounds: number
+  /** The board flashes of the last LLM turn to land, until the next one lands or New game. */
+  flash: Flash | null
   nextId: number
 }
+
+/** An LLM turn that landed, with the square the last move landed on; `id` tells one landing from the next. */
+export type Flash = { id: number; turn: LlmTurn; landedOn: string | null }
 
 export type GameLoopAction =
   | { type: 'new-game'; newGame: NewGame | null }
@@ -52,6 +57,7 @@ export const initialGameLoop: GameLoop = {
   error: null,
   next: null,
   moveSounds: 0,
+  flash: null,
   nextId: 2,
 }
 
@@ -71,10 +77,14 @@ export function phase(state: GameLoop): Phase {
 /** Whether the LLM's turn is running: asked for and not yet answered. */
 export const waitingForLlm = (state: GameLoop): boolean => state.request?.kind === 'llm-turn'
 
+/** Whether an LLM turn of the same game has landed in `next`, played or forfeited. */
+function llmTurnLanded(game: GameState | null, next: GameState): boolean {
+  return game !== null && next.game_id === game.game_id && next.llm_turns.length > game.llm_turns.length
+}
+
 /** Whether an LLM turn of the same game has landed in `next`, and played a move rather than forfeiting. */
 function movedByLlm(game: GameState | null, next: GameState): boolean {
-  const landed = game !== null && next.game_id === game.game_id && next.llm_turns.length > game.llm_turns.length
-  return landed && (next.llm_turn?.attempts.some((attempt) => attempt.result === 'legal') ?? false)
+  return llmTurnLanded(game, next) && (next.llm_turn?.attempts.some((attempt) => attempt.result === 'legal') ?? false)
 }
 
 function send(state: GameLoop, request: NewRequest): GameLoop {
@@ -93,7 +103,7 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
   switch (action.type) {
     case 'new-game':
       // Also during an LLM turn or a human move: their answers are dropped from here on.
-      return send({ ...state, error: null }, { kind: 'start', newGame: action.newGame })
+      return send({ ...state, error: null, flash: null }, { kind: 'start', newGame: action.newGame })
     case 'human-move':
       if (phase(state) !== 'human' || state.request) return state
       return send({ ...state, error: null }, { kind: 'move', uci: action.uci })
@@ -103,7 +113,11 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       const request = state.request
       if (request?.id !== action.requestId) return state
       const sound = request.kind === 'move' || (request.kind === 'llm-turn' && movedByLlm(state.game, action.game))
-      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0) }, action.game)
+      const turn = request.kind === 'llm-turn' && llmTurnLanded(state.game, action.game) ? action.game.llm_turn : null
+      const flash = turn
+        ? { id: request.id, turn, landedOn: action.game.last_move?.slice(2, 4) ?? null }
+        : state.flash
+      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash }, action.game)
     }
     case 'failed': {
       const request = state.request

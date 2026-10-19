@@ -50,6 +50,15 @@ export class Chessboard {
   constructor(context: HTMLElement, props: ChessboardProps = {}) {
     this.context = context
     this.props = props
+    // Its squares, as cm-chessboard draws them, for what is laid over a square (a notation slip's flash).
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    for (const square of [...'abcdefgh'].flatMap((file) => [...'12345678'].map((rank) => file + rank))) {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      rect.setAttribute('class', 'square')
+      rect.setAttribute('data-square', square)
+      svg.append(rect)
+    }
+    context.append(svg)
     if (props.position) this.position = props.position.split(' ')[0]
     if (props.orientation) this.orientation = props.orientation
     boards.push(this)
