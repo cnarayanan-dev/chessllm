@@ -6,6 +6,7 @@ read (ADR 0004); a missing `rules` means Standard rules."""
 import hashlib
 import json
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 from typing import Any
@@ -13,6 +14,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from chessllm.analysis import analysis_path
+from chessllm.anchors import ANCHOR_RATINGS, AnchorRating, anchor_name
 from chessllm.game import COLORS, Color, Rules, Settings
 from chessllm.move_quality import (
     VALIDATION_FILE,
@@ -23,6 +25,7 @@ from chessllm.move_quality import (
     read_validation,
 )
 from chessllm.prompt import ENFORCED, SYSTEM_PROMPT_FILES, LlmConstraints, RetryFeedback
+from chessllm.rating import RatedGame, Rating, ratings
 
 
 class PlayerConfiguration(BaseModel):
@@ -43,7 +46,7 @@ class PlayerConfiguration(BaseModel):
 
 
 class OpponentResults(BaseModel):
-    opponent: str  # the id of the other Player configuration, or "human"
+    opponent: str  # the id of the other Player configuration, "human", or an Anchor's name, e.g. "anchor:dragon:3"
     games: int
     wins: int
     draws: int
@@ -69,6 +72,9 @@ class LeaderboardEntry(BaseModel):
     # Stockfish diagnostics over every analysed legal move, never an Elo (ADR 0005); None without analysed moves.
     average_centipawn_loss: float | None
     average_accuracy: float | None  # lichess's move accuracy, 0-100
+    # Fitted only from Anchor matches and LLM faceoffs under Standard rules, a Forfeit a loss; None with no path to an
+    # Anchor, so always None under Chaos rules or with Play LLM games only (ADR 0005)
+    rating: Rating | None
     # Pooled from the analysis files of all its games, Play LLM included; None without an analysed move (ADR 0005)
     move_quality: MoveQuality | None
 
@@ -106,7 +112,7 @@ class ConfigurationTally:
     centipawn_losses: list[float] = field(default_factory=list)
     accuracies: list[float] = field(default_factory=list)
 
-    def entry(self, move_quality: MoveQuality | None) -> LeaderboardEntry:
+    def entry(self, rating: Rating | None, move_quality: MoveQuality | None) -> LeaderboardEntry:
         results = self.results
         enforced = self.configuration.llm_constraints in ENFORCED
         return LeaderboardEntry(
@@ -128,6 +134,7 @@ class ConfigurationTally:
             ],
             average_centipawn_loss=mean(self.centipawn_losses),
             average_accuracy=mean(self.accuracies),
+            rating=rating,
             move_quality=move_quality,
         )
 
@@ -136,17 +143,26 @@ def mean(values: list[float]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def leaderboard(games_dir: Path, move_quality_validation: Path = VALIDATION_FILE) -> Leaderboard:
+def leaderboard(
+    games_dir: Path,
+    move_quality_validation: Path = VALIDATION_FILE,
+    anchors: Mapping[str, AnchorRating] = ANCHOR_RATINGS,
+) -> Leaderboard:
     tallies: dict[str, ConfigurationTally] = {}
     analysed: dict[str, ConfigurationMoves] = defaultdict(ConfigurationMoves)
+    rated: list[RatedGame] = []
     for path in sorted(games_dir.glob("*.jsonl")):
         events = finished_game(path)
         if events is not None:
             add_game(tallies, events)
             add_analysed_moves(analysed, path, events)
             add_centipawn_loss_and_accuracy(tallies, events, analysis_path(path))
+            rated.extend(rated_game(events))
     validated_for = read_validation(move_quality_validation)
-    entries = [tally.entry(move_quality(analysed[key], validated_for)) for key, tally in tallies.items()]
+    fitted = ratings(rated, anchors)
+    entries = [
+        tally.entry(fitted.get(key), move_quality(analysed[key], validated_for)) for key, tally in tallies.items()
+    ]
     return Leaderboard(configurations=sorted(entries, key=lambda entry: (entry.configuration.model, entry.id)))
 
 
@@ -188,6 +204,30 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
         streak = (stats.get(color) or {}).get("legal_move_streak")
         if streak is not None:
             tally.streaks.append(streak)
+
+
+RATED_MODES = ("anchor_match", "llm_faceoff")  # Play LLM games don't count: the human's strength is unknown
+WHITE_SCORES = {"1-0": 1.0, "0-1": 0.0}  # anything else that ends a finished game is a draw, a half point
+
+
+def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
+    """The game as the Rating counts it, if it does: an Anchor match or LLM faceoff under Standard rules (version 1
+    logs are all Play LLM). A Forfeit is a loss like any other."""
+    start, end = events[0], events[-1]
+    standard = start.get("rules", "standard") == "standard"
+    if "log_version" not in start or start.get("mode") not in RATED_MODES or not standard:
+        return []
+    sides, _ = read_sides(start, end)
+    players = []
+    for color, side in sides.items():
+        if side["player"] == "llm":
+            players.append(llm_configuration(start, color, side).id())
+        elif side["player"] == "anchor":
+            players.append(anchor_name(side))
+        else:
+            return []
+    white, black = players
+    return [RatedGame(white=white, black=black, white_score=WHITE_SCORES.get(end["result"], 0.5))]
 
 
 def add_analysed_moves(analysed: dict[str, ConfigurationMoves], log: Path, events: list[dict[str, Any]]) -> None:
@@ -270,8 +310,10 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
 
 
 def opponent_name(side: dict[str, Any], configuration: PlayerConfiguration | None) -> str:
-    """The other configuration's id for an LLM, "human" for a human, and the side's description for anything else
-    (such as a later Anchor), e.g. "anchor:dragon:3"."""
+    """The other configuration's id for an LLM, the Anchor's name for an Anchor, e.g. "anchor:dragon:3", and the
+    side's description for anything else: "human" for a human."""
     if configuration is not None:
         return configuration.id()
+    if side["player"] == "anchor":
+        return anchor_name(side)
     return ":".join(str(value) for value in side.values())

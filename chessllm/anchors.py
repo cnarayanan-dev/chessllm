@@ -5,8 +5,9 @@ komodochess.com (/pub/dragon.zip) and its executable's path is configured, with 
 
 import os
 import platform
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import chess
 import chess.engine
@@ -17,6 +18,27 @@ DRAGON_PATH_VARIABLE = "CHESSLLM_DRAGON"
 # Dragon's strength is set by its Skill, not by its thinking time; this only keeps a game quick.
 MOVE_TIME_S = 0.1
 START_TIMEOUT_S = 30.0
+
+
+@dataclass(frozen=True)
+class AnchorRating:
+    """An Anchor's strength on the chess.com Rapid scale: its rating and the standard deviation of the Gaussian prior
+    the Rating fit holds it at (ADR 0005)."""
+
+    rating: float
+    uncertainty: float
+
+
+# Every Anchor's rating, by the Anchor's name (see anchor_name). The one place they are set: another Anchor, such as a
+# random legal mover at about -122, is added here and then rated games against it count towards the Rating.
+ANCHOR_RATINGS: dict[str, AnchorRating] = {
+    f"anchor:dragon:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=100) for skill in DRAGON_SKILLS
+}
+
+
+def anchor_name(side: dict[str, Any]) -> str:
+    """An Anchor side's name, from its description in game_start, e.g. "anchor:dragon:3" for Dragon at Skill 3."""
+    return ":".join(["anchor", *(str(side[key]) for key in ("engine", "skill") if key in side)])
 
 
 class AnchorUnavailable(Exception):
