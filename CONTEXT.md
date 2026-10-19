@@ -7,7 +7,7 @@ A benchmark of how well small local LLMs play chess, by playing them against hum
 ### Modes
 
 **Mode**:
-Who plays each side of a game, fixed for the whole game. Either **Play LLM** or **LLM faceoff**.
+Who plays each side of a game, fixed for the whole game. One of **Play LLM**, **LLM faceoff** or **Anchor match**.
 _Avoid_: Matchup, game type, opponent type
 
 **Play LLM**:
@@ -17,6 +17,18 @@ _Avoid_: Human vs LLM, single-player
 **LLM faceoff**:
 The **Mode** in which an LLM plays each side, two different models or one model against itself, so models can be compared with each other.
 _Avoid_: LLM vs LLM, self-play, tournament
+
+**Anchor match**:
+The **Mode** in which an LLM plays an **Anchor**, run unattended in batches, so the LLM's games have an opponent of known strength.
+_Avoid_: Engine game, bot match, calibration game
+
+**Anchor**:
+A non-LLM opponent whose strength on the chess.com scale is fixed in advance, such as a random legal mover or a chess engine held to a set skill level.
+_Avoid_: Bot, engine (alone), reference player
+
+**Move cap**:
+The number of moves per side after which an unattended game that has not ended by the rules is scored a draw, whatever the position.
+_Avoid_: Move limit, adjudication, timeout
 
 ### LLM constraints
 
@@ -103,3 +115,17 @@ _Avoid_: Resign, disqualification
 **Legal-move streak**:
 The number of legal moves an LLM plays in a game before its first illegal move, whether or not a retry later recovers the game. Not applicable under **Enforced decoding**, where it would be true by construction.
 _Avoid_: Legal move count, survival length
+
+### Rating
+
+**Player configuration**:
+An LLM together with every setting it plays a game with: model, thinking, **LLM constraints**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
+_Avoid_: Model (when settings differ), entrant, agent, bot
+
+**Rating**:
+The Elo of a **Player configuration** on the chess.com scale, estimated only from its wins, draws and losses, with a **Forfeit** counted as a loss. Games against **Anchors** set the scale; **LLM faceoff** games only place configurations relative to each other, so a configuration with no path to an Anchor has no Rating. **Play LLM** games do not count towards it, since the human's strength is unknown; they count only towards the **Move-quality estimate**. Fitted over all games together, so the order they were played in does not matter. Always given with its uncertainty, or as an upper bound when every game was lost.
+_Avoid_: Elo (alone), score, strength, performance
+
+**Move-quality estimate**:
+An Elo for a **Player configuration** inferred from its moves, regardless of who won: the human rating whose players would most likely have made the same moves. Given for each game and for each Player configuration; the configuration's estimate pools the moves of all its games rather than averaging the per-game estimates. Shown next to the **Rating** and never combined with it; the gap between the two is itself a finding.
+_Avoid_: Estimated rating, accuracy Elo, game rating
