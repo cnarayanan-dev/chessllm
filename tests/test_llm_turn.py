@@ -56,6 +56,8 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
         "attempts": [
             {
                 "move": "Nc6",
+                "san": "Nc6",
+                "notation_slip": False,
                 "result": "legal",
                 "feedback_sent": None,
                 "raw_reply": '{"move": "Nc6"}',

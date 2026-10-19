@@ -163,6 +163,7 @@ def test_a_new_game_starts_with_clean_stats(scripted):
         "legal_move_streak": 0,
         "illegal_moves": {"invalid": 0, "illegal": 0, "ambiguous": 0},
         "recovered_turns": 0,
+        "notation_slips": 0,
     }
     assert state["llm_turn"] is None
 

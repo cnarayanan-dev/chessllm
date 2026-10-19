@@ -88,6 +88,7 @@ class GameSession:
         self._streak_broken = False
         self._illegal_moves = dict.fromkeys(ILLEGAL_KINDS, 0)
         self._recovered_turns = 0
+        self._notation_slips = 0
         self._human = chess.WHITE if settings.human_color == "white" else chess.BLACK
         log.write(
             "game_start",
@@ -187,8 +188,10 @@ class GameSession:
         self._llm_turns.append(turn)
         feedback = None
         for number in range(1, MAX_ATTEMPTS + 1):
-            attempt: dict[str, Any] = {"move": None, "result": None, "feedback_sent": feedback}
-            attempt |= {"raw_reply": None, "thinking": None, "error": None, "latency_s": None}
+            attempt: dict[str, Any] = {
+                "move": None, "san": None, "notation_slip": False, "result": None, "feedback_sent": feedback,
+                "raw_reply": None, "thinking": None, "error": None, "latency_s": None,
+            }
             attempts.append(attempt)
             try:
                 reply = self._player.reply(messages)
@@ -205,6 +208,9 @@ class GameSession:
             # With thinking off, the reasoning in the answer stands in for the thinking text.
             thinking = reply.thinking if self._settings.thinking else reasoning(reply.raw)
             attempt |= {"move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking}
+            if move is not None:  # legal as written; a slip if not written exactly as its standard SAN (ADR 0002)
+                attempt["san"] = board.san(move)
+                attempt["notation_slip"] = written != attempt["san"]
             attempt["latency_s"] = reply.latency_s
             self._log.write("llm_attempt", ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list, **attempt)
             turn["thinking"] = thinking
@@ -212,6 +218,8 @@ class GameSession:
                 board.push(move)
                 if number > 1:
                     self._recovered_turns += 1
+                if attempt["notation_slip"]:
+                    self._notation_slips += 1
                 if not self._streak_broken:
                     self._legal_move_streak += 1
                 return
@@ -243,6 +251,7 @@ class GameSession:
             "legal_move_streak": self._legal_move_streak,
             "illegal_moves": dict(self._illegal_moves),
             "recovered_turns": self._recovered_turns,
+            "notation_slips": self._notation_slips,
         }
 
     def _human_legal_moves(self) -> list[str]:

@@ -59,6 +59,8 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
         "thinking": "Attack f2.",
         "raw_reply": '{"move": "Qh4"}',
         "move": "Qh4",
+        "san": None,
+        "notation_slip": False,
         "result": "illegal",
         "error": None,
     }
@@ -83,6 +85,7 @@ def test_a_finished_game_ends_its_log_with_the_summary_and_writes_a_pgn(scripted
         "legal_move_streak": 3,
         "illegal_moves": {"invalid": 0, "illegal": 0, "ambiguous": 0},
         "recovered_turns": 0,
+        "notation_slips": 0,
     }
     [pgn_file] = logs(tmp_path / "games", ".pgn")
     assert pgn_file.stem == log.stem
