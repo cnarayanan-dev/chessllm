@@ -2,6 +2,7 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 
 from chessllm.app import create_app
 from chessllm.game import Settings
@@ -10,6 +11,15 @@ from chessllm.players import LlmReply, Message
 
 class Raw(str):
     """A scripted reply sent to the game exactly as written, instead of wrapped as {"move": ...}."""
+
+
+def play_move(client: TestClient, uci: str) -> Response:
+    """Post the human's move, then ask for the LLM's turn as the page does while the game goes on.
+    Returns the last response: the move's if it was rejected or ended the game, else the LLM turn's."""
+    response = client.post("/api/games/current/moves", json={"uci": uci})
+    if response.status_code != 200 or response.json()["status"] != "playing":
+        return response
+    return client.post("/api/games/current/llm-turn")
 
 
 class ScriptedPlayer:

@@ -1,4 +1,5 @@
 import pytest
+from conftest import play_move
 
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -18,11 +19,11 @@ def test_starting_a_game_returns_the_start_position(scripted):
     assert {"e2e4", "g1f3", "b1c3"} <= set(state["human_legal_moves"])
 
 
-def test_a_legal_human_move_is_answered_by_the_llm_in_the_same_response(scripted):
+def test_a_legal_human_move_is_answered_by_the_llms_turn(scripted):
     client, _ = scripted(["e5"])
     client.post("/api/games")
 
-    response = client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    response = play_move(client, "e2e4")
 
     assert response.status_code == 200
     state = response.json()
@@ -46,7 +47,7 @@ def test_an_illegal_human_move_is_rejected_without_changing_the_state(scripted, 
     client, player = scripted([])
     before = client.post("/api/games").json()
 
-    response = client.post("/api/games/current/moves", json={"uci": uci})
+    response = play_move(client, uci)
 
     assert response.status_code == 400
     assert client.get("/api/games/current").json() == before
@@ -56,7 +57,7 @@ def test_an_illegal_human_move_is_rejected_without_changing_the_state(scripted, 
 def test_a_new_game_resets_to_the_start_position(scripted):
     client, _ = scripted(["e5"])
     client.post("/api/games")
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
+    play_move(client, "e2e4")
 
     state = client.post("/api/games").json()
 
@@ -69,16 +70,16 @@ def test_there_is_no_current_game_before_one_is_started(scripted):
     client, _ = scripted([])
 
     assert client.get("/api/games/current").status_code == 404
-    assert client.post("/api/games/current/moves", json={"uci": "e2e4"}).status_code == 404
+    assert play_move(client, "e2e4").status_code == 404
 
 
 def test_the_llm_is_not_asked_to_move_after_the_human_mates(scripted):
     client, player = scripted(["f6", "g5"])
     client.post("/api/games")
-    client.post("/api/games/current/moves", json={"uci": "e2e4"})
-    client.post("/api/games/current/moves", json={"uci": "d2d4"})
+    play_move(client, "e2e4")
+    play_move(client, "d2d4")
 
-    response = client.post("/api/games/current/moves", json={"uci": "d1h5"})
+    response = play_move(client, "d1h5")
 
     assert response.status_code == 200
     assert response.json()["pgn"] == "1. e4 f6 2. d4 g5 3. Qh5#"
@@ -89,11 +90,11 @@ def test_a_human_move_on_blacks_turn_is_rejected(scripted):
     client, _ = scripted(["f6", "g5"])
     client.post("/api/games")
     for uci in ["e2e4", "d2d4", "d1h5"]:
-        client.post("/api/games/current/moves", json={"uci": uci})
+        play_move(client, uci)
     before = client.get("/api/games/current").json()
     assert before["turn"] == "black"
 
-    response = client.post("/api/games/current/moves", json={"uci": "a7a6"})
+    response = play_move(client, "a7a6")
 
     assert response.status_code == 400
     assert client.get("/api/games/current").json() == before

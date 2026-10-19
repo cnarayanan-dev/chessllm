@@ -47,6 +47,10 @@ def play(scripted, movetext: str) -> tuple[Any, Any, dict[str, Any]]:
         response = client.post("/api/games/current/moves", json={"uci": uci})
         assert response.status_code == 200, response.json()
         state = response.json()
+        if state["status"] == "playing":
+            response = client.post("/api/games/current/llm-turn")
+            assert response.status_code == 200, response.json()
+            state = response.json()
     return client, player, state
 
 

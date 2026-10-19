@@ -4,6 +4,8 @@ import json
 import chess
 import chess.pgn
 
+from conftest import play_move
+
 from chessllm.players import LlmTimeout
 
 START_FEN = chess.STARTING_FEN
@@ -32,9 +34,9 @@ QWEN_THINKING = {
 
 
 def play(client, *ucis):
-    client.post("/api/games")
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
     for uci in ucis:
-        state = client.post("/api/games/current/moves", json={"uci": uci}).json()
+        state = play_move(client, uci).json()
     return state
 
 
@@ -142,7 +144,7 @@ def test_a_game_abandoned_with_new_game_keeps_its_log_so_far(scripted, tmp_path)
     client, _ = scripted(["e5"])
     play(client, "e2e4")
 
-    client.post("/api/games")
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True})
 
     first, second = logs(tmp_path / "games", ".jsonl")
     assert [event["type"] for event in events(first)] == ["game_start", "human_move", "llm_attempt"]
@@ -174,9 +176,11 @@ def test_the_log_records_the_retry_feedback_and_the_sampling_from_the_config(scr
 
 def test_with_the_human_as_black_the_llm_is_white_in_the_log_and_the_file_names(scripted, tmp_path):
     client, _ = scripted(["e4", "Qh5", "Bc4", "Qxf7#"])
-    client.post("/api/games", json={"human_color": "black", "llm_constraints": "listed"})
+    new_game = {"model": "qwen3.5:9b", "thinking": True, "human_color": "black", "llm_constraints": "listed"}
+    client.post("/api/games", json=new_game)
+    client.post("/api/games/current/llm-turn")
     for uci in ["e7e5", "b8c6", "g8f6"]:
-        client.post("/api/games/current/moves", json={"uci": uci})
+        play_move(client, uci)
 
     [log] = logs(tmp_path / "games", ".jsonl")
     assert log.name.endswith("_qwen3.5-9b_vs_human.jsonl")

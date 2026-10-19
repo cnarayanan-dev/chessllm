@@ -4,6 +4,8 @@ import json
 import chess
 import chess.pgn
 
+from conftest import play_move
+
 from chessllm.game import Settings
 from chessllm.players import Message
 from chessllm.prompt import SYSTEM_PROMPT_FILE, system_prompt
@@ -42,7 +44,9 @@ def test_the_human_plays_white_by_default(scripted):
 def test_when_the_human_plays_black_the_llm_opens_the_game(scripted):
     client, player = scripted(["e4"])
 
-    state = client.post("/api/games", json={"human_color": "black"}).json()
+    client.post("/api/games", json={"human_color": "black"})
+
+    state = client.post("/api/games/current/llm-turn").json()
 
     assert player.built_for == [Settings(human_color="black")]
     assert state["pgn"] == "1. e4"
@@ -56,7 +60,8 @@ def test_when_the_human_plays_black_the_llm_opens_the_game(scripted):
 def test_the_llm_playing_white_is_told_its_colour_and_shown_a_white_example(scripted):
     client, player = scripted(["e4", "Nf3"])
     client.post("/api/games", json={"human_color": "black"})
-    client.post("/api/games/current/moves", json={"uci": "e7e5"})
+    client.post("/api/games/current/llm-turn")
+    play_move(client, "e7e5")
 
     assert player.prompts == [
         [Message("system", SYSTEM_PROMPT_AS_WHITE), Message("user", f"PGN: (no moves yet)\nFEN: {START_FEN}")],
@@ -70,18 +75,20 @@ def test_the_llm_playing_white_is_told_its_colour_and_shown_a_white_example(scri
 def test_the_human_playing_black_cannot_move_white_pieces(scripted):
     client, _ = scripted(["e4"])
     client.post("/api/games", json={"human_color": "black"})
+    client.post("/api/games/current/llm-turn")
 
-    response = client.post("/api/games/current/moves", json={"uci": "d2d4"})
+    response = play_move(client, "d2d4")
 
     assert response.status_code == 400
 
 
 def test_the_human_playing_black_can_checkmate_the_llm(scripted, tmp_path):
     client, _ = scripted(["f3", "g4"])
-    client.post("/api/games", json={"human_color": "black"})
-    client.post("/api/games/current/moves", json={"uci": "e7e5"})
+    client.post("/api/games", json={"model": "qwen3.5:9b", "thinking": True, "human_color": "black"})
+    client.post("/api/games/current/llm-turn")
+    play_move(client, "e7e5")
 
-    state = client.post("/api/games/current/moves", json={"uci": "d8h4"}).json()
+    state = play_move(client, "d8h4").json()
 
     assert (state["status"], state["result"], state["end_reason"]) == ("over", "0-1", "checkmate")
     assert state["human_legal_moves"] == []
@@ -94,7 +101,9 @@ def test_the_human_playing_black_can_checkmate_the_llm(scripted, tmp_path):
 def test_an_llm_playing_white_that_forfeits_its_first_move_loses_as_white(scripted, tmp_path):
     client, _ = scripted(["e5", "Ke2", "banana", "Nf6"])
 
-    state = client.post("/api/games", json={"human_color": "black"}).json()
+    client.post("/api/games", json={"human_color": "black"})
+
+    state = client.post("/api/games/current/llm-turn").json()
 
     assert (state["status"], state["result"], state["end_reason"]) == ("over", "0-1", "forfeit")
     start, *_, end = events(tmp_path / "games")

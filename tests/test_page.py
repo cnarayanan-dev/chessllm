@@ -46,3 +46,9 @@ def test_the_settings_modal_offers_the_enforced_constraints_and_greys_out_retry_
     assert "blind_enforced: {name: \"Blind enforced\"" in page
     assert "listed_enforced: {name: \"Listed enforced\"" in page
     assert ".radio:disabled" in page
+
+
+def test_the_page_starts_the_llm_turn_with_its_own_request(client):
+    page = client.get("/").text
+
+    assert '"/api/games/current/llm-turn"' in page
