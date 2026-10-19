@@ -26,6 +26,18 @@ def test_the_root_serves_the_build(scripted, tmp_path):
     assert "<title>ChessLLM build</title>" in response.text
 
 
+def test_the_analytics_page_serves_the_same_build(scripted, tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><title>ChessLLM build</title>")
+    client, _ = scripted([], dist_dir=dist)
+
+    response = client.get("/analytics")
+
+    assert response.status_code == 200
+    assert "<title>ChessLLM build</title>" in response.text
+
+
 def test_next_is_gone(scripted, tmp_path):
     client, _ = scripted([], dist_dir=tmp_path / "no-dist")
 

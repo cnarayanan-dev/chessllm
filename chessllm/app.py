@@ -198,8 +198,9 @@ def create_app(
         return state
 
     @app.get("/", include_in_schema=False, response_model=None)
+    @app.get("/analytics", include_in_schema=False, response_model=None)
     def page() -> FileResponse | PlainTextResponse:
-        """The React app, from its build."""
+        """The React app, from its build: the game at /, the analytics page at /analytics."""
         index = dist_dir / "index.html"
         if not index.is_file():
             return PlainTextResponse(

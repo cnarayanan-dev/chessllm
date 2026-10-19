@@ -7,7 +7,7 @@ import { BoardFlashes } from '@/components/board/BoardFlashes'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { humanColor, phase, waitingForLlm } from '@/game/gameLoop'
@@ -96,6 +96,9 @@ export default function App() {
           {pending && <Badge className="bg-primary/10 text-primary">changes apply next game</Badge>}
         </div>
         <span className="flex-1" />
+        <a href="/analytics" className={buttonVariants({ variant: 'ghost' })}>
+          Analytics
+        </a>
         <Button variant="ghost" onClick={startNewGame}>
           New game
         </Button>
