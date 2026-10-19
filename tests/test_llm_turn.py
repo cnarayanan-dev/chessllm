@@ -81,32 +81,32 @@ def test_the_default_opponent_is_qwen_with_thinking_on(scripted):
 def test_the_game_reports_the_settings_it_was_started_with(scripted):
     client, _ = scripted([])
 
-    state = client.post("/api/games", json={"model": "gemma3:4b", "thinking": False, "retry_feedback": "bare"}).json()
+    state = client.post("/api/games", json={"model": "llama3:8b", "thinking": False, "retry_feedback": "bare"}).json()
 
-    assert state["settings"] == {"model": "gemma3:4b", "thinking": False, "retry_feedback": "bare", "sampling": {}}
+    assert state["settings"] == {"model": "llama3:8b", "thinking": False, "retry_feedback": "bare", "sampling": {}}
 
 
 def test_the_player_for_a_game_is_built_once_from_that_games_settings(scripted):
     client, player = scripted(["e5", "Nc6", "d5"])
-    client.post("/api/games", json={"model": "gemma3:4b", "thinking": False})
+    client.post("/api/games", json={"model": "llama3:8b", "thinking": False})
     client.post("/api/games/current/moves", json={"uci": "e2e4"})
 
     state = client.post("/api/games/current/moves", json={"uci": "g1f3"}).json()
 
-    assert player.built_for == [Settings(model="gemma3:4b", thinking=False)]
-    assert (state["settings"]["model"], state["settings"]["thinking"]) == ("gemma3:4b", False)
+    assert player.built_for == [Settings(model="llama3:8b", thinking=False)]
+    assert (state["settings"]["model"], state["settings"]["thinking"]) == ("llama3:8b", False)
 
 
 def test_settings_sent_for_a_new_game_apply_only_to_that_game(scripted):
     client, player = scripted(["Qh4", "e5", "d5"])
-    client.post("/api/games", json={"model": "gemma3:4b", "thinking": False, "retry_feedback": "bare"})
+    client.post("/api/games", json={"model": "llama3:8b", "thinking": False, "retry_feedback": "bare"})
     playing = client.post("/api/games/current/moves", json={"uci": "e2e4"}).json()
 
     state = client.post("/api/games", json={"thinking": True}).json()
     client.post("/api/games/current/moves", json={"uci": "d2d4"})
 
     assert playing["llm_turn"]["attempts"][1]["feedback_sent"].endswith("Try again.")  # bare
-    assert player.built_for == [Settings(model="gemma3:4b", thinking=False, retry_feedback="bare"), Settings()]
+    assert player.built_for == [Settings(model="llama3:8b", thinking=False, retry_feedback="bare"), Settings()]
     assert state["settings"] == {"model": "qwen3.5:9b", "thinking": True, "retry_feedback": "explained", "sampling": {}}
 
 

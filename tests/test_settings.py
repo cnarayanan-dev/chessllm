@@ -1,29 +1,60 @@
 from chessllm.game import Settings
-from chessllm.models import InstalledModel
+from chessllm.models import LlmModel
 
 
-def test_the_installed_chat_models_are_listed(scripted):
-    models = [InstalledModel("qwen3.5:9b", {"temperature": 1, "top_p": 0.95}), InstalledModel("llama3:8b", {})]
-    client, _ = scripted([], installed_models=lambda: models)
+def test_the_models_offered_are_the_saved_list_with_whether_each_can_think(scripted):
+    client, _ = scripted([])
 
     response = client.get("/api/models")
 
     assert response.status_code == 200
-    assert response.json() == [
-        {"name": "qwen3.5:9b", "sampling": {"temperature": 1, "top_p": 0.95}},
-        {"name": "llama3:8b", "sampling": {}},
+    assert [(model["name"], model["thinking"]) for model in response.json()] == [
+        ("qwen3.5:9b", True),
+        ("qwen3.8:latest", True),
+        ("llama3:8b", False),
     ]
 
 
-def test_the_sampling_config_overrides_the_models_defaults_in_the_list(scripted, tmp_path):
+def test_each_model_shows_its_sampling_defaults_overridden_by_the_config(scripted, tmp_path):
     config = tmp_path / "sampling.toml"
     config.write_text("temperature = 0.2\n")
-    models = [InstalledModel("qwen3.5:9b", {"temperature": 1, "top_p": 0.95})]
-    client, _ = scripted([], installed_models=lambda: models, sampling_file=config)
+    defaults = {"qwen3.5:9b": {"temperature": 1, "top_p": 0.95}, "llama3:8b": {}}
+    models = [LlmModel("qwen3.5:9b", thinking=True), LlmModel("llama3:8b", thinking=False)]
+    client, _ = scripted([], models=models, sampling_defaults=defaults.__getitem__, sampling_file=config)
 
-    [model] = client.get("/api/models").json()
+    assert client.get("/api/models").json() == [
+        {"name": "qwen3.5:9b", "thinking": True, "sampling": {"temperature": 0.2, "top_p": 0.95}},
+        {"name": "llama3:8b", "thinking": False, "sampling": {"temperature": 0.2}},
+    ]
 
-    assert model["sampling"] == {"temperature": 0.2, "top_p": 0.95}
+
+def test_a_model_ollama_cannot_show_is_still_offered_without_sampling(scripted):
+    def not_installed(model: str) -> dict[str, float]:
+        raise ConnectionError("Failed to connect to Ollama")
+
+    client, _ = scripted([], models=[LlmModel("llama3:8b", thinking=False)], sampling_defaults=not_installed)
+
+    assert client.get("/api/models").json() == [{"name": "llama3:8b", "thinking": False, "sampling": None}]
+
+
+def test_a_game_cannot_start_with_a_model_that_isnt_in_the_list(scripted):
+    client, player = scripted([])
+
+    response = client.post("/api/games", json={"model": "gemma3:4b"})
+
+    assert response.status_code == 400
+    assert "gemma3:4b" in response.json()["detail"]
+    assert player.built_for == []
+
+
+def test_a_game_cannot_start_with_thinking_on_for_a_model_that_cannot_think(scripted):
+    client, player = scripted([])
+
+    response = client.post("/api/games", json={"model": "llama3:8b", "thinking": True})
+
+    assert response.status_code == 400
+    assert "llama3:8b" in response.json()["detail"]
+    assert player.built_for == []
 
 
 def test_without_sampling_config_the_game_runs_at_the_models_defaults(scripted, tmp_path):
@@ -82,15 +113,3 @@ def test_a_sampling_option_that_isnt_a_number_is_refused(scripted, tmp_path):
 
     assert response.status_code == 500
     assert "temperature" in response.json()["detail"]
-
-
-def test_the_model_list_says_why_ollama_could_not_be_asked(scripted):
-    def ollama_down() -> list[InstalledModel]:
-        raise ConnectionError("Failed to connect to Ollama")
-
-    client, _ = scripted([], installed_models=ollama_down)
-
-    response = client.get("/api/models")
-
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Failed to connect to Ollama"

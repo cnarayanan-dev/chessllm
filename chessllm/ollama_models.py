@@ -1,34 +1,21 @@
-"""The installed Ollama models that can chat, with their sampling defaults."""
+"""The sampling defaults of an Ollama model."""
 
 from typing import Protocol
 
 import ollama
 
-from chessllm.models import SAMPLING_OPTIONS, InstalledModel
+from chessllm.models import SAMPLING_OPTIONS
 
 
 class OllamaClient(Protocol):
-    def list(self) -> ollama.ListResponse: ...
-
     def show(self, model: str) -> ollama.ShowResponse: ...
 
 
-def installed_chat_models(client: OllamaClient | None = None) -> list[InstalledModel]:
-    """Every installed model that can complete a chat, so embedding-only models are left out."""
-    client = client or ollama.Client()
-    models: dict[str, InstalledModel] = {}
-    for listed in client.list().models:
-        name = listed.model
-        if name is None or name in models:
-            continue
-        shown = client.show(name)
-        if "completion" in (shown.capabilities or []):
-            models[name] = InstalledModel(name, sampling_defaults(shown.parameters))
-    return list(models.values())
+def sampling_defaults(model: str, client: OllamaClient | None = None) -> dict[str, float]:
+    """The sampling options among the model's parameters, which Ollama gives one per line, e.g. "temperature   1".
 
-
-def sampling_defaults(parameters: str | None) -> dict[str, float]:
-    """The sampling options among a model's parameters, given one per line, e.g. "temperature   1"."""
+    Raises if Ollama can't show the model, e.g. when it isn't installed or Ollama isn't running."""
+    parameters = (client or ollama.Client()).show(model).parameters
     sampling: dict[str, float] = {}
     for line in (parameters or "").splitlines():
         name, _, value = line.strip().partition(" ")

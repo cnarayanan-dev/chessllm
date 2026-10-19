@@ -79,7 +79,7 @@
   .select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 5px; padding: 5px 8px; font: inherit; min-width: 170px; max-width: 260px; }
   .switch { width: 34px; height: 20px; border-radius: 99px; background: var(--line); border: 0; position: relative; cursor: pointer; flex: none; }
   .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-  .switch.on { background: var(--accent); } .switch.on::after { left: 16px; }
+  .switch.on { background: var(--accent); } .switch:disabled { opacity: .4; cursor: default; } .switch.on::after { left: 16px; }
   .radios { display: grid; gap: 8px; padding: 14px 0; }
   .radio { display: flex; flex-direction: column; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; text-align: left; background: transparent; }
   .radio.on { border-color: var(--accent); background: var(--accent-soft); }
@@ -147,9 +147,9 @@
     </section>
     <section data-section="model">
       <h2>Model</h2>
-      <div class="row"><div class="txt"><div class="t">Model</div><div class="d" id="modelHint">Installed Ollama models that can chat</div></div>
+      <div class="row"><div class="txt"><div class="t">Model</div><div class="d" id="modelHint"></div></div>
         <select class="select" id="model"></select></div>
-      <div class="row"><div class="txt"><div class="t">Thinking</div><div class="d">The model reasons before answering. Slower, likely stronger play. The thinking text is saved to the game log.</div></div>
+      <div class="row"><div class="txt"><div class="t">Thinking</div><div class="d" id="thinkingHint"></div></div>
         <button class="switch" id="thinkingSwitch" role="switch" aria-label="Thinking"></button></div>
     </section>
     <section data-section="advanced">
@@ -298,7 +298,7 @@ const FEEDBACK_LEVELS = {
   hinted: {name: "Hinted", description: "Also lists the legal moves (muddies free mode)"},
 }
 let next = null // {model, thinking, retry_feedback} for the next game
-let models = null // the installed chat models, or null until listed
+let models = null // the model list, [{name, thinking, sampling}], or null until listed
 let modelsError = null // why they could not be listed
 let section = "game"
 
@@ -338,17 +338,25 @@ function showSettings() {
     card.onclick = () => { next.retry_feedback = level; showSettings() }
     return card
   }))
-  // The chosen model stays listed even when Ollama doesn't report it, e.g. while Ollama is down.
+  // The chosen model stays listed until the list has loaded.
   const names = (models ?? []).map(model => model.name)
   if (!names.includes(next.model)) names.unshift(next.model)
   $("model").replaceChildren(...names.map(name => new Option(name, name, false, name === next.model)))
-  $("modelHint").textContent = modelsError ? `Could not list the models: ${modelsError}` : "Installed Ollama models that can chat"
+  $("modelHint").textContent = modelsError ? `Could not list the models: ${modelsError}` : "The models in chessllm/models.py"
+  const chosen = models?.find(model => model.name === next.model)
+  const canThink = chosen?.thinking ?? true
   $("thinkingSwitch").classList.toggle("on", next.thinking)
   $("thinkingSwitch").setAttribute("aria-checked", next.thinking)
-  const sampling = models?.find(model => model.name === next.model)?.sampling
-  $("samplingHint").textContent = sampling === undefined
-    ? modelsError ? `Could not read the sampling settings: ${modelsError}` : "The sampling settings show once Ollama lists the model."
-    : `Sampling for ${next.model}: the model's defaults, overridden by chessllm/sampling.toml. Change them in that file.`
+  $("thinkingSwitch").disabled = !canThink
+  $("thinkingHint").textContent = canThink
+    ? "The model reasons before answering. Slower, likely stronger play. The thinking text is saved to the game log."
+    : `${next.model} can't think: it reasons in its answer instead, before the move.`
+  const sampling = chosen?.sampling
+  $("samplingHint").textContent = !chosen
+    ? modelsError ? `Could not read the sampling settings: ${modelsError}` : "The sampling settings show once the models are listed."
+    : sampling === null
+      ? `Ollama could not show ${next.model}. Is it installed, and is Ollama running?`
+      : `Sampling for ${next.model}: the model's defaults, overridden by chessllm/sampling.toml. Change them in that file.`
   $("sampling").replaceChildren(...Object.entries(sampling ?? {}).map(([name, value]) => {
     const row = document.createElement("tr")
     row.append(...[name, value].map(text => Object.assign(document.createElement("td"), {textContent: text})))
@@ -381,7 +389,11 @@ function closeSettings() {
 document.querySelectorAll("#settings nav button").forEach(button => {
   button.onclick = () => { section = button.dataset.section; showSettings() }
 })
-$("model").onchange = event => { next.model = event.target.value; showSettings() }
+$("model").onchange = event => {
+  next.model = event.target.value
+  if (models?.find(model => model.name === next.model)?.thinking === false) next.thinking = false
+  showSettings()
+}
 $("thinkingSwitch").onclick = () => { next.thinking = !next.thinking; showSettings() }
 $("openSettings").onclick = openSettings
 $("closeSettings").onclick = closeSettings

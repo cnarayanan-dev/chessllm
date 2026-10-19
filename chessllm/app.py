@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from chessllm.game import GameSession, RejectedHumanMove, Settings
 from chessllm.game_log import GAMES_DIR, GameLog
-from chessllm.models import SAMPLING_FILE, InstalledModel, load_sampling
+from chessllm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
 from chessllm.players import LlmPlayer
 from chessllm.prompt import RetryFeedback
 
@@ -33,12 +33,13 @@ class NewGame(BaseModel):
 def create_app(
     player_for: Callable[[Settings], LlmPlayer],
     games_dir: Path = GAMES_DIR,
-    installed_models: Callable[[], list[InstalledModel]] = list,
+    models: list[LlmModel] = LLM_MODELS,
+    sampling_defaults: Callable[[str], dict[str, float]] = lambda model: {},
     sampling_file: Path = SAMPLING_FILE,
 ) -> FastAPI:
     """player_for builds the LLM player of each game from that game's settings.
 
-    installed_models lists the models the game can be played against."""
+    models are the models the game can be played against, and sampling_defaults gives a model's own sampling."""
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
@@ -48,14 +49,19 @@ def create_app(
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/api/models")
-    def models() -> list[dict[str, Any]]:
-        """Each model with the sampling it would play at: its own defaults, overridden by the config file."""
-        sampling = sampling_config()
-        try:
-            installed = installed_models()
-        except Exception as error:  # e.g. Ollama isn't running
-            raise HTTPException(503, str(error)) from None
-        return [{"name": model.name, "sampling": model.sampling | sampling} for model in installed]
+    def list_models() -> list[dict[str, Any]]:
+        """Each model with the sampling it would play at: its own defaults, overridden by the config file.
+
+        The sampling is None when Ollama can't show the model, e.g. when it isn't installed."""
+        config = sampling_config()
+
+        def sampling(model: LlmModel) -> dict[str, float] | None:
+            try:
+                return sampling_defaults(model.name) | config
+            except Exception:
+                return None
+
+        return [{"name": model.name, "thinking": model.thinking, "sampling": sampling(model)} for model in models]
 
     def sampling_config() -> dict[str, float]:
         try:
@@ -67,6 +73,11 @@ def create_app(
     def start_game(new_game: NewGame | None = None) -> dict[str, Any]:
         nonlocal game
         settings = Settings(**(new_game or NewGame()).model_dump(), sampling=sampling_config())
+        model = next((model for model in models if model.name == settings.model), None)
+        if model is None:
+            raise HTTPException(400, f"{settings.model} is not in the model list")
+        if settings.thinking and not model.thinking:
+            raise HTTPException(400, f"{settings.model} cannot think, so thinking must be off")
         game = GameSession(player_for(settings), settings, GameLog(games_dir, settings.model))
         return game.state()
 

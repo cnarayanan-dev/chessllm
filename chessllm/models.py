@@ -1,7 +1,7 @@
-"""The installed models the game can be played against, and the sampling settings from the config file."""
+"""The models the game can be played against, and the sampling settings from the config file."""
 
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 SAMPLING_FILE = Path(__file__).parent / "sampling.toml"
@@ -27,9 +27,18 @@ SAMPLING_OPTIONS = frozenset(
 
 
 @dataclass(frozen=True)
-class InstalledModel:
-    name: str
-    sampling: dict[str, float] = field(default_factory=dict)  # the model's own defaults
+class LlmModel:
+    name: str  # the Ollama model name
+    thinking: bool  # whether it can think before it answers (Ollama's "thinking" capability)
+
+
+# The models offered in the settings modal. Their thinking was checked on 2026-10-19 against the capabilities
+# `ollama show` reports and the Ollama library (ollama.com/library/qwen3.5, ollama.com/library/llama3).
+LLM_MODELS = [
+    LlmModel("qwen3.5:9b", thinking=True),  # Qwen 3.5, 9.7B parameters
+    LlmModel("qwen3.8:latest", thinking=True),  # Qwen 3.8, 27.8B parameters
+    LlmModel("llama3:8b", thinking=False),  # Llama 3, 8B parameters
+]
 
 
 def load_sampling(path: Path = SAMPLING_FILE) -> dict[str, float]:

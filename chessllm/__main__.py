@@ -4,7 +4,7 @@ import uvicorn
 
 from chessllm.app import create_app
 from chessllm.game import Settings
-from chessllm.ollama_models import installed_chat_models
+from chessllm.ollama_models import sampling_defaults
 from chessllm.ollama_player import OllamaPlayer
 
 
@@ -14,7 +14,7 @@ def player_for(settings: Settings) -> OllamaPlayer:
 
 
 def main() -> None:
-    uvicorn.run(create_app(player_for, installed_models=installed_chat_models), host="127.0.0.1", port=8000)
+    uvicorn.run(create_app(player_for, sampling_defaults=sampling_defaults), host="127.0.0.1", port=8000)
 
 
 if __name__ == "__main__":
