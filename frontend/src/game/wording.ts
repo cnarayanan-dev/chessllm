@@ -17,7 +17,7 @@ const END_REASONS: Record<string, string> = {
   forfeit: 'by forfeit',
   move_cap: 'at the move cap of 150 moves each',
   king_capture: 'by King capture',
-  king_left_in_check: 'by a king left in check',
+  king_left_in_check: 'by King left in check',
 }
 
 type LlmSide = Extract<GameSettings['white'], { player: 'llm' }>
@@ -25,6 +25,9 @@ type LlmSide = Extract<GameSettings['white'], { player: 'llm' }>
 export const faceoff = (game: GameState) => game.settings.mode === 'llm_faceoff'
 export const llmColors = (game: GameState) => COLORS.filter((color) => game.settings[color].player === 'llm')
 const llmSide = (game: GameState, color: Color) => game.settings[color] as LlmSide
+/** An LLM side's model, with its colour in a faceoff, e.g. "qwen3.5:9b (Black)". */
+const llmName = (game: GameState, color: Color) =>
+  faceoff(game) ? `${llmSide(game, color).model} (${COLOR_NAMES[color]})` : llmSide(game, color).model
 /**
  * Who took whose king. A king taken by a legal move was left hanging by its side; one taken by a chaos move was
  * taken by the mover, which may even have taken its own king.
@@ -33,7 +36,7 @@ function kingCapture(game: GameState, winner: Color): string {
   const loser = other(winner)
   const last = game.plies.at(-1)
   const human = humanColor(game)
-  const name = (color: Color) => (faceoff(game) ? `${llmSide(game, color).model} (${COLOR_NAMES[color]})` : llmSide(game, color).model)
+  const name = (color: Color) => llmName(game, color)
   if (last && chaosResolution(last)) {
     if (last.color === loser) return `${name(loser)} took its own king`
     return loser === human ? `${name(winner)} took your king` : `${name(winner)} took the king of ${name(loser)}`
@@ -43,9 +46,7 @@ function kingCapture(game: GameState, winner: Color): string {
 
 /** Whose chaos move left its own king in check, which loses at once. */
 function kingLeftInCheck(game: GameState, winner: Color): string {
-  const loser = other(winner)
-  const model = faceoff(game) ? `${llmSide(game, loser).model} (${COLOR_NAMES[loser]})` : llmSide(game, loser).model
-  return `${model} left its own king in check`
+  return `${llmName(game, other(winner))} left its own king in check`
 }
 
 /** The Game card's result line, e.g. "Black wins by checkmate", and the reason's detail under it, if any. */
@@ -54,7 +55,7 @@ export function resultText(game: GameState): { result: string; detail: string | 
   const winner = ({ '1-0': 'white', '0-1': 'black' } as const)[game.result as '1-0' | '0-1'] as Color | undefined
   const title =
     faceoff(game) && winner
-      ? `${llmSide(game, winner).model} (${COLOR_NAMES[winner]}) wins`
+      ? `${llmName(game, winner)} wins`
       : (RESULT_TITLES[game.result ?? ''] ?? game.result ?? '')
   const endReason = game.end_reason ?? ''
   const reason = END_REASONS[endReason] ?? `by ${endReason.replaceAll('_', ' ')}`

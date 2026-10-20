@@ -3,7 +3,7 @@ import type { GameState } from '@/api/types'
 import { gameSettings, resultText } from '@/game/wording'
 import { CHAOS_PLIES, aGame, chaosGame, plies } from '@/test/games'
 
-const kingCaptured = (overrides: Partial<GameState>) =>
+const chaosGameOver = (overrides: Partial<GameState>) =>
   chaosGame(13, { status: 'over', end_reason: 'king_capture', human_legal_moves: [], ...overrides })
 
 // The LLM, Black, takes White's king on e1 with a chaos move: Qd5 jumps there.
@@ -26,14 +26,14 @@ test('the result line: who won and how, with no detail for a checkmate or the Mo
 })
 
 test('King capture by the human: the LLM left its king hanging', () => {
-  expect(resultText(kingCaptured({ result: '1-0' }))).toEqual({
+  expect(resultText(chaosGameOver({ result: '1-0' }))).toEqual({
     result: 'White wins by King capture',
     detail: 'qwen3.5:9b left its king hanging',
   })
 })
 
 test("King capture by the LLM's chaos move: it took the human's king", () => {
-  const game = kingCaptured({ result: '0-1', plies: plies(...CHAOS_PLIES.slice(0, 11), QXE1) })
+  const game = chaosGameOver({ result: '0-1', plies: plies(...CHAOS_PLIES.slice(0, 11), QXE1) })
 
   expect(resultText(game).detail).toBe('qwen3.5:9b took your king')
 })
@@ -45,15 +45,25 @@ test('a chaos move that takes its own king loses', () => {
     'rnb2r2/pppp1ppp/7q/4p1B1/1b1PP3/2P2N2/PP1N1PPP/R2QKB1R w KQ - 0 7',
     { kind: 'chaos', from: 'd5', to: 'h6', piece: 'q', rook: null, reason: 'the queen on d5 moves' },
   ]
-  const game = kingCaptured({ result: '1-0', plies: plies(...CHAOS_PLIES.slice(0, 11), ownKing) })
+  const game = chaosGameOver({ result: '1-0', plies: plies(...CHAOS_PLIES.slice(0, 11), ownKing) })
 
   expect(resultText(game).detail).toBe('qwen3.5:9b took its own king')
 })
 
 test('a chaos move that leaves its own king in check loses, naming the LLM that played it', () => {
-  expect(resultText(kingCaptured({ result: '1-0', end_reason: 'king_left_in_check' }))).toEqual({
-    result: 'White wins by a king left in check',
+  expect(resultText(chaosGameOver({ result: '1-0', end_reason: 'king_left_in_check' }))).toEqual({
+    result: 'White wins by King left in check',
     detail: 'qwen3.5:9b left its own king in check',
+  })
+})
+
+test('in a faceoff a king left in check names the LLM and its side', () => {
+  const llm = aGame().settings.black
+  const faceoff = { mode: 'llm_faceoff' as const, white: { ...llm, model: 'gemma3:4b' }, black: llm, sampling: {}, rules: 'chaos' as const, max_attempts: 5 }
+
+  expect(resultText(chaosGameOver({ result: '1-0', end_reason: 'king_left_in_check', settings: faceoff }))).toEqual({
+    result: 'gemma3:4b (White) wins by King left in check',
+    detail: 'qwen3.5:9b (Black) left its own king in check',
   })
 })
 
@@ -61,11 +71,11 @@ test('in a faceoff the King capture names both LLMs by their side', () => {
   const llm = aGame().settings.black
   const faceoff = { mode: 'llm_faceoff' as const, white: { ...llm, model: 'gemma3:4b' }, black: llm, sampling: {}, rules: 'chaos' as const, max_attempts: 5 }
 
-  expect(resultText(kingCaptured({ result: '1-0', settings: faceoff }))).toEqual({
+  expect(resultText(chaosGameOver({ result: '1-0', settings: faceoff }))).toEqual({
     result: 'gemma3:4b (White) wins by King capture',
     detail: 'qwen3.5:9b (Black) left its king hanging',
   })
-  const byChaos = kingCaptured({ result: '0-1', settings: faceoff, plies: plies(...CHAOS_PLIES.slice(0, 11), QXE1) })
+  const byChaos = chaosGameOver({ result: '0-1', settings: faceoff, plies: plies(...CHAOS_PLIES.slice(0, 11), QXE1) })
   expect(resultText(byChaos).detail).toBe('qwen3.5:9b (Black) took the king of gemma3:4b (White)')
 })
 

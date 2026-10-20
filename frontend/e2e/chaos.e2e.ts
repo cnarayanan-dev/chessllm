@@ -101,16 +101,15 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expect(pieceOn(page, 'e8')).toHaveCount(0)
   await expect(pieceOn(page, 'h8')).toHaveCount(0)
 
-  // The king walks into the bishop's line, and the human takes it.
+  // The king walks into the bishop's line, which loses at once.
   await move(page, 'b1d2', 'Kh6')
-  await move(page, 'g5h6', 'Bxh6')
   const result = page.getByTestId('result')
-  await expect(result).toContainText('White wins by King capture')
-  await expect(result).toContainText(/.+ left its king hanging/)
+  await expect(result).toContainText('White wins by King left in check')
+  await expect(result).toContainText(/.+ left its own king in check/)
   await expect(page.getByTestId('totals')).toHaveText('5 illegal tries · 0 notation slips · 5 chaos moves (1 spawn)')
 
   // The history replays the spawn and the chaos move, with their marker, arrow and caption.
-  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('Qd5')
   await expect(caption(page)).toContainText('Qd5: no queen on the board; one appears on d5')
   await expect(spawnMarker(page)).toHaveCount(1)
@@ -130,11 +129,11 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expectPiece(page, 'f8', 'bb')
 })
 
-test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in King capture', async ({ page }) => {
-  // White's queen jumps to f7; Black ignores the check; White takes the king.
+test('an LLM faceoff under Chaos rules, started from the New game sheet, ends with a king left in check', async ({ page }) => {
+  // White's queen jumps to f7; Black ignores the check, which loses at once.
   await startFromSheet(
     page,
-    { white: ['Qxf7', 'Qxe8'], black: ['Nf6'] },
+    { white: ['Qxf7'], black: ['Nf6'] },
     async (sheet) => {
       await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
       await sheet.getByRole('radio', { name: 'Chaos' }).click()
@@ -143,16 +142,14 @@ test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in
   )
 
   const result = page.getByTestId('result')
-  await expect(result).toContainText(/\(White\) wins by King capture/)
-  await expect(result).toContainText(/.+ \(Black\) left its king hanging/)
+  await expect(result).toContainText(/\(White\) wins by King left in check/)
+  await expect(result).toContainText(/.+ \(Black\) left its own king in check/)
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
   await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)
-  await expect(moves(page).getByRole('button', { name: 'Qxe8' })).not.toHaveClass(/chaos/)
   await expect(page.getByTestId('totals')).toContainText('1 chaos move (0 spawns)')
-  await expectPiece(page, 'e8', 'wq')
+  await expectPiece(page, 'f7', 'wq')
 
-  await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('Qxf7')
   await expect(caption(page)).toContainText('Qd1→f7: no queen can reach f7 by its movement; d1 is nearest')
