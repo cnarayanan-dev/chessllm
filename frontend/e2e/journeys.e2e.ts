@@ -429,6 +429,7 @@ async function holdLlmTurns(page: Page) {
 }
 
 test('the player strips: the LLM above the board with its logo, the ring and the timer during its move', async ({ page }) => {
+  await page.clock.install()
   await playLlm(page, { black: ['e5'] })
   const white = page.getByTestId('strip-white')
   const black = page.getByTestId('strip-black')
@@ -440,14 +441,18 @@ test('the player strips: the LLM above the board with its logo, the ring and the
   await expect(black).not.toHaveAttribute('data-to-move')
 
   const letGo = await holdLlmTurns(page)
+  // The page's clock stands still from the human's move, so the timer is seen at 0 and then ticking on cue.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
   await clickMove(page, 'e2e4')
   await expect(black).toHaveAttribute('data-to-move')
   await expect(white).not.toHaveAttribute('data-to-move')
   const timer = black.getByRole('timer')
-  await expect(timer).toHaveText('0s')
-  await expect(timer).toHaveText('2s', { timeout: 5000 })
+  await expect(timer).toHaveText('0m 00s')
+  await page.clock.runFor(2000)
+  await expect(timer).toHaveText('0m 02s')
   await expect(page.getByRole('timer')).toHaveCount(1)
 
+  await page.clock.resume()
   await letGo()
   await expect(lastMove(page)).toHaveText('e5')
   await yourMove(page)
