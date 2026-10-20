@@ -11,7 +11,7 @@ from pydantic import Field, ValidationError
 
 from chessllm import chaos
 from chessllm.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable
-from chessllm.players import LlmPlayer, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
+from chessllm.players import LlmPlayer, LlmReply, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
 from chessllm.models import LlmModel
 from chessllm.prompt import (
@@ -199,6 +199,18 @@ def reasoning(raw: str) -> str | None:
         return ReasonedMoveAnswer.model_validate_json(raw).reasoning
     except ValidationError:
         return None
+
+
+def token_accounting(reply: LlmReply) -> dict[str, Any]:
+    """What the attempt's call used and why generation stopped. Only the game log has these, not the API's state;
+    an attempt with no answer has none."""
+    return {
+        "thinking_tokens": reply.thinking_tokens,
+        "answer_tokens": reply.answer_tokens,
+        "prompt_tokens": reply.prompt_tokens,
+        "stop_reason": reply.stop_reason,
+        "token_split_estimated": reply.token_split_estimated,
+    }
 
 
 def logged_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
@@ -509,7 +521,7 @@ class GameSession:
             attempt["latency_s"] = reply.latency_s
             self._log.write(
                 "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
-                **logged_attempt(attempt),
+                **logged_attempt(attempt), **token_accounting(reply),
             )
             turn |= {"thinking": thinking, "reasoning": reasoned}
             if move is not None:

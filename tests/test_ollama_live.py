@@ -101,3 +101,5 @@ def test_a_listed_enforced_turn_through_the_app_plays_a_legal_move_without_a_sli
     [log] = games_dir.glob("*.jsonl")
     [logged] = [event for event in map(json.loads, log.read_text(encoding="utf-8").splitlines()) if event["type"] == "llm_attempt"]
     assert sorted(logged["legal_moves"].split(" ")) == sorted(legal_sans(E4_FEN))
+    assert logged["prompt_tokens"] > 0 and logged["answer_tokens"] > 0
+    assert (logged["thinking_tokens"], logged["stop_reason"], logged["token_split_estimated"]) == (0, "stop", False)

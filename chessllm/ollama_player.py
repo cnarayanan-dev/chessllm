@@ -50,4 +50,26 @@ class OllamaPlayer:
         except httpx.TimeoutException:
             raise LlmTimeout(self.timeout_s) from None
         latency_s = time.perf_counter() - started
-        return LlmReply(raw=response.message.content or "", thinking=response.message.thinking, latency_s=latency_s)
+        raw, thinking = response.message.content or "", response.message.thinking
+        thinking_tokens, answer_tokens, estimated = split_tokens(response.eval_count, thinking or "", raw)
+        return LlmReply(
+            raw=raw,
+            thinking=thinking,
+            latency_s=latency_s,
+            thinking_tokens=thinking_tokens,
+            answer_tokens=answer_tokens,
+            prompt_tokens=response.prompt_eval_count,
+            stop_reason=response.done_reason,
+            token_split_estimated=estimated,
+        )
+
+
+def split_tokens(generated: int | None, thinking: str, answer: str) -> tuple[int | None, int | None, bool]:
+    """The thinking and answer tokens, and whether the split is estimated. Ollama gives one count for both, so
+    when the reply has both they are split by their share of the characters."""
+    if generated is None:
+        return None, None, False
+    if not thinking or not answer:
+        return (generated, 0, False) if thinking else (0, generated, False)
+    thinking_tokens = round(generated * len(thinking) / (len(thinking) + len(answer)))
+    return thinking_tokens, generated - thinking_tokens, True

@@ -124,3 +124,42 @@ def test_thinking_off_is_sent_as_off_for_a_model_that_thinks_by_default():
     [request] = calls
     assert request["model"] == "gemma4:26b"
     assert request["think"] is False
+
+
+def test_the_reply_carries_the_token_counts_and_stop_reason_with_the_thinking_and_answer_split_by_characters():
+    def chat(**request):
+        message = OllamaMessage(role="assistant", content='{"move": "e5"}', thinking="M" * 42)  # 14 + 42 characters
+        return ChatResponse(message=message, prompt_eval_count=812, eval_count=200, done_reason="stop")
+
+    reply = OllamaPlayer("qwen3.5:9b", chat=chat).reply([Message("user", "PGN: 1. e4")])
+
+    # Ollama counts thinking and answer together, so 200 tokens split 42:14 is an estimate.
+    assert (reply.thinking_tokens, reply.answer_tokens, reply.prompt_tokens) == (150, 50, 812)
+    assert reply.stop_reason == "stop"
+    assert reply.token_split_estimated is True
+
+
+@pytest.mark.parametrize(
+    ("thinking", "content", "tokens"),
+    [(None, '{"reasoning": "Mirror it.", "move": "e5"}', (0, 31)), ("Cut short while think", "", (31, 0))],
+)
+def test_with_only_thinking_or_only_an_answer_the_count_is_exact(thinking, content, tokens):
+    def chat(**request):
+        message = OllamaMessage(role="assistant", content=content, thinking=thinking)
+        return ChatResponse(message=message, prompt_eval_count=90, eval_count=31, done_reason="length")
+
+    reply = OllamaPlayer("qwen3.5:9b", thinking=thinking is not None, chat=chat).reply([Message("user", "PGN: 1. e4")])
+
+    assert (reply.thinking_tokens, reply.answer_tokens, reply.prompt_tokens) == tokens + (90,)
+    assert reply.stop_reason == "length"
+    assert reply.token_split_estimated is False
+
+
+def test_a_reply_without_counts_carries_none():
+    def chat(**request):
+        return ChatResponse(message=OllamaMessage(role="assistant", content='{"move": "e5"}', thinking="Mirror."))
+
+    reply = OllamaPlayer("qwen3.5:9b", chat=chat).reply([Message("user", "PGN: 1. e4")])
+
+    assert (reply.thinking_tokens, reply.answer_tokens, reply.prompt_tokens, reply.stop_reason) == (None,) * 4
+    assert reply.token_split_estimated is False

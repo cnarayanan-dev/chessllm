@@ -139,3 +139,31 @@ def test_command_prints_tables_or_json(tmp_path, capsys):
     report = json.loads(capsys.readouterr().out)
     assert report["games"] == 5
     assert report["end_reasons"]["unfinished"] == 1
+
+
+QWEN = LLAMA | {"model": "qwen3.5:9b", "thinking": True}
+
+
+def test_token_statistics_per_configuration_and_none_from_logs_without_them(tmp_path, capsys):
+    games_dir = tmp_path / "games"
+    events = game(QWEN, GEMMA, ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "d3", "d6", "c3", "Nf6"], "1/2-1/2",
+                  "move_cap", illegal={1: ["Ke2"] * 4, 3: ["Ke2"]})
+    qwen_attempts = [event for event in events if event["type"] == "llm_attempt" and event["color"] == "white"]
+    for number, attempt in enumerate(qwen_attempts, start=1):  # 10 attempts: 100 to 1000 thinking tokens
+        attempt |= {"thinking_tokens": 100 * number, "answer_tokens": 8, "prompt_tokens": 600 + number,
+                    "stop_reason": "length" if number in (4, 9) else "stop", "token_split_estimated": True}
+    write_log(games_dir, "2026-10-19T10-00-00_a", events)
+    write_log(games_dir, "2026-10-19T10-00-01_b", game(LLAMA, GEMMA, ["e4", "e5"], "1/2-1/2", "move_cap"))
+
+    report = analyse(load_games(games_dir)[0], Filters())
+
+    qwen = by_label(report)[("qwen3.5:9b", "free")]["themes"]
+    assert (qwen["thinking_tokens_median"], qwen["thinking_tokens_p90"]) == (550, 910)
+    assert qwen["prompt_tokens_median"] == 605.5
+    assert qwen["length_stops"] == 2
+    llama = by_label(report)[("llama3:8b", "free")]["themes"]
+    assert (llama["thinking_tokens_median"], llama["thinking_tokens_p90"], llama["prompt_tokens_median"]) == (None,) * 3
+    assert llama["length_stops"] == 0
+    assert main(["--games-dir", str(games_dir)]) == 0
+    text = capsys.readouterr().out
+    assert "thinking tokens median 550, p90 910; prompt tokens median 606; stopped for length: 2" in text

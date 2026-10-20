@@ -14,9 +14,16 @@ class Message:
 
 @dataclass(frozen=True)
 class LlmReply:
+    """The model's answer and Thinking, with what the call used. A count is None when the model reported none."""
+
     raw: str
     thinking: str | None
     latency_s: float
+    thinking_tokens: int | None = None
+    answer_tokens: int | None = None
+    prompt_tokens: int | None = None
+    stop_reason: str | None = None  # why generation stopped, as Ollama says: "stop", "length", ...
+    token_split_estimated: bool = False  # thinking and answer were counted together and split by characters
 
 
 class MoveAnswer(BaseModel):

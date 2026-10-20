@@ -1,5 +1,5 @@
 """Filter the game logs and summarise how the LLMs played: record per Player configuration, how games ended, recurring
-themes (illegal moves, streaks, forfeits, mates, openings, move quality) and the games themselves.
+themes (illegal moves, streaks, forfeits, mates, openings, move quality, tokens) and the games themselves.
 
 Run:
     uv run python -m scripts.analyse_games                              # every finished game in games/
@@ -218,6 +218,13 @@ def median(values: Sequence[float]) -> float | None:
     return statistics.median(values) if values else None
 
 
+def p90(values: Sequence[float]) -> float | None:
+    """The 90th percentile, interpolated between the values."""
+    if len(values) < 2:
+        return values[0] if values else None
+    return statistics.quantiles(values, n=10, method="inclusive")[-1]
+
+
 def ratio(part: float, whole: float) -> float | None:
     return part / whole if whole else None
 
@@ -278,6 +285,9 @@ class Themes:
     losses_by: Counter[str] = field(default_factory=Counter)
     plies: list[int] = field(default_factory=list)
     latencies: list[float] = field(default_factory=list)
+    thinking_tokens: list[int] = field(default_factory=list)  # per attempt with an answer; logs before them have none
+    prompt_tokens: list[int] = field(default_factory=list)
+    length_stops: int = 0  # attempts whose generation was cut at the token limit
     allowed_mate_in_one: int = 0  # legal moves after which the opponent could mate at once
     missed_mate_in_one: int = 0  # turns with a mate in one that the LLM didn't play
     mate_turns_checked: int = 0
@@ -296,6 +306,7 @@ class Themes:
                 result = attempt.get("result")
                 if isinstance(attempt.get("latency_s"), (int, float)):
                     self.latencies.append(float(attempt["latency_s"]))
+                self.add_tokens(attempt)
                 if result in NO_ANSWER:
                     self.no_answers += 1
                 elif result in ILLEGAL_KINDS:
@@ -330,6 +341,13 @@ class Themes:
                     last = turns[-1][-1] if turns and turns[-1] else {}
                     self.forfeits_without_answer += last.get("result") in NO_ANSWER
         self.add_analysis(side)
+
+    def add_tokens(self, attempt: dict[str, Any]) -> None:
+        if isinstance(attempt.get("thinking_tokens"), int):
+            self.thinking_tokens.append(attempt["thinking_tokens"])
+        if isinstance(attempt.get("prompt_tokens"), int):
+            self.prompt_tokens.append(attempt["prompt_tokens"])
+        self.length_stops += attempt.get("stop_reason") == "length"
 
     def add_mates(self, attempt: dict[str, Any]) -> None:
         try:
@@ -379,6 +397,10 @@ class Themes:
             "plies_mean": mean(self.plies),
             "plies_median": median(self.plies),
             "latency_mean_s": mean(self.latencies),
+            "thinking_tokens_median": median(self.thinking_tokens),
+            "thinking_tokens_p90": p90(self.thinking_tokens),
+            "prompt_tokens_median": median(self.prompt_tokens),
+            "length_stops": self.length_stops,
             "allowed_mate_in_one": self.allowed_mate_in_one,
             "missed_mate_in_one": self.missed_mate_in_one,
             "mate_turns_checked": self.mate_turns_checked,
@@ -476,6 +498,10 @@ def cell_text(value: Any) -> str:
     return str(value)
 
 
+def count_text(value: float | None) -> str:
+    return "-" if value is None else f"{value:.0f}"
+
+
 def percent(value: float | None) -> str:
     return "-" if value is None else f"{100 * value:.0f}%"
 
@@ -548,6 +574,13 @@ def theme_lines(themes: dict[str, Any]) -> list[str]:
         f"mate in one allowed after {themes['allowed_mate_in_one']} and missed on {themes['missed_mate_in_one']} "
         f"of {themes['mate_turns_checked']} legal moves",
     ]
+    if themes["thinking_tokens_median"] is not None or themes["prompt_tokens_median"] is not None:
+        lines.append(
+            f"thinking tokens median {count_text(themes['thinking_tokens_median'])}, "
+            f"p90 {count_text(themes['thinking_tokens_p90'])}; "
+            f"prompt tokens median {count_text(themes['prompt_tokens_median'])}; "
+            f"stopped for length: {themes['length_stops']}"
+        )
     if themes["chaos_moves"]:
         lines.append(f"chaos moves: {themes['chaos_moves']}")
     if themes["analysed_moves"]:

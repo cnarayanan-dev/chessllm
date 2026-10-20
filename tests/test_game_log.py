@@ -74,6 +74,11 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
         "notation_slip": False,
         "result": "illegal",
         "error": None,
+        "thinking_tokens": None,  # the scripted player reports no counts
+        "answer_tokens": None,
+        "prompt_tokens": None,
+        "stop_reason": None,
+        "token_split_estimated": False,
     }
     assert attempt_2["attempt"] == 2
     assert attempt_2["feedback_sent"].startswith('Your move "Qh4" is illegal')
@@ -149,6 +154,26 @@ def test_a_timeout_is_logged_as_an_attempt_without_a_reply(scripted, tmp_path):
     assert (attempt["result"], attempt["raw_reply"], attempt["move"]) == ("timeout", None, None)
     assert attempt["error"] == "Too long thinking: qwen3.5:9b gave no answer within 5 minutes."
     assert end["reason"] == "forfeit"
+    assert not {"thinking_tokens", "answer_tokens", "prompt_tokens", "stop_reason", "token_split_estimated"} & set(attempt)
+
+
+def test_each_attempt_with_an_answer_logs_its_tokens_and_why_generation_stopped(scripted, tmp_path):
+    client, player = scripted(["Qh4", "e5"], thinking=["Attack f2.", "Take the centre."])
+    player.usage = [
+        {"thinking_tokens": 1200, "answer_tokens": 8, "prompt_tokens": 640, "stop_reason": "stop",
+         "token_split_estimated": True},
+        {"thinking_tokens": 3, "answer_tokens": 0, "prompt_tokens": 700, "stop_reason": "length"},
+    ]
+
+    play(client, "e2e4")
+
+    start, _, attempt_1, attempt_2 = events(logs(tmp_path / "games", ".jsonl")[0])
+    tokens = ("thinking_tokens", "answer_tokens", "prompt_tokens", "stop_reason", "token_split_estimated")
+    assert [tuple(attempt[key] for key in tokens) for attempt in (attempt_1, attempt_2)] == [
+        (1200, 8, 640, "stop", True),
+        (3, 0, 700, "length", False),
+    ]
+    assert start["black"] == QWEN_THINKING  # recording tokens changes no setting
 
 
 def test_a_game_abandoned_with_new_game_keeps_its_log_so_far(scripted, tmp_path):

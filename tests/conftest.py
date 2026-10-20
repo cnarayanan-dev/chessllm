@@ -39,12 +39,14 @@ class ScriptedPlayer:
     """Test fake for the LLM player port: answers with the scripted SAN moves in order, as the JSON
     {"move": "<san>"}, and records every prompt and the allowed moves it came with. A scripted exception is
     raised instead of answering.
-    Thinking texts, if given, go with the replies in order. It serves every game, recording the settings
-    of each game it is built for."""
+    Thinking texts, if given, go with the replies in order, and so do usages: the token counts and stop reason
+    each reply reports (none by default). It serves every game, recording the settings of each game it is built
+    for."""
 
     def __init__(self, replies: list[str | BaseException], thinking: list[str] | None = None) -> None:
         self.replies = list(replies)
         self.thinking = list(thinking) if thinking is not None else None
+        self.usage: list[dict] = []
         self.prompts: list[list[Message]] = []
         self.allowed_moves: list[list[str] | None] = []
         self.built_for: list[Settings] = []
@@ -63,7 +65,8 @@ class ScriptedPlayer:
             raise move
         raw = move if isinstance(move, Raw) else json.dumps({"move": move})
         thinking = self.thinking.pop(0) if self.thinking is not None else None
-        return LlmReply(raw=raw, thinking=thinking, latency_s=0.0)
+        usage = self.usage.pop(0) if self.usage else {}
+        return LlmReply(raw=raw, thinking=thinking, latency_s=0.0, **usage)
 
 
 @pytest.fixture
