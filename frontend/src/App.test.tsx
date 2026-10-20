@@ -253,7 +253,7 @@ test('an LLM turn that fails shows the error, and the ring stays on the LLM with
   expect(timer()).not.toBeInTheDocument()
 })
 
-test('at the end of the game the Game card shows the result line and a New game button', async () => {
+test('at the end of the game the Game card shows the result line and a Rematch button', async () => {
   const over = afterE5({ status: 'over', result: '0-1', end_reason: 'checkmate', human_legal_moves: [] })
   fakeBackend().on('GET /api/games/current', Response.json(over))
 
@@ -261,7 +261,7 @@ test('at the end of the game the Game card shows the result line and a New game 
 
   expect(await screen.findByTestId('result')).toHaveTextContent('Black wins by checkmate')
   expect(within(gameCard()).getByTestId('result')).toBeInTheDocument()
-  expect(within(gameCard()).getByRole('button', { name: 'New game' })).toBeInTheDocument()
+  expect(within(gameCard()).getByRole('button', { name: 'Rematch' })).toBeInTheDocument()
   expect(screen.queryByTestId('banner')).not.toBeInTheDocument()
   expect(ringed()).toEqual([])
   expect(timer()).not.toBeInTheDocument()
@@ -340,18 +340,57 @@ test("New game starts a game with the running game's settings and drops the aban
   expect(playMoveSound).not.toHaveBeenCalled()
 })
 
-test("New game in the Game card starts the next game", async () => {
-  const over = afterE5({ status: 'over', result: '1/2-1/2', end_reason: 'stalemate', human_legal_moves: [] })
-  fakeBackend()
-    .on('GET /api/games/current', Response.json(over))
-    .on('POST /api/games', Response.json(aGame({ game_id: 'game-2' })))
-  renderApp()
+describe('Rematch', () => {
+  test('in Play LLM the human takes the other colour: the board turns and the LLM opens', async () => {
+    const over = afterE5({ status: 'over', result: '1/2-1/2', end_reason: 'stalemate', human_legal_moves: [] })
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(over))
+      .on('POST /api/games', Response.json(llmPlaysWhite({ game_id: 'game-2' })))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    renderApp()
 
-  expect(await screen.findByTestId('result')).toHaveTextContent('Draw by stalemate')
-  await userEvent.click(within(gameCard()).getByRole('button', { name: 'New game' }))
+    expect(await screen.findByTestId('result')).toHaveTextContent('Draw by stalemate')
+    await userEvent.click(within(gameCard()).getByRole('button', { name: 'Rematch' }))
 
-  await yourMove()
-  expect(screen.queryByTestId('result')).not.toBeInTheDocument()
+    await llmMoving('white')
+    expect(backend.sentTo('POST /api/games')[0].body).toEqual({
+      mode: 'play_llm',
+      white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+      black: { player: 'human' },
+      rules: 'standard',
+      max_attempts: 5,
+    })
+    expect(players()).toEqual(['White qwen3.5:9b', 'Black You'])
+    await waitFor(() => expect(theBoard().orientation).toBe('b'))
+    expect(screen.queryByTestId('result')).not.toBeInTheDocument()
+    expect(gameCard()).not.toHaveTextContent('Your changes apply to the next game')
+  })
+
+  test('in an LLM faceoff the two LLMs change sides, each with its own settings', async () => {
+    const llm = afterE4().settings.black
+    const white = { ...llm, model: 'gemma3:4b', thinking: true, llm_constraints: 'listed' as const }
+    const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white, black: llm }
+    const over = afterE5({ status: 'over', result: '1-0', end_reason: 'checkmate', human_legal_moves: [], settings })
+    const swapped = { ...settings, white: llm, black: white }
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(over))
+      .on('POST /api/games', Response.json(aGame({ game_id: 'game-2', human_legal_moves: [], settings: swapped })))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    renderApp()
+
+    await userEvent.click(await within(await screen.findByRole('region', { name: 'Game' })).findByRole('button', { name: 'Rematch' }))
+
+    await llmMoving('white')
+    expect(backend.sentTo('POST /api/games')[0].body).toEqual({
+      mode: 'llm_faceoff',
+      white: llm,
+      black: white,
+      rules: 'standard',
+      max_attempts: 5,
+    })
+    expect(players()).toEqual(['White qwen3.5:9b', 'Black gemma3:4b'])
+    expect(gameCard()).not.toHaveTextContent('Your changes apply to the next game')
+  })
 })
 
 describe('settings', () => {

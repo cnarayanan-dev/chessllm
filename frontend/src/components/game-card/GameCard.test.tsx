@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import type { GameState } from '@/api/types'
 import { GameCard } from '@/components/game-card/GameCard'
 import { aGame, chaosGame } from '@/test/games'
@@ -16,8 +16,8 @@ const faceoffOf = (white: Partial<typeof llm>, black: Partial<typeof llm>) =>
     },
   })
 
-const renderCard = (game: GameState) =>
-  render(<GameCard game={game} pending={false} error={null} onNewGame={() => {}} />)
+const renderCard = (game: GameState, onRematch = () => {}) =>
+  render(<GameCard game={game} pending={false} error={null} onRematch={onRematch} />)
 
 const gameCard = () => screen.getByRole('region', { name: 'Game' })
 /** The Lucide icons in an element, by name ("user", "bot", …). */
@@ -125,4 +125,41 @@ test('the players are shown by name with their colour, without a model logo', ()
   ])
   expect(within(players).queryByRole('img')).not.toBeInTheDocument()
   expect(players.querySelector('img, svg')).toBeNull()
+})
+
+const over = (game: GameState): GameState => ({ ...game, status: 'over', result: '1-0', end_reason: 'checkmate' })
+
+test("once the game is over, Rematch sits under the result line in the setting chips' style, instead of New game", async () => {
+  const onRematch = vi.fn()
+  renderCard(over(aGame()), onRematch)
+
+  const rematch = within(gameCard()).getByRole('button', { name: 'Rematch' })
+  expect(icons(rematch)).toEqual(['rotate-ccw'])
+  expect(rematch).toHaveClass('rounded-full', 'bg-muted')
+  expect(within(gameCard()).queryByRole('button', { name: 'New game' })).not.toBeInTheDocument()
+  await userEvent.click(rematch)
+  expect(onRematch).toHaveBeenCalledOnce()
+})
+
+test('no Rematch while the game is playing', () => {
+  renderCard(aGame())
+
+  expect(within(gameCard()).queryByRole('button')).not.toBeInTheDocument()
+})
+
+test("Rematch's tooltip and aria-description say which colour you will play, or that the LLMs swap", async () => {
+  const { unmount } = renderCard(over(aGame()))
+  const rematch = within(gameCard()).getByRole('button', { name: 'Rematch' })
+
+  expect(rematch).toHaveAttribute('aria-description', 'Same settings, you play Black')
+  await userEvent.hover(rematch)
+  const tooltip = (await screen.findByText('Same settings, you play Black')).closest('[data-slot=tooltip-content]')
+  expect(tooltip).toHaveTextContent(/^Same settings, you play Black$/)
+  unmount()
+
+  renderCard(over(faceoffOf({}, {})))
+  expect(within(gameCard()).getByRole('button', { name: 'Rematch' })).toHaveAttribute(
+    'aria-description',
+    'Same settings, the LLMs swap colours',
+  )
 })

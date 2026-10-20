@@ -32,8 +32,9 @@ export type GameLoop = {
   /** The error line. */
   error: string | null
   /**
-   * The next game's setup, as the Settings modal changes it: set up as the first game shown was, then kept, so the
-   * running game keeps its own settings and the changes apply once the next game starts. Null before the first game.
+   * The next game's setup, as the Settings modal changes it: set up as the first game shown and each game started
+   * were, kept otherwise, so the running game keeps its own settings and the changes apply once the next game starts.
+   * Null before the first game.
    */
   next: NextGame | null
   /** Counts the moves that have landed and play the move sound: the human's, and each LLM move (not a forfeit). */
@@ -179,7 +180,9 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
         : state.flash
       // The view stays where it is in the same game; another game is shown live.
       const history = state.game?.game_id === action.game.game_id ? state.history : null
-      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history }, action.game)
+      // A game started is the next game's setup from then on, a Rematch's swapped colours included.
+      const next = request.kind === 'start' ? nextGameFrom(action.game.settings) : state.next
+      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history, next }, action.game)
     }
     case 'failed': {
       const request = state.request

@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, type ChaosShown } from '@/game/chaos'
 import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
+import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
 import { isPending, newGameRequest, type Models } from '@/settings/next-game'
 import { SettingsModal } from '@/settings/SettingsModal'
@@ -117,7 +118,7 @@ export default function App() {
           // stays in the API and the game log. (`shown` is set whenever `game` is.)
           game && shown ? (
             <>
-              <GameCard game={game} pending={pending} error={error} onNewGame={startNewGame} />
+              <GameCard game={game} pending={pending} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
               <ReasoningPanel game={game} ply={shown.ply} live={!history} />
             </>
           ) : (

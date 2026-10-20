@@ -379,6 +379,16 @@ describe("the next game's setup", () => {
     expect(edited.next).toBe(changed)
     expect(landed.next).toBe(changed)
   })
+
+  test('follows a game started, which may differ from it, as a Rematch does', () => {
+    const shown = run(received(initialGameLoop, aGame()))
+    const llm = aGame().settings.black
+    const rematch = aGame({ game_id: 'game-2', settings: { ...aGame().settings, white: llm, black: { player: 'human' } } })
+    const starting = gameLoop(shown, { type: 'new-game', newGame: null })
+    const started = gameLoop(starting, received(starting, rematch))
+
+    expect(started.next).toMatchObject({ mode: 'play_llm', human_color: 'black' })
+  })
 })
 
 describe('when no game can be loaded or started', () => {

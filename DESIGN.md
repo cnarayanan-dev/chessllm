@@ -94,7 +94,7 @@ The board keeps its own small face for the coordinates and its flashes (`board.c
 
 ## Icons: Lucide
 
-All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (its setting icons: Game card), `ArrowRight` the result's New game, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
+All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (its setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
 
 ## Layout
 
@@ -133,7 +133,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 | Box | Components |
 | --- | --- |
 | Top bar | ghost / outline `Button`s (links as `buttonVariants`), `Tooltip` + `Kbd`; Preferences: icon `Button`, `Popover`, `Switch`, `Tooltip` |
-| Game card | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Separator`, `SettingChip` with `Tooltip`, `Button size="lg"`, `Badge variant="secondary"` |
+| Game card | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Separator`, `SettingChip` with `Tooltip` (Rematch: its button form), `Badge variant="secondary"` |
 | Reasoning panel | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Badge` (`secondary`, or `destructive` when forfeited) |
 | Player strip | `Item` holding a pill with `Avatar` / `AvatarFallback`; Merida pieces; `Badge variant="secondary"` for +N |
 | Board | cm-chessboard in `Board.tsx`, unchanged |
@@ -172,7 +172,7 @@ There is no sentence saying whose move it is: the ring and the timer say it.
   Each chip's tooltip gives its short name (semibold, the constraints with the sheet's plain name and the glossary term, "Board only (Free)") and what it means, e.g. "**Standard rules** Normal chess. Rated."; the name is the chip's accessible name, the meaning its `aria-description`. In a faceoff a setting the two LLMs share is one chip; one they differ in is one chip per side, each with a small White (outlined) or Black (filled) dot at its lower right, its name led by the side ("White: Thinking on"). The names, meanings and per-side split come from `gameSettings` in `frontend/src/game/wording.ts`, the icons from `settingIcon` in `frontend/src/components/game-card/settingIcons.ts`.
 - **Players**, indented under the Mode: a small outlined circle for White and a filled one for Black (drawn in CSS, with the side named for screen readers), then the model or "You". No model logo (the strips have them), no Elo.
 - **The setting chip** (`SettingChip` in `frontend/src/components/setting-chip/SettingChip.tsx`), for any small round control or badge in this style: a 28px `muted` circle holding one 16px Lucide icon (stroke 1.75), focusable so its `Tooltip` opens on hover and on keyboard focus, an optional side dot. Given `onClick`, it is a `button` instead: a `muted` pill with the icon and its name beside it, hover `accent`, the tooltip giving only the description.
-- **When the game is over**, after a `Separator`: the **result line** (20px semibold, e.g. "Black wins by checkmate", or in a faceoff by model, "qwen3.5:9b (White) wins by checkmate") with the reason's detail under it in muted text, and a primary `Button size="lg"` "New game →". This replaces the old result banner.
+- **When the game is over**, after a `Separator`: the **result line** (20px semibold, e.g. "Black wins by checkmate", or in a faceoff by model, "qwen3.5:9b (White) wins by checkmate") with the reason's detail under it in muted text, and **Rematch**: a setting chip button, `RotateCcw` and "Rematch". **Rematch** (CONTEXT.md) starts a new game at once, no sheet, with the same Mode and settings and the colours swapped: in Play LLM the human takes the other colour, so the board turns; in a faceoff the two LLMs change sides, each with its own settings. Its tooltip and `aria-description` say what happens: "Same settings, you play Black" / "… you play White" / "Same settings, the LLMs swap colours" (`rematchOf` and `rematchDescription` in `frontend/src/game/rematch.ts`). New game stays in the top bar. This replaces the old result banner.
 - **Last**, when there is one: a `secondary` Badge with `Settings2`, "Your changes apply to the next game", and a request error as a `text-destructive` line.
 
 ## Reasoning panel
@@ -227,7 +227,7 @@ The React port (#29) carried the old page's generic look. These are gone; don't 
 | A row of setting chips in the top bar | The settings in the Game card, one icon each, explained in its tooltip |
 | Uppercase micro-labels | Sentence-case `CardTitle`s and muted text |
 | Status sentences ("Black · qwen3.5:9b is thinking… 12s", "Your move", "Waiting for…") | The turn ring and the move timer in the player strips |
-| The result banner | The result line and New game button in the Game card |
+| The result banner | The result line and Rematch in the Game card |
 | Players shown only as chips | Player strips with logo, name, captures, spawns and +N |
 | A move list that grows with the game, and Back to live | A fixed-height list of 8 rows that scrolls itself, and the pulse on a new move |
 | "Show thinking" | The Reasoning panel (the Thinking stays in the API and the log) |

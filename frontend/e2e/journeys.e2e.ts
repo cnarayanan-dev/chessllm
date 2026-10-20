@@ -141,6 +141,52 @@ test('an LLM faceoff started from the settings modal plays to its end', async ({
   await expectPiece(page, 'h4', 'bq')
 })
 
+test('Rematch after a Play LLM game: the human plays Black, the board turns and the LLM opens', async ({ page }) => {
+  await playLlm(page, { white: ['e4'], black: ['Qh4', 'Qh4', 'Ke7', 'Ke7', 'Bb4'] })
+  await clickMove(page, 'e2e4')
+  await expect(page.getByTestId('result')).toContainText('by forfeit')
+  await expect(page.getByRole('button', { name: 'New game' })).toHaveCount(1) // the top bar's alone
+
+  const rematch = page.getByRole('region', { name: 'Game' }).getByRole('button', { name: 'Rematch' })
+  await expect(rematch).toHaveAttribute('aria-description', 'Same settings, you play Black')
+  await rematch.hover()
+  await expect(page.locator('[data-slot=tooltip-content]')).toHaveText('Same settings, you play Black')
+  await rematch.click()
+
+  await expect(lastMove(page)).toHaveText('e4')
+  await expect(page.getByTestId('result')).toHaveCount(0)
+  await expect(page.getByTestId('strip-black')).toHaveAttribute('data-to-move')
+  await expect(page.getByTestId('strip-black')).toContainText('You')
+  expect(await stripsAroundBoard(page)).toEqual(['white', 'black'])
+})
+
+test('Rematch after an LLM faceoff: the two LLMs change sides, each with its own settings', async ({ page }) => {
+  await page.request.post('/e2e/script', { data: { white: ['f3', 'g4'], black: ['e5', 'Qh4#'] } })
+  const started = await page.request.post('/api/games', {
+    data: {
+      mode: 'llm_faceoff',
+      white: { player: 'llm', model: 'qwen3.5:9b', thinking: true },
+      black: { player: 'llm', model: 'llama3:8b' },
+    },
+  })
+  expect(started.ok()).toBe(true)
+  await page.goto('/')
+  const card = page.getByRole('region', { name: 'Game' })
+  const players = card.getByRole('list', { name: 'Players' }).getByRole('listitem')
+  await expect(page.getByTestId('result')).toContainText('by checkmate')
+  await expect(players).toHaveText(['White qwen3.5:9b', 'Black llama3:8b'])
+
+  const rematch = card.getByRole('button', { name: 'Rematch' })
+  await expect(rematch).toHaveAttribute('aria-description', 'Same settings, the LLMs swap colours')
+  await rematch.click()
+
+  await expect(players).toHaveText(['White llama3:8b', 'Black qwen3.5:9b'])
+  await expect(card.getByRole('img', { name: 'White: Thinking off' })).toBeVisible()
+  await expect(card.getByRole('img', { name: 'Black: Thinking on' })).toBeVisible()
+  await expect(page.getByTestId('result')).toContainText('by checkmate')
+  await expectOver(page)
+})
+
 test('stepping back through the move history and returning to live', async ({ page }) => {
   await playLlm(page, { black: ['e5', 'Nc6'] })
   await move(page, 'e2e4', 'e5')
