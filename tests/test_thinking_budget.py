@@ -87,6 +87,25 @@ def test_each_attempt_logs_whether_its_answer_was_forced(tmp_path):
     assert "forced" not in second  # left out when not forced, so attempts without a budget log as before
 
 
+def test_a_budgeted_gemma4_batch_plays_and_logs_its_budget_and_forced_answers(tmp_path):
+    player = ScriptedPlayer(FOOLS_MATE)
+    player.usage = [{"forced": True, "stop_reason": "stop"}, {}, {}, {}]
+
+    code, _ = faceoff(tmp_path, "--models", "gemma4:26b", "gemma3:12b", "--thinking-for", "gemma4:26b",
+                      "--thinking-budget-for", "gemma4:26b=2048", player_for=player.for_settings)
+
+    assert code == 0
+    start = game_log(tmp_path)[0]
+    assert (start["white"]["model"], start["white"]["thinking"], start["white"]["thinking_budget"]) == (
+        "gemma4:26b", True, 2048
+    )
+    assert set(start["black"]) == PLAIN_SIDE_KEYS
+    first, second = attempts(tmp_path, "white")
+    assert (first["forced"], first["result"]) == (True, "legal")
+    assert "forced" not in second
+    assert game_log(tmp_path)[-1]["type"] == "game_end"
+
+
 def ollama_chat(*responses: ChatResponse):
     replies = list(responses)
     return lambda **request: replies.pop(0)

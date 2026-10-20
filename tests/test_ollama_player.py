@@ -249,3 +249,24 @@ def test_a_reply_cut_while_answering_hands_back_the_complete_thinking_unchanged(
     assert forced["messages"][-1] == {"role": "assistant", "thinking": "Nf6 develops. Nf6.", "content": " "}
     assert (reply.raw, reply.forced) == (' {"move": "Nf6"}', True)
     assert (reply.thinking_tokens, reply.answer_tokens, reply.token_split_estimated) == (24, 8, True)
+
+
+def test_gemma4_cut_while_thinking_is_forced_by_the_same_chat_route_under_the_same_schema_and_enum():
+    # Ollama's gemma4 renderer answers the handed-back thinking in a new model turn, but carries it, so Gemma 4 takes
+    # the chat route like the Qwen models, with no Gemma-specific request (docs/research/thinking-budget.md).
+    chat, calls = scripted_chat(
+        answer("", "Bxf7+ wins a pawn, but", prompt_eval_count=372, eval_count=256, done_reason="length"),
+        answer('{"move": "Bb3"}', prompt_eval_count=651, eval_count=7, done_reason="stop"),
+    )
+
+    reply = OllamaPlayer("gemma4:26b", chat=chat, budget=256).reply(TURN, allowed_moves=["Bxf7+", "Bb3", "d3"])
+
+    first, forced = calls  # exactly one forced-answer call
+    assert (first["model"], first["think"], first["options"]) == ("gemma4:26b", True, {"num_predict": 256})
+    assert (forced["model"], forced["think"], forced["format"]) == ("gemma4:26b", True, first["format"])
+    assert forced["format"]["properties"]["move"]["enum"] == ["Bxf7+", "Bb3", "d3"]
+    assert forced["messages"] == first["messages"] + [
+        {"role": "assistant", "thinking": "Bxf7+ wins a pawn, but" + BUDGET_SENTENCE, "content": " "}
+    ]
+    assert forced["options"] == {"num_predict": 64}
+    assert (reply.raw, reply.forced, reply.thinking_tokens, reply.answer_tokens) == ('{"move": "Bb3"}', True, 256, 7)

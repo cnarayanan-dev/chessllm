@@ -1,8 +1,9 @@
-"""Live test of the Thinking budget against a real Ollama model: a budgeted qwen3.8 move under Listed enforced is
-forced to answer, and the forced answer is still held to the legal moves (ADR 0007).
+"""Live test of the Thinking budget against real Ollama models: a budgeted move of qwen3.8 and of gemma4:26b under
+Listed enforced is forced to answer, and the forced answer is still held to the legal moves (ADR 0007). Both take the
+same chat route; gemma4's renderer answers in a new model turn (docs/research/thinking-budget.md).
 
-Excluded from the default run; run it with `pytest -m ollama`. Skipped when no Ollama server is reachable or
-qwen3.8:latest isn't installed. gemma4:26b's live test follows in its own ticket (#73)."""
+Excluded from the default run; run it with `pytest -m ollama`. Skipped when no Ollama server is reachable, and per
+model when it isn't installed."""
 
 import chess
 import ollama
@@ -15,30 +16,30 @@ from chessllm.prompt import LISTED_SYSTEM_PROMPT_FILE, turn_messages
 
 pytestmark = pytest.mark.ollama
 
-MODEL = "qwen3.8:latest"
-# White's sixth move in an Italian Game (docs/research/board-images-positions.json #1): 33 legal moves, so qwen3.8
-# thinks for far longer than the budget.
+# White's sixth move in an Italian Game (docs/research/board-images-positions.json #1): 33 legal moves, so both
+# models think for far longer than the budget.
 FEN = "r1bqkb1r/ppp2ppp/3p1n2/n3p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 6"
 PGN = "1. e4 e5 2. Nf3 Nc6 3. Bc4 d6 4. Ng1 Nf6 5. Nf3 Na5"
 BUDGET = 128  # small, so the budget binds
 
 
-@pytest.fixture(scope="module", autouse=True)
-def ollama_server():
+@pytest.fixture(scope="module")
+def installed() -> list[str]:
     try:
-        installed = [model.model for model in ollama.Client(timeout=2).list().models]
+        return [model.model for model in ollama.Client(timeout=2).list().models]
     except Exception as error:
         pytest.skip(f"no Ollama server reachable: {error}")
-    if MODEL not in installed:
-        pytest.skip(f"{MODEL} is not installed in Ollama")
 
 
-def test_a_budgeted_listed_enforced_move_is_forced_and_from_the_list():
+@pytest.mark.parametrize("model", ["qwen3.8:latest", "gemma4:26b"])
+def test_a_budgeted_listed_enforced_move_is_forced_and_from_the_list(installed, model):
+    if model not in installed:
+        pytest.skip(f"{model} is not installed in Ollama")
     board = chess.Board(FEN)
     allowed = [board.san(move) for move in board.legal_moves]
     messages = turn_messages(PGN, FEN, "white", LISTED_SYSTEM_PROMPT_FILE, " ".join(allowed))
-    speed = next(model.tokens_per_s for model in LLM_MODELS if model.name == MODEL)
-    player = OllamaPlayer(MODEL, thinking=True, timeout_s=time_limit_s(BUDGET, speed), budget=BUDGET)
+    speed = next(llm.tokens_per_s for llm in LLM_MODELS if llm.name == model)
+    player = OllamaPlayer(model, thinking=True, timeout_s=time_limit_s(BUDGET, speed), budget=BUDGET)
 
     reply = player.reply(messages, allowed)
 

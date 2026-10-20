@@ -280,6 +280,7 @@ Each run: call 1 with `options.num_predict` = the cap; if `done_reason == "lengt
 - **Raw route: also works** [Measured]. `/api/generate` with `raw: true`, the same `format` and `num_predict: 64`, and the prompt = the `_debug_render_only` render of the turn's messages (with `think: true`, so `<|think|>` is in the system turn; it ends `<turn|>\n<|turn>model\n`) + `<|channel>thought\n` + thinking so far + budget sentence + `\n<channel|>`. That continues the same model turn, as Gemma would produce it. 3/3: `{"move": "d3"}` twice, and `a3` under the restricted enum, 7 tokens each, empty `thinking`, prompt 651 tokens in 0.5-1.6 s. The rendered text starts with the literal `<bos>`; it worked as is.
 - **Speed** [Measured]: 36.1-41.7 tok/s; prompt 372 tokens cold in 1.7 s. Call 2 reused the cache (1,424 tokens in 0.23 s).
 - **Time limit** [Inference]: budget ÷ 36 tok/s + ~2 s + ~1 s. 3,072 tokens ≈ 90 s, 6,144 ≈ 175 s.
+- **Route in the implementation: chat** (#73). `OllamaPlayer` forces gemma4:26b's answer through the same chat call as the Qwen models, with no Gemma-specific code; the raw route stays a documented fallback, not built. The live test (`tests/test_ollama_budget_live.py`, budget 128) passed on 2026-10-20: forced, and the move in the enum. [Measured]
 
 ### What #72 and #73 should build
 
