@@ -44,7 +44,8 @@ async function startFromSettings(page: Page, script: Script, setUp: (settings: R
   expect(started.ok()).toBe(true)
   await page.goto('/')
   await yourMove(page)
-  await expect(page.getByText('Chaos rules', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('img', { name: 'Standard rules' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Chaos rules' })).toHaveCount(0)
 
   await page.getByRole('button', { name: /Settings/ }).click()
   const settings = page.getByRole('dialog', { name: 'Settings' })
@@ -57,7 +58,7 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await startFromSettings(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Kh6'] }, async (settings) => {
     await settings.getByRole('switch', { name: 'Chaos rules' }).click()
   })
-  await expect(page.getByText('Chaos rules', { exact: true })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
 
   // The bishop jumps over its own pawn on e7.
   await move(page, 'e2e4', 'Bb4')
@@ -134,7 +135,7 @@ test('an LLM faceoff under Chaos rules, started from the Settings modal, ends in
   const result = page.getByTestId('result')
   await expect(result).toContainText(/\(White\) wins by King capture/)
   await expect(result).toContainText(/.+ \(Black\) left its king hanging/)
-  await expect(page.getByText('Chaos rules', { exact: true })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
   await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Qxe8' })).not.toHaveClass(/chaos/)

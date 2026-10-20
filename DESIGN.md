@@ -94,7 +94,7 @@ The board keeps its own small face for the coordinates and its flashes (`board.c
 
 ## Icons: Lucide
 
-All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Settings` (the gear) Preferences, `Swords` Play LLM, `Bot` LLM faceoff, `ArrowRight` the result's New game, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
+All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (its setting icons: Game card), `ArrowRight` the result's New game, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
 
 ## Layout
 
@@ -133,7 +133,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 | Box | Components |
 | --- | --- |
 | Top bar | ghost / outline `Button`s (links as `buttonVariants`), `Tooltip` + `Kbd`; Preferences: icon `Button`, `Popover`, `Switch`, `Tooltip` |
-| Game card | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Separator`, `Button size="lg"`, `Badge variant="secondary"` |
+| Game card | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Separator`, `SettingChip` with `Tooltip`, `Button size="lg"`, `Badge variant="secondary"` |
 | Reasoning panel | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Badge` (`secondary`, or `destructive` when forfeited) |
 | Player strip | `Item` holding a pill with `Avatar` / `AvatarFallback`; Merida pieces; `Badge variant="secondary"` for +N |
 | Board | cm-chessboard in `Board.tsx`, unchanged |
@@ -159,8 +159,19 @@ There is no sentence saying whose move it is: the ring and the timer say it.
 
 `frontend/src/components/game-card/GameCard.tsx`, top of the left column, a lichess game card without Elo, 15px:
 
-- **Header**: the Mode icon (`Swords` Play LLM, `Bot` LLM faceoff) in a 40px `muted` circle, beside the **Mode** as the `CardTitle` and, under it in muted text, the **settings line** (`settingsLine` in `frontend/src/game/wording.ts`): LLM constraints, rules, retry feedback, thinking, and the illegal moves before a forfeit when not the default, e.g. `Listed | Standard rules | explained feedback | thinking off`. A value that differs between the two LLMs gives one item per side ("White thinking off | Black thinking on"). Items are flex items that wrap only between each other; the "|" sits in each item's left padding and the list is shifted left by that padding, so no line starts with a "|".
-- **Players**, indented under the Mode: a small outlined circle for White and a filled one for Black (drawn in CSS, with the side named for screen readers), then the model or "You". No Elo.
+- **Header**: the **Mode icon shows the players**, in a 64 × 40px `muted` pill: Lucide `User` "vs" `Bot` for Play LLM, `Bot` "vs" `Bot` for LLM faceoff (`role="img"`, named "You against an LLM" / "An LLM against an LLM"). Beside it the **Mode** as the `CardTitle` and, under it, the **settings as icons**, one **setting chip** each, wrapping between chips:
+
+  | setting | icons |
+  | --- | --- |
+  | LLM constraints | Free `Eye`, Listed `ListChecks`, Blind enforced `Lock`, Listed enforced `ShieldCheck` |
+  | Rules | Standard `ChessKnight`, Chaos `Zap` |
+  | Retry feedback | Explained `MessageSquareText`, Bare `MessageSquare`, Hinted `Lightbulb`; none for an LLM under an enforced constraint |
+  | Thinking | `Brain`; off: `BrainOff`, Lucide's `Brain` with the slash of its *Off icons, drawn in `frontend/src/components/icons/BrainOff.tsx` |
+  | Forfeit limit | `Flag`, its tooltip giving the number; none when every LLM is under an enforced constraint |
+
+  Each chip's tooltip gives its short name (semibold, the constraints with the sheet's plain name and the glossary term, "Board only (Free)") and what it means, e.g. "**Standard rules** Normal chess. Rated."; the name is the chip's accessible name, the meaning its `aria-description`. In a faceoff a setting the two LLMs share is one chip; one they differ in is one chip per side, each with a small White (outlined) or Black (filled) dot at its lower right, its name led by the side ("White: Thinking on"). The names, meanings and per-side split come from `gameSettings` in `frontend/src/game/wording.ts`, the icons from `settingIcon` in `frontend/src/components/game-card/settingIcons.ts`.
+- **Players**, indented under the Mode: a small outlined circle for White and a filled one for Black (drawn in CSS, with the side named for screen readers), then the model or "You". No model logo (the strips have them), no Elo.
+- **The setting chip** (`SettingChip` in `frontend/src/components/setting-chip/SettingChip.tsx`), for any small round control or badge in this style: a 28px `muted` circle holding one 16px Lucide icon (stroke 1.75), focusable so its `Tooltip` opens on hover and on keyboard focus, an optional side dot. Given `onClick`, it is a `button` instead: a `muted` pill with the icon and its name beside it, hover `accent`, the tooltip giving only the description.
 - **When the game is over**, after a `Separator`: the **result line** (20px semibold, e.g. "Black wins by checkmate", or in a faceoff by model, "qwen3.5:9b (White) wins by checkmate") with the reason's detail under it in muted text, and a primary `Button size="lg"` "New game →". This replaces the old result banner.
 - **Last**, when there is one: a `secondary` Badge with `Settings2`, "Your changes apply to the next game", and a request error as a `text-destructive` line.
 
@@ -213,7 +224,7 @@ The React port (#29) carried the old page's generic look. These are gone; don't 
 | Stock shadcn neutral theme, whose secondary text fails AA on a grey page | The Stone palette, warm greys with a darker muted foreground, checked by tests |
 | Every block in a bordered card | Luma cards set off by fill and shadow; inside them filled `muted` surfaces, and faint lines only between table rows and above the totals |
 | Glyph icons (♞ ⚙ ✦ ⚑ …) | Lucide icons; the Merida rook as the mark and tab icon; Merida pieces for captures |
-| A row of setting chips in the top bar | The settings line in the Game card, items separated by "\|" |
+| A row of setting chips in the top bar | The settings in the Game card, one icon each, explained in its tooltip |
 | Uppercase micro-labels | Sentence-case `CardTitle`s and muted text |
 | Status sentences ("Black · qwen3.5:9b is thinking… 12s", "Your move", "Waiting for…") | The turn ring and the move timer in the player strips |
 | The result banner | The result line and New game button in the Game card |

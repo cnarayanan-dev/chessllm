@@ -60,8 +60,11 @@ const players = () =>
   within(within(gameCard()).getByRole('list', { name: 'Players' }))
     .getAllByRole('listitem')
     .map((item) => item.textContent)
-/** The Game card's settings line, item by item. */
-const settingsItems = () => within(gameCard()).getAllByTestId('setting').map((item) => item.textContent)
+/** The Game card's settings, chip by chip, by their accessible names. */
+const settingsItems = () =>
+  within(within(gameCard()).getByRole('list', { name: 'Settings' }))
+    .getAllByRole('img')
+    .map((chip) => chip.getAttribute('aria-label'))
 
 /** Plays a move on the board, once the board takes moves. */
 async function drop(from: string, to: string) {
@@ -90,7 +93,13 @@ test('shows the current game: the Game card, the player strips and the board', a
   expect(strip('white')).toHaveTextContent('You')
   expect(screen.queryByTestId('status')).not.toBeInTheDocument()
   expect(within(gameCard()).getByText('Play LLM')).toBeInTheDocument()
-  expect(settingsItems()).toEqual(['Free', 'Standard rules', 'explained feedback', 'thinking off'])
+  expect(settingsItems()).toEqual([
+    'Board only (Free)',
+    'Standard rules',
+    'Explained feedback',
+    'Thinking off',
+    'Forfeit after 5 illegal moves',
+  ])
   expect(players()).toEqual(['White You', 'Black qwen3.5:9b'])
   expect(within(gameCard()).queryByText(/Elo/)).not.toBeInTheDocument()
   // The settings live in the Game card, not in the top bar.
@@ -641,7 +650,7 @@ describe('Chaos rules', () => {
     await waitFor(() => expect(board.input?.color).toBe('w'))
 
     expect(settingsItems()).toContain('Standard rules')
-    expect(screen.queryByText('Chaos rules')).not.toBeInTheDocument()
+    expect(settingsItems()).not.toContain('Chaos rules')
     expect(caption()).not.toBeInTheDocument()
     expect(board.arrows).toEqual([])
   })
@@ -652,7 +661,8 @@ describe('Chaos rules', () => {
       .on('GET /api/games/current', Response.json(chaosGame(1)))
       .on('POST /api/games/current/llm-turn', turn.promise)
     renderApp()
-    expect(await within(await screen.findByRole('region', { name: 'Game' })).findByText('Chaos rules')).toBeInTheDocument()
+    const card = await screen.findByRole('region', { name: 'Game' })
+    expect(await within(card).findByRole('img', { name: 'Chaos rules' })).toBeInTheDocument()
     const board = await waitFor(theBoard)
 
     await act(async () => turn.resolve(Response.json(chaosGame(2))))

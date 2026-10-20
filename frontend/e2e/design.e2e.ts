@@ -159,52 +159,39 @@ test('below 760px: one column, the board, the moves, then the Game card', async 
   expect(game.y).toBeGreaterThan(moves.y + moves.height)
 })
 
-/**
- * The Game card's settings items, line by line: each item's box, whether it is cut off by the line's clip, and
- * whether its "|" (in its left padding) shows; the clip hides it at the start of a line.
- */
-async function settingsLines(page: Page) {
-  const items = await page.getByTestId('setting').evaluateAll((elements) =>
-    elements.map((element) => {
-      const box = element.getBoundingClientRect()
-      const clip = element.parentElement!.parentElement!.getBoundingClientRect()
-      const bar = parseFloat(getComputedStyle(element, '::before').left)
-      return {
-        top: box.top,
-        height: box.height,
-        clipped: box.right > clip.right + 0.5 || element.scrollWidth > element.clientWidth,
-        barShown: box.left + bar >= clip.left,
-      }
-    }),
-  )
-  const lines: (typeof items)[] = []
-  items.forEach((item, i) => (i === 0 || item.top !== items[i - 1].top ? lines.push([item]) : lines.at(-1)!.push(item)))
-  return lines
-}
+const settingChips = (page: Page) => page.getByRole('list', { name: 'Settings' }).getByRole('img')
 
-/** Expects every item shown whole, on one line unless it is alone on its line, and no "|" starting a line. */
-function expectWrappedBetweenItems(lines: Awaited<ReturnType<typeof settingsLines>>) {
-  const lineHeight = Math.min(...lines.flat().map((item) => item.height))
-  for (const line of lines) {
-    line.forEach((item, i) => {
-      expect(item.clipped).toBe(false)
-      expect(item.barShown).toBe(i > 0)
-      if (line.length > 1) expect(item.height).toBe(lineHeight)
-    })
+/** Expects every setting chip to be a 28px circle holding one icon, inside the Game card. */
+async function expectChipsWhole(page: Page) {
+  const card = (await page.getByRole('region', { name: 'Game' }).boundingBox())!
+  for (const chip of await settingChips(page).all()) {
+    const box = (await chip.boundingBox())!
+    expect([box.width, box.height]).toEqual([28, 28])
+    expect(box.x).toBeGreaterThanOrEqual(card.x)
+    expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width)
+    await expect(chip.locator('svg')).toHaveCount(1)
   }
 }
 
-test('the settings line wraps only between items, and no "|" starts a line', async ({ page }) => {
+test("the Game card's settings are icons, each explained in a tooltip on hover and on keyboard focus", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openGame(page)
 
-  const lines = await settingsLines(page)
-  expect(lines.length).toBeGreaterThan(1) // it wraps at this width
-  expectWrappedBetweenItems(lines)
+  await expect(settingChips(page)).toHaveCount(5)
+  await expectChipsWhole(page)
+  await settingChips(page).first().hover()
+  const tooltip = page.locator('[data-slot=tooltip-content]')
+  await expect(tooltip).toHaveText('Board only (Free) The LLM finds its own moves and can play an illegal one.')
+  await expect(tooltip).toBeInViewport({ ratio: 1 })
+  await page.mouse.move(0, 0)
+  await expect(tooltip).toBeHidden()
+
+  await settingChips(page).nth(1).focus()
+  await expect(tooltip).toHaveText('Standard rules Normal chess. Rated.')
 })
 
 for (const width of [1101, 761]) {
-  test(`at ${width}px a faceoff's per-side settings are shown whole`, async ({ page }) => {
+  test(`at ${width}px a faceoff's per-side settings show whole, each with its side's dot`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.request.post('/e2e/script', { data: {} })
     const started = await page.request.post('/api/games', {
@@ -216,8 +203,9 @@ for (const width of [1101, 761]) {
     })
     expect(started.ok()).toBe(true)
     await page.goto('/')
-    await expect(page.getByTestId('setting').first()).toHaveText('White Listed enforced')
+    await expect(settingChips(page).first()).toHaveAccessibleName('White: Shown and kept legal (Listed enforced)')
 
-    expectWrappedBetweenItems(await settingsLines(page))
+    await expectChipsWhole(page)
+    await expect(settingChips(page).first().locator('[data-side=white]')).toBeVisible()
   })
 }

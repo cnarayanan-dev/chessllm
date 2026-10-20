@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { GameState } from '@/api/types'
-import { resultText, settingsLine } from '@/game/wording'
+import { gameSettings, resultText } from '@/game/wording'
 import { CHAOS_PLIES, aGame, chaosGame, plies } from '@/test/games'
 
 const kingCaptured = (overrides: Partial<GameState>) =>
@@ -66,29 +66,68 @@ const llm = aGame().settings.black as Extract<GameState['settings']['black'], { 
 const faceoffOf = (white: Partial<typeof llm>, black: Partial<typeof llm>) =>
   aGame({ settings: { ...aGame().settings, mode: 'llm_faceoff', white: { ...llm, ...white }, black: { ...llm, ...black } } })
 
-test("the Game card's settings line: the LLM constraints, the rules, the feedback and thinking", () => {
-  expect(settingsLine(aGame())).toEqual(['Free', 'Standard rules', 'explained feedback', 'thinking off'])
-  expect(settingsLine(chaosGame(1))).toContain('Chaos rules')
+/** The Game card's settings, each as its setting and value, and its side when the two LLMs differ in it. */
+const shown = (game: GameState) =>
+  gameSettings(game).map(({ setting, value, color }) => `${setting}=${value}${color ? ` (${color})` : ''}`)
+
+test("the Game card's settings: the LLM constraints, the rules, the Retry feedback, thinking and the forfeit limit", () => {
+  expect(shown(aGame())).toEqual([
+    'llm_constraints=free',
+    'rules=standard',
+    'retry_feedback=explained',
+    'thinking=off',
+    'max_attempts=5',
+  ])
+  expect(shown(chaosGame(1))).toContain('rules=chaos')
 })
 
-test('in a faceoff a setting that differs between the two LLMs gives one item per side', () => {
-  const game = faceoffOf({ thinking: false, llm_constraints: 'listed' }, { thinking: true, llm_constraints: 'listed' })
+test('each setting has its short name and what it means', () => {
+  const game = aGame({ settings: { ...aGame().settings, max_attempts: 3 } })
 
-  expect(settingsLine(game)).toEqual([
-    'Listed',
-    'Standard rules',
-    'explained feedback',
-    'White thinking off',
-    'Black thinking on',
+  expect(gameSettings(game).map(({ name, description }) => [name, description])).toEqual([
+    ['Board only (Free)', 'The LLM finds its own moves and can play an illegal one.'],
+    ['Standard rules', 'Normal chess. Rated.'],
+    ['Explained feedback', 'After an illegal move the LLM is told the move and the kind of failure.'],
+    ['Thinking off', 'The LLM answers without reasoning first.'],
+    ['Forfeit after 3 illegal moves', 'An LLM loses after 3 illegal moves in one turn.'],
+  ])
+  const one = aGame({ settings: { ...aGame().settings, max_attempts: 1 } })
+  expect(gameSettings(one).at(-1)).toMatchObject({
+    name: 'Forfeit after 1 illegal move',
+    description: 'An LLM loses after 1 illegal move in one turn.',
+  })
+})
+
+test('an LLM under an enforced constraint has no Retry feedback; with no other LLM there is no forfeit limit', () => {
+  expect(shown(faceoffOf({ llm_constraints: 'blind_enforced' }, { llm_constraints: 'listed_enforced' }))).toEqual([
+    'llm_constraints=blind_enforced (white)',
+    'llm_constraints=listed_enforced (black)',
+    'rules=standard',
+    'thinking=off',
+  ])
+  expect(shown(faceoffOf({ llm_constraints: 'listed_enforced' }, { retry_feedback: 'hinted' }))).toEqual([
+    'llm_constraints=listed_enforced (white)',
+    'llm_constraints=free (black)',
+    'rules=standard',
+    'retry_feedback=hinted (black)',
+    'thinking=off',
+    'max_attempts=5',
   ])
 })
 
-test('the illegal moves before forfeit show only when they differ from the default 5', () => {
-  expect(settingsLine(aGame()).join(' ')).not.toContain('forfeit')
-  const game = aGame({ settings: { ...aGame().settings, max_attempts: 3 } })
+test('in a faceoff a setting the LLMs share is one item; one that differs is one per side, named by its side', () => {
+  const game = faceoffOf({ thinking: false, llm_constraints: 'listed' }, { thinking: true, llm_constraints: 'listed' })
 
-  expect(settingsLine(game).at(-1)).toBe('3 illegal moves before forfeit')
-  expect(settingsLine(aGame({ settings: { ...aGame().settings, max_attempts: 1 } })).at(-1)).toBe(
-    '1 illegal move before forfeit',
-  )
+  expect(shown(game)).toEqual([
+    'llm_constraints=listed',
+    'rules=standard',
+    'retry_feedback=explained',
+    'thinking=off (white)',
+    'thinking=on (black)',
+    'max_attempts=5',
+  ])
+  expect(gameSettings(game).filter((item) => item.setting === 'thinking').map((item) => item.name)).toEqual([
+    'White: Thinking off',
+    'Black: Thinking on',
+  ])
 })

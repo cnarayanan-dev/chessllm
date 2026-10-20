@@ -1,4 +1,4 @@
-// The words around the board: the Game card's settings line and result.
+// The words around the board: the Game card's settings and result.
 import type { Color, GameSettings, GameState } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
 import { humanColor } from '@/game/gameLoop'
@@ -6,14 +6,6 @@ import { humanColor } from '@/game/gameLoop'
 export const COLORS: readonly Color[] = ['white', 'black']
 export const COLOR_NAMES: Record<Color, string> = { white: 'White', black: 'Black' }
 const other = (color: Color): Color => (color === 'white' ? 'black' : 'white')
-
-export const LLM_CONSTRAINTS_NAMES = {
-  free: 'Free',
-  listed: 'Listed',
-  blind_enforced: 'Blind enforced',
-  listed_enforced: 'Listed enforced',
-} as const
-export const FEEDBACK_NAMES = { explained: 'Explained', bare: 'Bare', hinted: 'Hinted' } as const
 
 const RESULT_TITLES: Record<string, string> = { '1-0': 'White wins', '0-1': 'Black wins', '1/2-1/2': 'Draw' }
 const END_REASONS: Record<string, string> = {
@@ -70,29 +62,91 @@ export function resultText(game: GameState): { result: string; detail: string | 
   return { result: `${title} ${reason}`, detail }
 }
 
-/** The attempts per turn when the game does not set them otherwise (CONTEXT.md: Retry). */
-const DEFAULT_MAX_ATTEMPTS = 5
+/** A setting of the running game as the Game card shows it: one icon, its name and meaning in the tooltip. */
+export type GameSetting = {
+  setting: 'llm_constraints' | 'rules' | 'retry_feedback' | 'thinking' | 'max_attempts'
+  /** The setting's value as the API names it ('free', 'chaos', …), 'on' / 'off' for thinking, the number of moves. */
+  value: string
+  /** The short name, e.g. "Board only (Free)"; in a faceoff whose LLMs differ in it, after the side ("White: …"). */
+  name: string
+  description: string
+  /** The LLM's side, when the two LLMs of a faceoff differ in the setting; otherwise null. */
+  color: Color | null
+}
+type Shown = Pick<GameSetting, 'value' | 'name' | 'description'>
+
+/** The LLM constraints with the plain name of the New game sheet, the glossary term kept beside it (CONTEXT.md). */
+const LLM_CONSTRAINTS: Record<LlmSide['llm_constraints'], Shown> = {
+  free: { value: 'free', name: 'Board only (Free)', description: 'The LLM finds its own moves and can play an illegal one.' },
+  listed: {
+    value: 'listed',
+    name: 'Board + legal moves (Listed)',
+    description: 'The LLM is shown the legal moves, but can still play an illegal one.',
+  },
+  blind_enforced: {
+    value: 'blind_enforced',
+    name: 'Kept legal, not told (Blind enforced)',
+    description: 'The LLM is held to the legal moves without being shown them.',
+  },
+  listed_enforced: {
+    value: 'listed_enforced',
+    name: 'Shown and kept legal (Listed enforced)',
+    description: 'The LLM is shown the legal moves and held to them.',
+  },
+}
+const RULES: Record<NonNullable<GameSettings['rules']>, Shown> = {
+  standard: { value: 'standard', name: 'Standard rules', description: 'Normal chess. Rated.' },
+  chaos: { value: 'chaos', name: 'Chaos rules', description: "The LLM's illegal moves are played anyway. Unrated." },
+}
+const RETRY_FEEDBACK: Record<LlmSide['retry_feedback'], Shown> = {
+  explained: {
+    value: 'explained',
+    name: 'Explained feedback',
+    description: 'After an illegal move the LLM is told the move and the kind of failure.',
+  },
+  bare: { value: 'bare', name: 'Bare feedback', description: 'After an illegal move the LLM is told only that it was illegal.' },
+  hinted: { value: 'hinted', name: 'Hinted feedback', description: 'After an illegal move the LLM is also told the legal moves.' },
+}
+const THINKING: Record<'on' | 'off', Shown> = {
+  on: { value: 'on', name: 'Thinking on', description: 'The LLM reasons before each move.' },
+  off: { value: 'off', name: 'Thinking off', description: 'The LLM answers without reasoning first.' },
+}
+/** Under Enforced decoding the LLM cannot play an illegal move, so it is never retried (ADR 0003). */
+const enforced = (side: LlmSide) => side.llm_constraints === 'blind_enforced' || side.llm_constraints === 'listed_enforced'
 
 /**
- * The Game card's settings line, one item each: the LLM constraints, the rules, the feedback and thinking, then the
- * illegal moves before forfeit if not the default. A value that differs between the two LLMs in a faceoff gives one
- * item per side, e.g. "White thinking off", "Black thinking on".
+ * The Game card's settings, one item each: the LLM constraints, the rules, the Retry feedback, thinking and the
+ * illegal moves before forfeit. An LLM under an enforced constraint has no Retry feedback, and when every LLM is, there
+ * is no forfeit limit. A setting that differs between the two LLMs of a faceoff gives one item per side.
  */
-export function settingsLine(game: GameState): string[] {
+export function gameSettings(game: GameState): GameSetting[] {
   const colors = llmColors(game)
   const sides = colors.map((color) => llmSide(game, color))
-  const perSide = (format: (side: LlmSide) => string) => {
-    const values = sides.map(format)
-    return new Set(values).size === 1 ? [values[0]] : colors.map((color, i) => `${COLOR_NAMES[color]} ${values[i]}`)
+  const perSide = (setting: GameSetting['setting'], shown: (side: LlmSide) => Shown | null): GameSetting[] => {
+    const values = sides.map(shown)
+    if (new Set(values).size === 1) return values[0] ? [{ setting, ...values[0], color: null }] : []
+    return colors.flatMap((color, i) => {
+      const value = values[i]
+      return value ? [{ setting, ...value, name: `${COLOR_NAMES[color]}: ${value.name}`, color }] : []
+    })
   }
   const attempts = game.settings.max_attempts
+  const moves = `${attempts} illegal ${attempts === 1 ? 'move' : 'moves'}`
   return [
-    ...perSide((side) => LLM_CONSTRAINTS_NAMES[side.llm_constraints]),
-    game.settings.rules === 'chaos' ? 'Chaos rules' : 'Standard rules',
-    ...perSide((side) => `${FEEDBACK_NAMES[side.retry_feedback].toLowerCase()} feedback`),
-    ...perSide((side) => `thinking ${side.thinking ? 'on' : 'off'}`),
-    ...(attempts !== DEFAULT_MAX_ATTEMPTS
-      ? [`${attempts} illegal ${attempts === 1 ? 'move' : 'moves'} before forfeit`]
+    ...perSide('llm_constraints', (side) => LLM_CONSTRAINTS[side.llm_constraints]),
+    { setting: 'rules', ...RULES[game.settings.rules ?? 'standard'], color: null },
+    ...perSide('retry_feedback', (side) => (enforced(side) ? null : RETRY_FEEDBACK[side.retry_feedback])),
+    ...perSide('thinking', (side) => THINKING[side.thinking ? 'on' : 'off']),
+    ...(sides.some((side) => !enforced(side))
+      ? [
+          {
+            setting: 'max_attempts' as const,
+            value: String(attempts),
+            name: `Forfeit after ${moves}`,
+            description: `An LLM loses after ${moves} in one turn.`,
+            color: null,
+          },
+        ]
       : []),
   ]
 }
