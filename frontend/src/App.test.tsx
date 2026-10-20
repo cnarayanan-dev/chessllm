@@ -46,9 +46,9 @@ async function yourMove(color: 'white' | 'black' = 'white') {
   expect(timer()).not.toBeInTheDocument()
 }
 
-/** Waits for an LLM's move to run: the ring and the timer, from 0s, in its strip. */
+/** Waits for an LLM's move to run: the ring and the timer, from 0m 00s, in its strip. */
 async function llmMoving(color: 'white' | 'black') {
-  await waitFor(() => expect(within(strip(color)).getByRole('timer')).toHaveTextContent('0s'))
+  await waitFor(() => expect(within(strip(color)).getByRole('timer')).toHaveTextContent('0m 00s'))
   expect(ringed()).toEqual([color])
   expect(screen.getAllByRole('timer')).toHaveLength(1)
 }

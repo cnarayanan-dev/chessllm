@@ -68,14 +68,16 @@ test('what follows the name and the timer go in the strip', () => {
   )
 
   expect(within(strip('black')).getByText('captures')).toBeInTheDocument()
-  expect(within(strip('black')).getByRole('timer')).toHaveTextContent('0s')
+  expect(within(strip('black')).getByRole('timer')).toHaveTextContent('0m 00s')
 })
 
-test('the move timer counts the seconds since it started', () => {
+test('the move timer counts the minutes and seconds since it started', () => {
   vi.useFakeTimers()
   render(<MoveTimer />)
 
-  expect(screen.getByRole('timer')).toHaveTextContent('0s')
+  expect(screen.getByRole('timer')).toHaveTextContent('0m 00s')
   act(() => vi.advanceTimersByTime(12_000))
-  expect(screen.getByRole('timer')).toHaveTextContent('12s')
+  expect(screen.getByRole('timer')).toHaveTextContent('0m 12s')
+  act(() => vi.advanceTimersByTime(60_000))
+  expect(screen.getByRole('timer')).toHaveTextContent('1m 12s')
 })

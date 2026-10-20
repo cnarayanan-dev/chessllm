@@ -76,7 +76,8 @@ export function PlayerStrip({ game, color, timer, children }: PlayerStripProps) 
   )
 }
 
-/** The seconds since the LLM's move started, ticking every second so the page is seen not to have frozen. */
+/** The time since the LLM's move started, as minutes and seconds, ticking every second so the page is seen not to have
+ *  frozen. */
 export function MoveTimer() {
   const [started] = useState(() => Date.now())
   const [seconds, setSeconds] = useState(0)
@@ -87,9 +88,9 @@ export function MoveTimer() {
   return (
     <span
       role="timer"
-      className="ml-auto inline-flex h-10 min-w-19 flex-none items-center justify-end rounded-full bg-timer px-4 text-xl font-medium text-timer-foreground tabular-nums"
+      className="ml-auto inline-flex h-10 min-w-28 flex-none items-center justify-end rounded-full bg-timer px-4 text-xl font-medium text-timer-foreground tabular-nums"
     >
-      {seconds}s
+      {Math.floor(seconds / 60)}m {String(seconds % 60).padStart(2, '0')}s
     </span>
   )
 }
