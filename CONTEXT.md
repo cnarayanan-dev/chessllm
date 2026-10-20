@@ -26,6 +26,10 @@ _Avoid_: Engine game, bot match, calibration game
 A non-LLM opponent whose strength on the chess.com scale is fixed in advance, such as a random legal mover or a chess engine held to a set skill level.
 _Avoid_: Bot, engine (alone), reference player
 
+**Rematch**:
+A new game with the same **Mode** and settings as the game just played, the colours swapped: in **Play LLM** the human takes the other side, in an **LLM faceoff** the two LLMs change sides.
+_Avoid_: Replay, rerun, play again
+
 **Move cap**:
 The number of moves per side after which an unattended game that has not ended by the rules is scored a draw, whatever the position.
 _Avoid_: Move limit, adjudication, timeout
