@@ -32,7 +32,7 @@ class LlmModel:
     thinking: bool  # whether it can think before it answers (Ollama's "thinking" capability)
 
 
-# The models offered in the settings modal. Their thinking was checked on 2026-10-19 against the capabilities
+# The models offered in the New game sheet. Their thinking was checked on 2026-10-19 against the capabilities
 # `ollama show` reports and the Ollama library (ollama.com/library/qwen3.5, ollama.com/library/llama3,
 # ollama.com/library/gemma3).
 LLM_MODELS = [

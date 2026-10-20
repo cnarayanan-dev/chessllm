@@ -355,42 +355,6 @@ describe('an LLM faceoff', () => {
   })
 })
 
-describe("the next game's setup", () => {
-  test('is set up as the first game shown was, and kept as other games arrive', () => {
-    const shown = run(received(initialGameLoop, afterE4()))
-    expect(initialGameLoop.next).toBeNull()
-    expect(shown.next).toEqual({
-      mode: 'play_llm',
-      human_color: 'white',
-      models: { white: 'qwen3.5:9b', black: 'qwen3.5:9b' },
-      custom: false,
-      sides: {
-        white: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
-        black: { thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
-      },
-      rules: 'standard',
-      max_attempts: 5,
-    })
-
-    const changed = { ...shown.next!, mode: 'llm_faceoff' as const }
-    const edited = gameLoop(shown, { type: 'next-game', next: changed })
-    const landed = gameLoop(edited, received(edited, afterE5()))
-
-    expect(edited.next).toBe(changed)
-    expect(landed.next).toBe(changed)
-  })
-
-  test('follows a game started, which may differ from it, as a Rematch does', () => {
-    const shown = run(received(initialGameLoop, aGame()))
-    const llm = aGame().settings.black
-    const rematch = aGame({ game_id: 'game-2', settings: { ...aGame().settings, white: llm, black: { player: 'human' } } })
-    const starting = gameLoop(shown, { type: 'new-game', newGame: null })
-    const started = gameLoop(starting, received(starting, rematch))
-
-    expect(started.next).toMatchObject({ mode: 'play_llm', human_color: 'black' })
-  })
-})
-
 describe('when no game can be loaded or started', () => {
   test('stays idle with the error', () => {
     const state = gameLoop(initialGameLoop, { type: 'failed', requestId: 1, message: 'Internal Server Error' })

@@ -14,7 +14,6 @@
 */
 import type { Color, GameState, LlmTurn, NewGame, Ply } from '@/api/types'
 import { played } from '@/game/chaos'
-import { nextGameFrom, type NextGame } from '@/settings/next-game'
 
 /** The one request to the backend in flight. */
 export type Request =
@@ -31,12 +30,6 @@ export type GameLoop = {
   request: Request | null
   /** The error line. */
   error: string | null
-  /**
-   * The next game's setup, as the Settings modal changes it: set up as the first game shown and each game started
-   * were, kept otherwise, so the running game keeps its own settings and the changes apply once the next game starts.
-   * Null before the first game.
-   */
-  next: NextGame | null
   /** Counts the moves that have landed and play the move sound: the human's, and each LLM move (not a forfeit). */
   moveSounds: number
   /** The board flashes of the last LLM turn to land, until the next one lands or New game. */
@@ -58,7 +51,6 @@ export type History = { ply: number }
 export type GameLoopAction =
   | { type: 'new-game'; newGame: NewGame | null }
   | { type: 'human-move'; uci: string }
-  | { type: 'next-game'; next: NextGame }
   | { type: 'received'; requestId: number; game: GameState }
   | { type: 'failed'; requestId: number; message: string }
   // The move history: view the position after a ply (0: the start; the last ply: live), or step back or forward a ply.
@@ -72,7 +64,6 @@ export const initialGameLoop: GameLoop = {
   game: null,
   request: { id: 1, kind: 'load' },
   error: null,
-  next: null,
   moveSounds: 0,
   flash: null,
   history: null,
@@ -155,7 +146,7 @@ function send(state: GameLoop, request: NewRequest): GameLoop {
 // A game is shown and, if an LLM is to move, its turn is asked for. Starting a turn clears the error line, unless
 // keepError: a new game that could not start leaves its error up as the running game's turn starts again.
 function show(state: GameLoop, game: GameState, keepError = false): GameLoop {
-  const shown = { ...state, game, request: null, next: state.next ?? nextGameFrom(game.settings) }
+  const shown = { ...state, game, request: null }
   if (!llmToMove(game)) return shown
   return send({ ...shown, error: keepError ? state.error : null }, { kind: 'llm-turn', game })
 }
@@ -168,8 +159,6 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
     case 'human-move':
       if (!boardInput(state) || state.request) return state
       return send({ ...state, error: null }, { kind: 'move', uci: action.uci })
-    case 'next-game':
-      return { ...state, next: action.next }
     case 'received': {
       const request = state.request
       if (request?.id !== action.requestId) return state
@@ -180,9 +169,7 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
         : state.flash
       // The view stays where it is in the same game; another game is shown live.
       const history = state.game?.game_id === action.game.game_id ? state.history : null
-      // A game started is the next game's setup from then on, a Rematch's swapped colours included.
-      const next = request.kind === 'start' ? nextGameFrom(action.game.settings) : state.next
-      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history, next }, action.game)
+      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history }, action.game)
     }
     case 'failed': {
       const request = state.request

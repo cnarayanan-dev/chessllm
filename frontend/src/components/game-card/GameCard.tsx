@@ -1,10 +1,9 @@
 // The Game card, as a lichess game card without Elo: the Mode, the settings, the players, and the result and Rematch
 // once over.
-import { Bot, RotateCcw, Settings2, User } from 'lucide-react'
+import { Bot, RotateCcw, User } from 'lucide-react'
 import type { GameState } from '@/api/types'
 import { settingIcon } from '@/components/game-card/settingIcons'
 import { SettingChip } from '@/components/setting-chip/SettingChip'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { rematchDescription } from '@/game/rematch'
@@ -19,8 +18,6 @@ const MODES = {
 
 type GameCardProps = {
   game: GameState
-  /** Whether the Settings modal holds changes, which apply to the next game. */
-  pending: boolean
   /** The last request's error. */
   error: string | null
   /** Starts the Rematch, once the game is over. */
@@ -45,7 +42,7 @@ function Settings({ game }: { game: GameState }) {
   )
 }
 
-export function GameCard({ game, pending, error, onRematch }: GameCardProps) {
+export function GameCard({ game, error, onRematch }: GameCardProps) {
   const mode = MODES[game.settings.mode]
   const over = game.status === 'over' ? resultText(game) : null
   const name = (color: 'white' | 'black') => {
@@ -104,19 +101,11 @@ export function GameCard({ game, pending, error, onRematch }: GameCardProps) {
           />
         </CardContent>
       )}
-      {(pending || error !== null) && (
-        <CardContent className="flex flex-col items-start gap-2">
-          {pending && (
-            <Badge variant="secondary" className="h-auto px-2.5 py-1 whitespace-normal">
-              <Settings2 aria-hidden="true" />
-              Your changes apply to the next game
-            </Badge>
-          )}
-          {error !== null && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
+      {error !== null && (
+        <CardContent>
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
         </CardContent>
       )}
     </Card>

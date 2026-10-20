@@ -16,10 +16,10 @@ const actions = () =>
   [...topBar().querySelectorAll('a, button')].map((element) => element.getAttribute('aria-label') ?? element.textContent)
 
 describe('on the game page', () => {
-  test('shows the rook mark and "ChessLLM", then Analytics, New game and Settings, and ends with Preferences', () => {
-    render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
+  test('shows the rook mark and "ChessLLM", then Analytics and New game, and ends with Preferences; no Settings', () => {
+    render(<TopBar onNewGame={() => {}} />)
 
-    expect(actions()).toEqual(['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences'])
+    expect(actions()).toEqual(['ChessLLM', 'Analytics', 'New game', 'Preferences'])
     expect(screen.getByRole('link', { name: 'ChessLLM' }).querySelector('img')).toHaveAttribute(
       'src',
       expect.stringContaining('rook'),
@@ -28,29 +28,34 @@ describe('on the game page', () => {
     expect(screen.getByRole('link', { name: 'Analytics' })).toHaveAttribute('href', '/analytics')
   })
 
-  test('New game and Settings are buttons that call the page', async () => {
+  test('New game is a button that calls the page', async () => {
     const onNewGame = vi.fn()
-    const onSettings = vi.fn()
-    render(<TopBar onNewGame={onNewGame} onSettings={onSettings} />)
+    render(<TopBar onNewGame={onNewGame} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'New game' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
 
     expect(onNewGame).toHaveBeenCalledOnce()
-    expect(onSettings).toHaveBeenCalledOnce()
   })
 
-  test('the Settings button has no shortcut on it; its tooltip reads "Settings ⌘K"', async () => {
-    render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
-    const settings = screen.getByRole('button', { name: 'Settings' })
+  test.each(['Meta', 'Control'])('%s+K calls New game too', async (modifier) => {
+    const onNewGame = vi.fn()
+    render(<TopBar onNewGame={onNewGame} />)
 
-    expect(settings).toHaveTextContent(/^Settings$/)
+    await userEvent.keyboard(`{${modifier}>}k{/${modifier}}`)
+
+    expect(onNewGame).toHaveBeenCalledOnce()
+  })
+
+  test('the New game button has no shortcut on it; its tooltip reads "New game ⌘K"', async () => {
+    render(<TopBar onNewGame={() => {}} />)
+    const newGame = screen.getByRole('button', { name: 'New game' })
+
+    expect(newGame).toHaveTextContent(/^New game$/)
     expect(within(topBar()).queryByText('⌘K')).not.toBeInTheDocument()
 
-    await userEvent.hover(settings)
+    await userEvent.hover(newGame)
 
-    const tooltip = await screen.findByText('⌘K')
-    expect(tooltip.closest('[data-slot=tooltip-content]')).toHaveTextContent('Settings ⌘K')
+    expect(await tooltip()).toHaveTextContent(/^New game ⌘K$/)
   })
 })
 
@@ -58,7 +63,7 @@ describe('Preferences', () => {
   afterEach(() => localStorage.clear())
 
   test('is a gear icon button whose tooltip reads "Preferences"', async () => {
-    render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
+    render(<TopBar onNewGame={() => {}} />)
     const preferences = screen.getByRole('button', { name: 'Preferences' })
 
     expect(preferences).toHaveTextContent(/^$/)
@@ -70,7 +75,7 @@ describe('Preferences', () => {
   })
 
   test('opens a panel with the Move sound switch, off in a browser that never turned it on', async () => {
-    render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
+    render(<TopBar onNewGame={() => {}} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Preferences' }))
 
@@ -79,7 +84,7 @@ describe('Preferences', () => {
   })
 
   test('Move sound applies at once and is remembered in this browser', async () => {
-    const { unmount } = render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
+    const { unmount } = render(<TopBar onNewGame={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: 'Preferences' }))
 
     await userEvent.click(await screen.findByRole('switch', { name: 'Move sound' }))
@@ -96,7 +101,7 @@ describe('Preferences', () => {
   const explanation = 'A click on every move. Applies at once, in this browser.'
 
   test("Move sound's explanation is a tooltip on hover, not a text line, and its aria-description", async () => {
-    render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
+    render(<TopBar onNewGame={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: 'Preferences' }))
     const panel = await screen.findByRole('dialog', { name: 'Preferences' })
 
@@ -109,8 +114,8 @@ describe('Preferences', () => {
   })
 
   test("with the keyboard alone, Move sound's explanation shows once its switch has focus", async () => {
-    render(<TopBar onNewGame={() => {}} onSettings={() => {}} />)
-    for (const _ of ['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences']) await userEvent.tab()
+    render(<TopBar onNewGame={() => {}} />)
+    for (const _ of ['ChessLLM', 'Analytics', 'New game', 'Preferences']) await userEvent.tab()
     expect(screen.getByRole('button', { name: 'Preferences' })).toHaveFocus()
 
     await userEvent.keyboard('{Enter}')
@@ -122,12 +127,11 @@ describe('Preferences', () => {
 })
 
 describe('on a page without the game', () => {
-  test('New game and Settings are links that do it on the game page; Preferences is there too', () => {
+  test('New game is a link that opens the New game sheet on the game page; Preferences is there too', () => {
     render(<TopBar />)
 
-    expect(actions()).toEqual(['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences'])
+    expect(actions()).toEqual(['ChessLLM', 'Analytics', 'New game', 'Preferences'])
     expect(screen.getByRole('link', { name: 'New game' })).toHaveAttribute('href', '/?then=new-game')
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/?then=settings')
   })
 
   test('the current page is marked', () => {

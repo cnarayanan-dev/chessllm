@@ -17,7 +17,7 @@ const faceoffOf = (white: Partial<typeof llm>, black: Partial<typeof llm>) =>
   })
 
 const renderCard = (game: GameState, onRematch = () => {}) =>
-  render(<GameCard game={game} pending={false} error={null} onRematch={onRematch} />)
+  render(<GameCard game={game} error={null} onRematch={onRematch} />)
 
 const gameCard = () => screen.getByRole('region', { name: 'Game' })
 /** The Lucide icons in an element, by name ("user", "bot", …). */

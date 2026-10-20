@@ -1,4 +1,4 @@
-// The words around the board: the Game card's settings and result.
+// The words around the board: the settings, in the Game card and the New game sheet, and the result.
 import type { Color, GameSettings, GameState } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
 import { humanColor } from '@/game/gameLoop'
@@ -75,38 +75,48 @@ export type GameSetting = {
 }
 type Shown = Pick<GameSetting, 'value' | 'name' | 'description'>
 
-/** The LLM constraints with the plain name of the New game sheet, the glossary term kept beside it (CONTEXT.md). */
-const LLM_CONSTRAINTS: Record<LlmSide['llm_constraints'], Shown> = {
-  free: { value: 'free', name: 'Board only (Free)', description: 'The LLM finds its own moves and can play an illegal one.' },
+type Words = { name: string; description: string }
+
+/**
+ * The LLM constraints in plain words, the glossary term (CONTEXT.md) kept beside the name: the New game sheet's
+ * options, and in the Game card "Board only (Free)".
+ */
+export const LLM_CONSTRAINT_WORDS: Record<LlmSide['llm_constraints'], Words & { term: string }> = {
+  free: { name: 'Board only', term: 'Free', description: 'The LLM finds its own moves and can play an illegal one.' },
   listed: {
-    value: 'listed',
-    name: 'Board + legal moves (Listed)',
+    name: 'Board + legal moves',
+    term: 'Listed',
     description: 'The LLM is shown the legal moves, but can still play an illegal one.',
   },
   blind_enforced: {
-    value: 'blind_enforced',
-    name: 'Kept legal, not told (Blind enforced)',
+    name: 'Kept legal, not told',
+    term: 'Blind enforced',
     description: 'The LLM is held to the legal moves without being shown them.',
   },
   listed_enforced: {
-    value: 'listed_enforced',
-    name: 'Shown and kept legal (Listed enforced)',
+    name: 'Shown and kept legal',
+    term: 'Listed enforced',
     description: 'The LLM is shown the legal moves and held to them.',
   },
 }
-const RULES: Record<NonNullable<GameSettings['rules']>, Shown> = {
-  standard: { value: 'standard', name: 'Standard rules', description: 'Normal chess. Rated.' },
-  chaos: { value: 'chaos', name: 'Chaos rules', description: "The LLM's illegal moves are played anyway. Unrated." },
+/** The Rules: the New game sheet's options, and in the Game card "Standard rules". */
+export const RULES_WORDS: Record<NonNullable<GameSettings['rules']>, Words> = {
+  standard: { name: 'Standard', description: 'Normal chess. Rated.' },
+  chaos: { name: 'Chaos', description: "The LLM's illegal moves are played anyway. Unrated." },
 }
-const RETRY_FEEDBACK: Record<LlmSide['retry_feedback'], Shown> = {
-  explained: {
-    value: 'explained',
-    name: 'Explained feedback',
-    description: 'After an illegal move the LLM is told the move and the kind of failure.',
-  },
-  bare: { value: 'bare', name: 'Bare feedback', description: 'After an illegal move the LLM is told only that it was illegal.' },
-  hinted: { value: 'hinted', name: 'Hinted feedback', description: 'After an illegal move the LLM is also told the legal moves.' },
+/** The Retry feedback levels: the New game sheet's options, and in the Game card "Explained feedback". */
+export const RETRY_FEEDBACK_WORDS: Record<LlmSide['retry_feedback'], Words> = {
+  explained: { name: 'Explained', description: 'After an illegal move the LLM is told the move and the kind of failure.' },
+  bare: { name: 'Bare', description: 'After an illegal move the LLM is told only that it was illegal.' },
+  hinted: { name: 'Hinted', description: 'After an illegal move the LLM is also told the legal moves.' },
 }
+const shown = <T extends string, W extends Words>(words: Record<T, W>, name: (word: W) => string) =>
+  Object.fromEntries(
+    Object.entries<W>(words).map(([value, word]) => [value, { value, name: name(word), description: word.description }]),
+  ) as Record<T, Shown>
+const LLM_CONSTRAINTS = shown(LLM_CONSTRAINT_WORDS, ({ name, term }) => `${name} (${term})`)
+const RULES = shown(RULES_WORDS, ({ name }) => `${name} rules`)
+const RETRY_FEEDBACK = shown(RETRY_FEEDBACK_WORDS, ({ name }) => `${name} feedback`)
 const THINKING: Record<'on' | 'off', Shown> = {
   on: { value: 'on', name: 'Thinking on', description: 'The LLM reasons before each move.' },
   off: { value: 'off', name: 'Thinking off', description: 'The LLM answers without reasoning first.' },

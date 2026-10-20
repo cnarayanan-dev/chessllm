@@ -55,10 +55,11 @@ async function fonts(page: Page) {
 
 const INTER = { used: ['"Inter Variable", sans-serif'], loaded: ['Inter Variable'] }
 
-test('Inter is the only interface font: the game page, the Settings modal and the Analytics page', async ({ page }) => {
+test('Inter is the only interface font: the game page, the New game sheet and the Analytics page', async ({ page }) => {
   await openGame(page)
-  await page.getByRole('button', { name: 'Settings' }).click()
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  await expect(page.getByRole('dialog', { name: 'New game' })).toBeVisible()
+  await page.getByRole('button', { name: 'Advanced settings' }).click()
   expect(await fonts(page)).toEqual(INTER)
 
   expect((await page.request.post('/e2e/leaderboard-games')).ok()).toBe(true)
@@ -67,33 +68,46 @@ test('Inter is the only interface font: the game page, the Settings modal and th
   expect(await fonts(page)).toEqual(INTER)
 })
 
-test('the top bar on the game page: the mark, then Analytics, New game and Settings, and Preferences at the end; ⌘K shows only in the tooltip', async ({ page }) => {
+test('the top bar on the game page: the mark, then Analytics and New game, and Preferences at the end; ⌘K shows only in the tooltip', async ({ page }) => {
   await openGame(page)
 
-  expect(await actions(page)).toEqual(['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences'])
+  expect(await actions(page)).toEqual(['ChessLLM', 'Analytics', 'New game', 'Preferences'])
   const bar = (await page.getByRole('banner').boundingBox())!
   const preferences = (await page.getByRole('button', { name: 'Preferences' }).boundingBox())!
   expect(bar.x + bar.width - (preferences.x + preferences.width)).toBeLessThan(40) // on the right
-  const settings = page.getByRole('banner').getByRole('button', { name: 'Settings' })
-  await expect(settings).toHaveText('Settings')
+  const newGame = page.getByRole('banner').getByRole('button', { name: 'New game' })
+  await expect(newGame).toHaveText('New game')
 
-  await settings.hover()
-  await expect(page.locator('[data-slot=tooltip-content]')).toHaveText('Settings ⌘K')
+  await newGame.hover()
+  await expect(page.locator('[data-slot=tooltip-content]')).toHaveText('New game ⌘K')
 
   await page.mouse.move(0, 400)
   await page.keyboard.press('ControlOrMeta+k')
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'New game' })).toBeVisible()
 })
 
-test('the top bar on the Analytics page: its Settings opens the modal on the game page', async ({ page }) => {
+test('the top bar on the Analytics page: New game and ⌘K open the New game sheet on the game page', async ({ page }) => {
   await openGame(page)
+  const before = (await (await page.request.get('/api/games/current')).json()).game_id
   await page.goto('/analytics')
 
-  expect(await actions(page)).toEqual(['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences'])
-  await page.getByRole('banner').getByRole('link', { name: 'Settings' }).click()
-
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
+  expect(await actions(page)).toEqual(['ChessLLM', 'Analytics', 'New game', 'Preferences'])
+  await page.getByRole('banner').getByRole('link', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await expect(sheet).toBeVisible()
   await expect(page).toHaveURL(/\/$/)
+
+  // Closing it leaves the game as it was; starting replaces it.
+  await page.keyboard.press('Escape')
+  await expect(sheet).toBeHidden()
+  await yourMove(page)
+  expect((await (await page.request.get('/api/games/current')).json()).game_id).toBe(before)
+
+  await page.goto('/analytics')
+  await page.keyboard.press('ControlOrMeta+k')
+  await sheet.getByRole('button', { name: 'Play as White' }).click()
+  await yourMove(page)
+  await expect.poll(async () => (await (await page.request.get('/api/games/current')).json()).game_id).not.toBe(before)
 })
 
 test('the top bar on the Analytics page: Preferences opens there, with Move sound', async ({ page }) => {
@@ -106,18 +120,6 @@ test('the top bar on the Analytics page: Preferences opens there, with Move soun
 
   await expect(page.getByRole('dialog', { name: 'Preferences' }).getByRole('switch', { name: 'Move sound' })).not.toBeChecked()
   await expect(page).toHaveURL(/\/analytics$/)
-})
-
-test('the top bar on the Analytics page: its New game starts one on the game page', async ({ page }) => {
-  await openGame(page)
-  const before = (await (await page.request.get('/api/games/current')).json()).game_id
-  await page.goto('/analytics')
-
-  await page.getByRole('banner').getByRole('link', { name: 'New game' }).click()
-
-  await yourMove(page)
-  await expect.poll(async () => (await (await page.request.get('/api/games/current')).json()).game_id).not.toBe(before)
-  await expect(page).toHaveURL(/\/$/)
 })
 
 /** The box of each of the game page's columns. */

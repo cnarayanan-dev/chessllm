@@ -189,6 +189,6 @@ test('has the top bar: the ChessLLM mark links back to the game, and Analytics i
   const topBar = screen.getByRole('banner')
   expect(within(topBar).getByRole('link', { name: 'ChessLLM' })).toHaveAttribute('href', '/')
   expect(within(topBar).getByRole('link', { name: 'Analytics' })).toHaveAttribute('aria-current', 'page')
-  expect(within(topBar).getByRole('link', { name: 'New game' })).toBeInTheDocument()
-  expect(within(topBar).getByRole('link', { name: 'Settings' })).toBeInTheDocument()
+  expect(within(topBar).getByRole('link', { name: 'New game' })).toHaveAttribute('href', '/?then=new-game')
+  expect(within(topBar).queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
 })

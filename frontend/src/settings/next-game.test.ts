@@ -7,7 +7,7 @@ import {
   chooseRules,
   chooseMode,
   chooseModel,
-  isPending,
+  everyLlmEnforced,
   newGameRequest,
   nextGameFrom,
   setValue,
@@ -47,7 +47,7 @@ const faceoff: GameSettings = {
   max_attempts: 5,
 }
 
-describe('the next game starts as the running one', () => {
+describe('the sheet opens with the last game\'s settings, which start the same game again', () => {
   test('in Play LLM', () => {
     const next = nextGameFrom(playLlm)
 
@@ -58,7 +58,6 @@ describe('the next game starts as the running one', () => {
       white: { player: 'human' },
       black: llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }),
     })
-    expect(isPending(next, models, playLlm)).toBe(false)
   })
 
   test('in an LLM faceoff, customized per LLM when the sides differ', () => {
@@ -66,7 +65,6 @@ describe('the next game starts as the running one', () => {
 
     expect(next.custom).toBe(true)
     expect(newGameRequest(next, models)).toEqual({ mode: 'llm_faceoff', rules: 'standard', max_attempts: 5, white: faceoff.white, black: faceoff.black })
-    expect(isPending(next, models, faceoff)).toBe(false)
   })
 
   test('in an LLM faceoff, shared when both sides play under the same settings', () => {
@@ -76,38 +74,26 @@ describe('the next game starts as the running one', () => {
   })
 })
 
-test('a change is pending until the next game starts', () => {
-  const next = setValue(nextGameFrom(playLlm), 'black', 'retry_feedback', 'hinted')
-
-  expect(isPending(next, models, playLlm)).toBe(true)
-})
-
 describe('Illegal moves before forfeit', () => {
-  test("the next game keeps the running game's limit; another is a change until it starts", () => {
+  test("the next game keeps the last game's limit, or the one chosen", () => {
     const next = nextGameFrom({ ...playLlm, max_attempts: 9 })
 
-    expect(next.max_attempts).toBe(9)
-    expect(isPending(next, models, { ...playLlm, max_attempts: 9 })).toBe(false)
-    const changed = chooseMaxAttempts(next, 25)
-    expect(newGameRequest(changed, models)).toMatchObject({ max_attempts: 25 })
-    expect(isPending(changed, models, { ...playLlm, max_attempts: 9 })).toBe(true)
+    expect(newGameRequest(next, models)).toMatchObject({ max_attempts: 9 })
+    expect(newGameRequest(chooseMaxAttempts(next, 25), models)).toMatchObject({ max_attempts: 25 })
   })
 })
 
 describe('Chaos rules', () => {
-  test('the next game keeps the running game\'s Chaos rules', () => {
-    const chaos: GameSettings = { ...playLlm, rules: 'chaos' }
-    const next = nextGameFrom(chaos)
+  test("the next game keeps the last game's Chaos rules", () => {
+    const next = nextGameFrom({ ...playLlm, rules: 'chaos' })
 
     expect(newGameRequest(next, models)).toMatchObject({ rules: 'chaos' })
-    expect(isPending(next, models, chaos)).toBe(false)
   })
 
-  test('switched on, the next game plays under Chaos rules, a change until it starts', () => {
+  test('switched on, the next game plays under Chaos rules', () => {
     const next = chooseRules(nextGameFrom(playLlm), 'chaos')
 
     expect(newGameRequest(next, models)).toMatchObject({ rules: 'chaos' })
-    expect(isPending(next, models, playLlm)).toBe(true)
   })
 
   test('possible only when every LLM plays under Free or Listed', () => {
@@ -137,10 +123,20 @@ describe('Chaos rules', () => {
   })
 })
 
+test('every LLM under Enforced decoding: in Play LLM the one LLM, in a faceoff both, customized or not', () => {
+  const play = nextGameFrom(playLlm)
+  expect(everyLlmEnforced(play)).toBe(false)
+  expect(everyLlmEnforced(setValue(play, 'black', 'llm_constraints', 'blind_enforced'))).toBe(true)
+
+  const custom = nextGameFrom(faceoff) // White under Free, Black under Listed enforced
+  expect(everyLlmEnforced(custom)).toBe(false)
+  expect(everyLlmEnforced(setValue(custom, 'white', 'llm_constraints', 'listed_enforced'))).toBe(true)
+})
+
 test('a running game whose settings leave out the rules plays under Standard rules', () => {
   const { rules: _, ...unnamed } = playLlm
 
-  expect(isPending(nextGameFrom(unnamed), models, unnamed)).toBe(false)
+  expect(newGameRequest(nextGameFrom(unnamed), models)).toMatchObject({ rules: 'standard' })
 })
 
 test('the human changing colour leaves the LLM its model', () => {

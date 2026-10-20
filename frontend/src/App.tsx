@@ -18,8 +18,8 @@ import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/ga
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
-import { isPending, newGameRequest, type Models } from '@/settings/next-game'
-import { SettingsModal } from '@/settings/SettingsModal'
+import { NewGameSheet } from '@/settings/NewGameSheet'
+import { newGameRequest, nextGameFrom, type Models, type NextGame } from '@/settings/next-game'
 
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
@@ -45,14 +45,14 @@ function ChaosCaption({ chaos }: { chaos: ChaosShown }) {
 }
 
 export default function App() {
-  const { state, newGame, humanMove, changeNext, viewPly, step } = useGameLoop()
-  const { game, error, request, next, history } = state
+  const { state, newGame, humanMove, viewPly, step } = useGameLoop()
+  const { game, error, request, history } = state
   const shown = shownPosition(state)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  // The models as the Settings modal last listed them, or null until it has: they decide whether thinking is on.
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const openSheet = useCallback(() => setSheetOpen(true), [])
+  // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
   const models: Models = modelsList.isError ? null : (modelsList.data ?? null)
-  const pending = game !== null && next !== null && isPending(next, models, game.settings)
   const running = waitingForLlm(state)
   // A new array with every state, so the same position given again snaps a rejected move's piece back.
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
@@ -71,24 +71,21 @@ export default function App() {
       {shown && <Captures material={material(live.plies.slice(0, shown.ply), shown.fen, color)} color={color} />}
     </PlayerStrip>
   )
-  // The next game, as set up in the Settings modal, or the default game if none could be loaded.
-  const startNewGame = useCallback(() => newGame(next ? newGameRequest(next, models) : null), [newGame, next, models])
+  /** Starts a game set up as `next`, replacing the running one at once: the New game sheet's start buttons. */
+  const startGame = useCallback((next: NextGame) => newGame(newGameRequest(next, models)), [newGame, models])
 
-  // New game or Settings chosen in the top bar of another page, done once the game is shown. New game is then the
-  // button's: the models are listed only by the Settings modal, so until it opens the button has none either.
+  // New game chosen in the top bar of another page: the sheet opens once the game is shown.
   const then = useRef(thenFrom(window.location.search))
   useEffect(() => {
-    if (!then.current || !game || !next) return
-    const asked = then.current
+    if (!then.current || !game) return
     then.current = null
     window.history.replaceState(null, '', window.location.pathname)
-    if (asked === 'settings') setSettingsOpen(true)
-    else startNewGame()
-  }, [game, next, startNewGame])
+    setSheetOpen(true)
+  }, [game])
 
-  // ← and → step through the move history, unless a field or the Settings modal has the keys.
+  // ← and → step through the move history, unless a field or the New game sheet has the keys.
   useEffect(() => {
-    if (settingsOpen) return
+    if (sheetOpen) return
     const onKey = (event: KeyboardEvent) => {
       const by = ({ ArrowLeft: -1, ArrowRight: 1 } as const)[event.key as 'ArrowLeft' | 'ArrowRight']
       if (!by || keyTakenElsewhere(event)) return
@@ -97,19 +94,18 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, step])
+  }, [sheetOpen, step])
 
   return (
     <div className="min-h-svh text-sm">
-      <TopBar onNewGame={startNewGame} onSettings={() => setSettingsOpen(true)} />
-      {game && next && (
-        <SettingsModal
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          running={game.settings}
-          next={next}
-          onNextChange={changeNext}
-          onStartNext={newGame}
+      <TopBar onNewGame={openSheet} />
+      {game && (
+        // It opens with the last game's settings, each time.
+        <NewGameSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          initial={nextGameFrom(game.settings)}
+          onStart={startGame}
         />
       )}
       <GameLayout
@@ -118,7 +114,7 @@ export default function App() {
           // stays in the API and the game log. (`shown` is set whenever `game` is.)
           game && shown ? (
             <>
-              <GameCard game={game} pending={pending} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
+              <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
               <ReasoningPanel game={game} ply={shown.ply} live={!history} />
             </>
           ) : (

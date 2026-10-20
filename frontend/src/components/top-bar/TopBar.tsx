@@ -1,5 +1,5 @@
-// The top bar of every page: the ChessLLM mark, then Analytics, New game and Settings, and Preferences at the end.
-import { ChartNoAxesColumn, Plus, Settings2 } from 'lucide-react'
+// The top bar of every page: the ChessLLM mark, then Analytics and New game, and Preferences at the end.
+import { ChartNoAxesColumn, Plus } from 'lucide-react'
 import { useEffect } from 'react'
 import rook from '@/assets/chessllm-rook.svg'
 import { Preferences } from '@/components/top-bar/Preferences'
@@ -13,27 +13,27 @@ import { cn } from '@/lib/utils'
 const linkClass = (variant: 'ghost' | 'outline', className?: string) => cn(buttonVariants({ variant }), className)
 
 type TopBarProps = {
-  /** Starts a new game. Without it, as on a page without the game, New game is a link to the game page that does it. */
+  /**
+   * Opens the New game sheet, as ⌘K (Ctrl+K) does. Without it, as on a page without the game, New game and ⌘K go to
+   * the game page and open the sheet there.
+   */
   onNewGame?: () => void
-  /** Opens the Settings modal. Without it, Settings (and ⌘K) go to the game page and open it there. */
-  onSettings?: () => void
   /** The page shown, marked among the links. */
   current?: 'analytics'
 }
 
-export function TopBar({ onNewGame, onSettings, current }: TopBarProps) {
-  // On the game page the Settings modal itself listens for ⌘K (Ctrl+K).
+export function TopBar({ onNewGame, current }: TopBarProps) {
   useEffect(() => {
-    if (onSettings) return
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        window.location.assign(thenHref('settings'))
+        if (onNewGame) onNewGame()
+        else window.location.assign(thenHref('new-game'))
       }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [onSettings])
+  }, [onNewGame])
 
   return (
     <header className="flex flex-wrap items-center gap-1.5 px-6 py-3">
@@ -49,32 +49,21 @@ export function TopBar({ onNewGame, onSettings, current }: TopBarProps) {
         <ChartNoAxesColumn data-icon="inline-start" aria-hidden="true" />
         Analytics
       </a>
-      {onNewGame ? (
-        <Button variant="outline" onClick={onNewGame}>
-          <Plus data-icon="inline-start" aria-hidden="true" />
-          New game
-        </Button>
-      ) : (
-        <a href={thenHref('new-game')} className={linkClass('outline')}>
-          <Plus data-icon="inline-start" aria-hidden="true" />
-          New game
-        </a>
-      )}
       <Tooltip>
         <TooltipTrigger
           render={
-            onSettings ? (
-              <Button variant="ghost" onClick={onSettings} />
+            onNewGame ? (
+              <Button variant="outline" onClick={onNewGame} />
             ) : (
-              <a href={thenHref('settings')} className={linkClass('ghost')} />
+              <a href={thenHref('new-game')} className={linkClass('outline')} />
             )
           }
         >
-          <Settings2 data-icon="inline-start" aria-hidden="true" />
-          Settings
+          <Plus data-icon="inline-start" aria-hidden="true" />
+          New game
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          Settings <Kbd>⌘K</Kbd>
+          New game <Kbd>⌘K</Kbd>
         </TooltipContent>
       </Tooltip>
       <div className="ml-auto">

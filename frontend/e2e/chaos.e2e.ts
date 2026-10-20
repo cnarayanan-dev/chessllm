@@ -35,8 +35,13 @@ async function move(page: Page, uci: string, then: string) {
   await expect(lastMove(page)).toHaveText(then)
 }
 
-/** Opens the page on a Standard rules Play LLM game, then sets up the next game in the Settings modal and starts it. */
-async function startFromSettings(page: Page, script: Script, setUp: (settings: ReturnType<Page['getByRole']>) => Promise<void>) {
+/** Opens the page on a Standard rules Play LLM game, then sets up the next game in the New game sheet and starts it. */
+async function startFromSheet(
+  page: Page,
+  script: Script,
+  setUp: (sheet: ReturnType<Page['getByRole']>) => Promise<void>,
+  start = 'Play as White',
+) {
   await page.request.post('/e2e/script', { data: script })
   const started = await page.request.post('/api/games', {
     data: { mode: 'play_llm', white: { player: 'human' }, black: { player: 'llm' } },
@@ -47,16 +52,16 @@ async function startFromSettings(page: Page, script: Script, setUp: (settings: R
   await expect(page.getByRole('img', { name: 'Standard rules' })).toBeVisible()
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toHaveCount(0)
 
-  await page.getByRole('button', { name: /Settings/ }).click()
-  const settings = page.getByRole('dialog', { name: 'Settings' })
-  await setUp(settings)
-  await settings.getByRole('button', { name: 'Start new game' }).click()
-  await expect(settings).toBeHidden()
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await setUp(sheet)
+  await sheet.getByRole('button', { name: start }).click()
+  await expect(sheet).toBeHidden()
 }
 
 test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castle, then King capture', async ({ page }) => {
-  await startFromSettings(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Kh6'] }, async (settings) => {
-    await settings.getByRole('switch', { name: 'Chaos rules' }).click()
+  await startFromSheet(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Kh6'] }, async (sheet) => {
+    await sheet.getByRole('radio', { name: 'Chaos' }).click()
   })
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
 
@@ -125,12 +130,17 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expectPiece(page, 'f8', 'bb')
 })
 
-test('an LLM faceoff under Chaos rules, started from the Settings modal, ends in King capture', async ({ page }) => {
+test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in King capture', async ({ page }) => {
   // White's queen jumps to f7; Black ignores the check; White takes the king.
-  await startFromSettings(page, { white: ['Qxf7', 'Qxe8'], black: ['Nf6'] }, async (settings) => {
-    await settings.getByRole('radio', { name: /LLM faceoff/ }).click()
-    await settings.getByRole('switch', { name: 'Chaos rules' }).click()
-  })
+  await startFromSheet(
+    page,
+    { white: ['Qxf7', 'Qxe8'], black: ['Nf6'] },
+    async (sheet) => {
+      await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
+      await sheet.getByRole('radio', { name: 'Chaos' }).click()
+    },
+    'Start faceoff',
+  )
 
   const result = page.getByTestId('result')
   await expect(result).toContainText(/\(White\) wins by King capture/)
@@ -149,25 +159,32 @@ test('an LLM faceoff under Chaos rules, started from the Settings modal, ends in
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'd1f7')
 })
 
-test('the Chaos rules switch is off limits while an LLM plays under Enforced decoding', async ({ page }) => {
+test('Chaos is off limits while an LLM plays under Enforced decoding, the reason in its tooltip', async ({ page }) => {
   await page.request.post('/e2e/script', { data: {} })
   await page.request.post('/api/games', { data: { mode: 'play_llm', white: { player: 'human' }, black: { player: 'llm' } } })
   await page.goto('/')
-  await page.getByRole('button', { name: /Settings/ }).click()
-  const settings = page.getByRole('dialog', { name: 'Settings' })
-  const chaos = settings.getByRole('switch', { name: 'Chaos rules' })
-  await expect(chaos).toBeEnabled()
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  const chaos = sheet.getByRole('radio', { name: 'Chaos' })
+  await expect(chaos).not.toHaveAttribute('aria-disabled', 'true')
 
-  await settings.getByRole('radio', { name: /^Blind enforced/ }).click()
-  await expect(chaos).toBeDisabled()
-  await expect(settings).toContainText("Only under Free or Listed: under Enforced decoding the LLM can't play an illegal move.")
+  await sheet.getByRole('button', { name: 'Advanced settings' }).click()
+  await sheet.getByRole('radio', { name: /^Kept legal, not told/ }).click()
+  await expect(chaos).toHaveAttribute('aria-disabled', 'true')
+  await chaos.hover()
+  await expect(page.locator('[data-slot=tooltip-content]')).toHaveText(
+    'Needs an LLM that can play an illegal move: pick Board only or Board + legal moves in Advanced settings.',
+  )
 
   // In a faceoff customized per LLM, one enforced side is enough.
-  await settings.getByRole('radio', { name: /^Free/ }).click()
-  await settings.getByRole('radio', { name: /LLM faceoff/ }).click()
-  await settings.getByRole('switch', { name: 'Customize per LLM' }).click()
-  await expect(chaos).toBeEnabled()
-  await settings.getByRole('radiogroup', { name: 'LLM constraints' }).nth(1).getByRole('radio', { name: /^Listed enforced/ }).click()
-  await expect(chaos).toBeDisabled()
-  await expect(settings).toContainText('Only when every LLM plays under Free or Listed: Black plays under Listed enforced.')
+  await sheet.getByRole('radio', { name: /^Board only/ }).click()
+  await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
+  await sheet.getByRole('switch', { name: 'Customize per LLM' }).click()
+  await expect(chaos).not.toHaveAttribute('aria-disabled', 'true')
+  await sheet.getByRole('radiogroup', { name: 'Black: what the LLM is given' }).getByRole('radio', { name: /^Shown and kept legal/ }).click()
+  await expect(chaos).toHaveAttribute('aria-disabled', 'true')
+  await expect(chaos).toHaveAttribute(
+    'aria-description',
+    'Needs every LLM able to play an illegal move: pick Board only or Board + legal moves for Black in Advanced settings.',
+  )
 })

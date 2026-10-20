@@ -1,13 +1,11 @@
 # Design
 
-The frontend's design system as shipped by the restyle (#52), recorded from the code in `frontend/`. Three surfaces share it: the game page (`/`), the Analytics page (`/analytics`) and the Settings modal. The board keeps its lichess look and is not part of it.
+The frontend's design system as shipped by the restyle (#52), recorded from the code in `frontend/`. Three surfaces share it: the game page (`/`), the Analytics page (`/analytics`) and the New game sheet. The board keeps its lichess look and is not part of it.
 
 ## Rules for the whole UI
 
 - **Icon and short name, the explanation on hover.** A choice or control shows an icon and its short name. Its description, hint, or the reason it is disabled appears in a `Tooltip` on hover and on keyboard focus, and the same text is the control's `aria-description` for screen readers. No secondary text lines under options. The trigger is the control itself, or a row holding the control's name and the control (as Move sound in Preferences), so hovering the name and focusing the control both show it.
 - **Icons: Lucide** for every interface icon, **Lobe Icons** for model logos (as in the player strips). No other icon set; an icon Lucide lacks is drawn in Lucide's line style (e.g. thinking off is Lucide `Brain` with a slash, as Lucide draws its `*Off` icons). No text glyphs (♔ ♚ ⇄ ▸).
-
-The Settings modal predates both rules and still has description lines; the New game sheet replacing it follows them.
 
 ## Style: shadcn Luma
 
@@ -20,7 +18,7 @@ The Settings modal predates both rules and still has description lines; the New 
 
 The radius scale comes from `--radius: 0.625rem` (`--radius-sm` to `--radius-4xl` in `@theme inline`).
 
-Installed components: Alert, Avatar, Badge, Button, Card, Collapsible (not used yet), Dialog, Item, Kbd, Popover, Radio group, Scroll area, Select, Separator, Switch, Table, Tooltip. Add more with `pnpm dlx shadcn@latest add <name>` in `frontend/`.
+Installed components: Alert, Avatar, Badge, Button, Card, Collapsible, Dialog, Item, Kbd, Popover, Radio group, Scroll area, Select, Separator, Switch, Table, Tooltip. Add more with `pnpm dlx shadcn@latest add <name>` in `frontend/`.
 
 A link styled as a button merges `buttonVariants` with `cn`, as `Button` does (`linkClass` in `TopBar.tsx`); on their own the variant's classes conflict with the base ones (an `outline` link loses its border).
 
@@ -94,13 +92,13 @@ The board keeps its own small face for the coordinates and its flashes (`board.c
 
 ## Icons: Lucide
 
-All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (its setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
+All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (its setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the New game sheet: `User` vs `Bot` and `Bot` vs `Bot` on the Mode cards, the Game card's setting icons on the Rules, constraint and Retry feedback cards, `ArrowLeftRight` to swap the sides and `ChevronDown` on Advanced settings. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
 
 ## Layout
 
 ### Top bar
 
-`frontend/src/components/top-bar/TopBar.tsx`, on every page: on the left the **ChessLLM** mark (the Merida rook on a light square, `frontend/src/assets/chessllm-rook.svg`, also the browser tab's icon in `frontend/index.html`) linking to the game, then **Analytics** (`ghost`, filled `muted` on its own page), **New game** (`outline`) and **Settings** (`ghost`), and on the right (`ml-auto`) the gear **Preferences** icon button (below). ⌘K shows only in the Settings button's Tooltip ("Settings" + `Kbd`). On a page without the game, New game and Settings (and ⌘K) link to the game page with `?then=new-game` / `?then=settings`, which does it once the game is shown. No game settings show in the top bar; Preferences holds only this browser's own choices.
+`frontend/src/components/top-bar/TopBar.tsx`, on every page: on the left the **ChessLLM** mark (the Merida rook on a light square, `frontend/src/assets/chessllm-rook.svg`, also the browser tab's icon in `frontend/index.html`) linking to the game, then **Analytics** (`ghost`, filled `muted` on its own page) and **New game** (`outline`), and on the right (`ml-auto`) the gear **Preferences** icon button (below). New game and ⌘K (Ctrl+K) open the New game sheet; ⌘K shows only in New game's Tooltip ("New game" + `Kbd`). On a page without the game, New game (and ⌘K) link to the game page with `?then=new-game` (`frontend/src/components/top-bar/then.ts`), which opens the sheet there once the game is shown and drops the parameter. No game settings show in the top bar; Preferences holds only this browser's own choices.
 
 ### Preferences
 
@@ -140,7 +138,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 | Moves panel | `Card size="sm"`, `CardTitle`, `Switch size="sm"`, `ScrollArea` |
 | Start error | `Alert variant="destructive"` |
 | Analytics | `Card` with `CardHeader` / `CardContent` / `CardFooter`, `Switch`, `Table`, `Badge` (`secondary` chips, dashed `outline` mark), `Tooltip` |
-| Settings modal | `Dialog`, `Button`, `Badge`, `Select`, `Radio group`, `Switch`, `Tooltip` |
+| New game sheet | `Dialog`, `Radio group` cards, `Select`, `Switch`, `Collapsible`, `Button`, `Tooltip` |
 
 ## Player strip
 
@@ -173,7 +171,7 @@ There is no sentence saying whose move it is: the ring and the timer say it.
 - **Players**, indented under the Mode: a small outlined circle for White and a filled one for Black (drawn in CSS, with the side named for screen readers), then the model or "You". No model logo (the strips have them), no Elo.
 - **The setting chip** (`SettingChip` in `frontend/src/components/setting-chip/SettingChip.tsx`), for any small round control or badge in this style: a 28px `muted` circle holding one 16px Lucide icon (stroke 1.75), focusable so its `Tooltip` opens on hover and on keyboard focus, an optional side dot. Given `onClick`, it is a `button` instead: a `muted` pill with the icon and its name beside it, hover `accent`, the tooltip giving only the description.
 - **When the game is over**, after a `Separator`: the **result line** (20px semibold, e.g. "Black wins by checkmate", or in a faceoff by model, "qwen3.5:9b (White) wins by checkmate") with the reason's detail under it in muted text, and **Rematch**: a setting chip button, `RotateCcw` and "Rematch". **Rematch** (CONTEXT.md) starts a new game at once, no sheet, with the same Mode and settings and the colours swapped: in Play LLM the human takes the other colour, so the board turns; in a faceoff the two LLMs change sides, each with its own settings. Its tooltip and `aria-description` say what happens: "Same settings, you play Black" / "… you play White" / "Same settings, the LLMs swap colours" (`rematchOf` and `rematchDescription` in `frontend/src/game/rematch.ts`). New game stays in the top bar. This replaces the old result banner.
-- **Last**, when there is one: a `secondary` Badge with `Settings2`, "Your changes apply to the next game", and a request error as a `text-destructive` line.
+- **Last**, when there is one: a request error as a `text-destructive` line. There is no note about the next game's settings: the New game sheet starts the game it sets up, or forgets its changes.
 
 ## Reasoning panel
 
@@ -211,9 +209,29 @@ Unchanged by the restyle (`frontend/src/components/board/`): cm-chessboard with 
 
 Loading, no games and errors each show in a plain Card in the table's place.
 
-## Settings modal
+## New game sheet
 
-Only its style is part of this system (its content changes separately): a `Dialog` (`rounded-4xl`, `shadow-xl`), a `muted` side rail of pill section buttons with the current one on `card`, filled choice cards (`rounded-2xl bg-muted`, chosen: `card` with a 2px primary ring), Luma Selects and Switches, and a `muted` footer strip with the primary "Start new game" Button.
+`frontend/src/settings/NewGameSheet.tsx`, opened by New game in the top bar and ⌘K (Ctrl+K): a `Dialog` (560px, `rounded-4xl`, `shadow-xl`, scrolling within 90% of the window's height) titled **New game**, with the ✕ close button. It sets up the next game and starts it; nothing applies until then.
+
+- **Opening**: always with the last game's settings (`nextGameFrom` in `frontend/src/settings/next-game.ts`, after a Rematch too), Advanced settings closed. Focus goes to the sheet itself, so no tooltip shows until asked for; Tab goes on from there. The models are listed afresh at each opening.
+- **Closing**: ✕, Esc or a click outside closes it, leaves the running game as it is and forgets its changes; the next opening starts from the last game again. There is no pending state.
+- **Starting** replaces any running game at once, without asking, and closes the sheet: in Play LLM **Play as White** / **Play as Black** (lichess style: the colour is the button; the last game's colour is the primary Button, the other `outline`), each with its side dot; in an LLM faceoff one primary **Start faceoff**.
+
+Top to bottom, every explanation in a Tooltip and the control's `aria-description` (the hover rule):
+
+1. **Mode**: two choice cards, the players as icons above the name: **Play LLM** `User` vs `Bot`, **LLM faceoff** `Bot` vs `Bot`.
+2. **Opponent**: Play LLM, one model `Select`; LLM faceoff, White's and Black's model, each under its side's dot and name, with an `outline` icon Button (`ArrowLeftRight`, "Swap colours") between them that swaps the LLMs with their settings. If the models can't be listed, a `text-destructive` alert line says why and the chosen models stay.
+3. **Thinking**: a row with its name and a `Switch`, "Reasons before each move. Slower, likely stronger."; disabled when the model can't think, the tooltip naming it ("llama3:8b can't think."; in a faceoff each model that can't).
+4. **Rules**: two choice cards, **Standard** `ChessKnight` and **Chaos** `Zap`. Under an enforced constraint Chaos is disabled (40% opacity), its tooltip giving the reason ("Needs an LLM that can play an illegal move: pick Board only or Board + legal moves in Advanced settings.", naming the side when customized per LLM).
+5. **Advanced settings**: a `Collapsible` on a light `muted` surface (`rounded-3xl`), closed by default, its trigger a `ChevronDown` (turned while closed) and the name, its summary "What the LLM sees, retries, forfeit" as the tooltip. Inside:
+   - **What the LLM is given**: the four LLM constraints as cards with the Game card's icons, the plain name with the glossary term under it in muted 12px: Board only (Free), Board + legal moves (Listed), Kept legal, not told (Blind enforced), Shown and kept legal (Listed enforced).
+   - **After an illegal move, tell the LLM**: Retry feedback as three cards, Explained / Bare / Hinted.
+   - **Illegal moves before forfeit**: a `Select` of 1 to 25, default 5, the tooltip counting the retries it leaves.
+   - Retry feedback is hidden (not disabled) for an LLM under an enforced constraint, the forfeit limit when every LLM is (ADR 0003).
+   - **Customize per LLM** (faceoff only): a switch row; on, a `card` block per side (its dot, side and model) with that LLM's Thinking, constraints and Retry feedback, and the shared Thinking row above goes.
+6. The start button(s).
+
+Choice cards are a `Radio group` of filled cards (`rounded-2xl bg-muted`, hover `accent`; chosen: `card` with a 2px primary ring), the 20px icon (stroke 1.75) above the name. The words (names and meanings of the constraints, Rules and Retry feedback) are the Game card's, from `frontend/src/game/wording.ts`. No summary line (the Game card shows the running game's settings), no presets, no sampling table (`chessllm/sampling.toml` is where sampling is set) and no Move sound (it is in Preferences).
 
 ## Patterns this replaced
 
@@ -224,6 +242,7 @@ The React port (#29) carried the old page's generic look. These are gone; don't 
 | Stock shadcn neutral theme, whose secondary text fails AA on a grey page | The Stone palette, warm greys with a darker muted foreground, checked by tests |
 | Every block in a bordered card | Luma cards set off by fill and shadow; inside them filled `muted` surfaces, and faint lines only between table rows and above the totals |
 | Glyph icons (♞ ⚙ ✦ ⚑ …) | Lucide icons; the Merida rook as the mark and tab icon; Merida pieces for captures |
+| The Settings modal, its sections, description lines, sampling table and "changes apply to the next game" note | The New game sheet, which starts the game it sets up |
 | A row of setting chips in the top bar | The settings in the Game card, one icon each, explained in its tooltip |
 | Uppercase micro-labels | Sentence-case `CardTitle`s and muted text |
 | Status sentences ("Black · qwen3.5:9b is thinking… 12s", "Your move", "Waiting for…") | The turn ring and the move timer in the player strips |

@@ -28,5 +28,5 @@ const ICONS: { [setting in GameSetting['setting']]: Record<string, IconOf> } = {
 }
 
 /** A setting's icon; the forfeit limit is a `Flag` whatever the number. */
-export const settingIcon = ({ setting, value }: GameSetting): IconOf =>
+export const settingIcon = ({ setting, value }: Pick<GameSetting, 'setting' | 'value'>): IconOf =>
   setting === 'max_attempts' ? Flag : ICONS[setting][value]

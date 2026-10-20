@@ -53,6 +53,12 @@ async function llmMoving(color: 'white' | 'black') {
   expect(screen.getAllByRole('timer')).toHaveLength(1)
 }
 const topBar = () => screen.getByRole('banner')
+const models = [{ name: 'qwen3.5:9b', thinking: true, sampling: {} }]
+/** Opens the New game sheet from the top bar. */
+async function openSheet() {
+  await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
+  return screen.findByRole('dialog', { name: 'New game' })
+}
 const gameCard = () => screen.getByRole('region', { name: 'Game' })
 const reasoning = () => screen.getByRole('region', { name: 'Reasoning' })
 /** The Game card's players, White first, each as its side and name. */
@@ -315,16 +321,20 @@ test('playing Black: the board turns, with the human at the bottom, and the LLM 
   expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(1)
 })
 
-test("New game starts a game with the running game's settings and drops the abandoned game's LLM turn", async () => {
+test("New game opens the sheet with the running game's settings; starting replaces the game, dropping its LLM turn", async () => {
   const abandoned = later()
   const backend = fakeBackend()
     .on('GET /api/games/current', Response.json(afterE4()))
+    .on('GET /api/models', Response.json(models))
     .on('POST /api/games/current/llm-turn', abandoned.promise)
     .on('POST /api/games', Response.json(aGame({ game_id: 'game-2' })))
   renderApp()
   await llmMoving('black')
 
-  await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
+  const sheet = await openSheet()
+  expect(backend.sentTo('POST /api/games')).toHaveLength(0)
+  await userEvent.click(within(sheet).getByRole('button', { name: 'Play as White' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   await yourMove()
   await act(async () => abandoned.resolve(Response.json(afterE5())))
 
@@ -363,7 +373,6 @@ describe('Rematch', () => {
     expect(players()).toEqual(['White qwen3.5:9b', 'Black You'])
     await waitFor(() => expect(theBoard().orientation).toBe('b'))
     expect(screen.queryByTestId('result')).not.toBeInTheDocument()
-    expect(gameCard()).not.toHaveTextContent('Your changes apply to the next game')
   })
 
   test('in an LLM faceoff the two LLMs change sides, each with its own settings', async () => {
@@ -376,6 +385,7 @@ describe('Rematch', () => {
       .on('GET /api/games/current', Response.json(over))
       .on('POST /api/games', Response.json(aGame({ game_id: 'game-2', human_legal_moves: [], settings: swapped })))
       .on('POST /api/games/current/llm-turn', later().promise)
+      .on('GET /api/models', Response.json(models))
     renderApp()
 
     await userEvent.click(await within(await screen.findByRole('region', { name: 'Game' })).findByRole('button', { name: 'Rematch' }))
@@ -389,32 +399,35 @@ describe('Rematch', () => {
       max_attempts: 5,
     })
     expect(players()).toEqual(['White qwen3.5:9b', 'Black gemma3:4b'])
-    expect(gameCard()).not.toHaveTextContent('Your changes apply to the next game')
+
+    // The New game sheet then opens with the Rematch's settings: the last game's.
+    const sheet = await openSheet()
+    expect(within(sheet).getByRole('combobox', { name: 'White model' })).toHaveTextContent('qwen3.5:9b')
+    expect(within(sheet).getByRole('combobox', { name: 'Black model' })).toHaveTextContent('gemma3:4b')
   })
 })
 
-describe('settings', () => {
-  const models = [{ name: 'qwen3.5:9b', thinking: true, sampling: {} }]
-  const pendingNote = 'Your changes apply to the next game'
-
-  test('the settings button opens the modal; a change is pending in the Game card, and the running game keeps its settings', async () => {
-    fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models))
+describe('the New game sheet', () => {
+  test('⌘K opens it; closing it leaves the running game as it is and forgets its changes, with no note', async () => {
+    const backend = fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models), Response.json(models))
     renderApp()
     await yourMove()
-    expect(within(gameCard()).queryByText(pendingNote)).not.toBeInTheDocument()
 
-    await userEvent.click(within(topBar()).getByRole('button', { name: /Settings/ }))
-    const dialog = await screen.findByRole('dialog', { name: 'Settings' })
-    await userEvent.click(within(dialog).getByRole('radio', { name: /^Black/ }))
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const sheet = await screen.findByRole('dialog', { name: 'New game' })
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'LLM faceoff' }))
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
-    expect(within(gameCard()).getByText(pendingNote)).toBeInTheDocument()
+    expect(within(gameCard()).queryByText(/next game/)).not.toBeInTheDocument()
     expect(players()).toEqual(['White You', 'Black qwen3.5:9b'])
+    expect(backend.sentTo('POST /api/games')).toHaveLength(0)
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByRole('radio', { name: 'Play LLM' })).toHaveAttribute('aria-checked', 'true')
     await yourMove()
   })
 
-  test('New game starts the next game, after which no change is pending', async () => {
+  test('Play as Black starts the game as set up in the sheet', async () => {
     const backend = fakeBackend()
       .on('GET /api/games/current', Response.json(aGame()))
       .on('GET /api/models', Response.json(models))
@@ -423,11 +436,8 @@ describe('settings', () => {
     renderApp()
     await yourMove()
 
-    await userEvent.keyboard('{Meta>}k{/Meta}')
-    await userEvent.click(await screen.findByRole('radio', { name: /^Black/ }))
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
+    const sheet = await openSheet()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Play as Black' }))
 
     await waitFor(() => expect(players()).toEqual(['White qwen3.5:9b', 'Black You']))
     expect(backend.sentTo('POST /api/games')[0].body).toEqual({
@@ -437,36 +447,24 @@ describe('settings', () => {
       rules: 'standard',
       max_attempts: 5,
     })
-    expect(within(gameCard()).queryByText(pendingNote)).not.toBeInTheDocument()
   })
 
   describe('coming from another page', () => {
     afterEach(() => window.history.replaceState(null, '', '/'))
 
-    test("its Settings opens the modal once the game is shown, and the address loses the request", async () => {
-      fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models))
-      window.history.replaceState(null, '', '/?then=settings')
-      renderApp()
-
-      expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
-      expect(window.location.search).toBe('')
-      await yourMove()
-    })
-
-    test('its New game starts the next game, set up as the game shown', async () => {
-      const backend = fakeBackend()
-        .on('GET /api/games/current', Response.json(aGame()))
-        .on('POST /api/games', Response.json(aGame({ game_id: 'game-2' })))
+    test('its New game opens the sheet once the game is shown, and the address loses the request', async () => {
+      const backend = fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models))
       window.history.replaceState(null, '', '/?then=new-game')
       renderApp()
 
-      await waitFor(() => expect(backend.sentTo('POST /api/games')).toHaveLength(1))
-      expect(backend.sentTo('POST /api/games')[0].body).toMatchObject({ mode: 'play_llm', black: { model: 'qwen3.5:9b' } })
+      expect(await screen.findByRole('dialog', { name: 'New game' })).toBeInTheDocument()
       expect(window.location.search).toBe('')
+      expect(backend.sentTo('POST /api/games')).toHaveLength(0)
+      await yourMove()
     })
   })
 
-  test('an LLM faceoff started from the modal plays itself to the end, White at the bottom and the board locked', async () => {
+  test('an LLM faceoff started from the sheet plays itself to the end, White at the bottom and the board locked', async () => {
     const llm = afterE4().settings.black
     const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
     const faceoff = (overrides: Partial<GameState>) =>
@@ -489,8 +487,8 @@ describe('settings', () => {
     await yourMove()
 
     await userEvent.keyboard('{Meta>}k{/Meta}')
-    await userEvent.click(await screen.findByRole('radio', { name: /^LLM faceoff/ }))
-    await userEvent.click(screen.getByRole('button', { name: 'Start new game' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'LLM faceoff' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start faceoff' }))
 
     // Each turn is asked for as soon as the last one lands, its timer in the strip of the side to move.
     await waitFor(() => expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(2))
@@ -539,6 +537,7 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   const starting = later()
   fakeBackend()
     .on('GET /api/games/current', Response.json(afterE4()))
+    .on('GET /api/models', Response.json(models))
     .on('POST /api/games/current/llm-turn', Response.json(landed))
     .on('POST /api/games', starting.promise)
   renderApp()
@@ -550,8 +549,10 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   expect(within(moves).getByText('illegal · try 1', { exact: false })).toHaveClass('mistake', 'illegal')
   expect(screen.getByTestId('totals')).toHaveTextContent('1 illegal try · 0 notation slips')
 
-  // The flashes go at the click, before the new game has arrived.
-  await userEvent.click(within(topBar()).getByRole('button', { name: 'New game' }))
+  // The flashes go at the start, before the new game has arrived.
+  const sheet = await openSheet()
+  expect(screen.getByText('✗ LLM move illegal')).toBeInTheDocument()
+  await userEvent.click(within(sheet).getByRole('button', { name: 'Play as White' }))
   expect(screen.queryByText('✗ LLM move illegal')).not.toBeInTheDocument()
 
   await act(async () => starting.resolve(Response.json(aGame({ game_id: 'game-2' }))))
@@ -665,13 +666,13 @@ describe('the move history', () => {
     await waitFor(() => expect(board.input?.color).toBe('w'))
   })
 
-  test('the arrow keys leave the settings modal alone', async () => {
+  test('the arrow keys leave the New game sheet alone', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(afterE5())).on('GET /api/models', Response.json([]))
     renderApp()
     await yourMove()
 
     await userEvent.keyboard('{Meta>}k{/Meta}')
-    await screen.findByRole('dialog', { name: 'Settings' })
+    await screen.findByRole('dialog', { name: 'New game' })
     await userEvent.keyboard('{ArrowLeft}')
 
     expect(viewedMove()).not.toBeInTheDocument()

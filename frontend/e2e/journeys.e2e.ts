@@ -124,14 +124,14 @@ test('the human promotes a pawn through the promotion dialog', async ({ page }) 
   await expectPiece(page, 'h1', 'bq')
 })
 
-test('an LLM faceoff started from the settings modal plays to its end', async ({ page }) => {
+test('an LLM faceoff started from the New game sheet plays to its end', async ({ page }) => {
   await playLlm(page, { white: ['f3', 'g4'], black: ['e5', 'Qh4#'] })
 
-  await page.getByRole('button', { name: /Settings/ }).click()
-  const settings = page.getByRole('dialog', { name: 'Settings' })
-  await settings.getByRole('radio', { name: /LLM faceoff/ }).click()
-  await settings.getByRole('button', { name: 'Start new game' }).click()
-  await expect(settings).toBeHidden()
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
+  await sheet.getByRole('button', { name: 'Start faceoff' }).click()
+  await expect(sheet).toBeHidden()
 
   const result = page.getByTestId('result')
   await expect(result).toContainText(/\(Black\) wins/)
