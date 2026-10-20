@@ -108,3 +108,19 @@ def test_enforced_decoding_puts_the_allowed_moves_as_an_enum_on_the_move_only(th
     else:
         assert properties["reasoning"] == {"title": "Reasoning", "type": "string"}
         assert list(properties) == ["reasoning", "move"]
+
+
+def test_thinking_off_is_sent_as_off_for_a_model_that_thinks_by_default():
+    # Gemma 4 thinks unless told not to, so off must be sent, not left out.
+    calls = []
+
+    def chat(**request):
+        calls.append(request)
+        message = OllamaMessage(role="assistant", content='{"reasoning": "Mirror the centre pawn.", "move": "e5"}')
+        return ChatResponse(message=message)
+
+    OllamaPlayer("gemma4:26b", thinking=False, chat=chat).reply([Message("user", "PGN: 1. e4")])
+
+    [request] = calls
+    assert request["model"] == "gemma4:26b"
+    assert request["think"] is False

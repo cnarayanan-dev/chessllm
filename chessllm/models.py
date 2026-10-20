@@ -40,6 +40,9 @@ LLM_MODELS = [
     LlmModel("qwen3.8:latest", thinking=True),  # Qwen 3.8, 27.8B parameters
     LlmModel("llama3:8b", thinking=False),  # Llama 3, 8B parameters
     LlmModel("gemma3:12b", thinking=False),  # Gemma 3, 11.8B parameters
+    # Gemma 4, 26.2B parameters (a 16 GB nvfp4 build). Checked on 2026-10-20 against `ollama show gemma4:26b`:
+    # thinking false or true, true by default, so the player must always send it.
+    LlmModel("gemma4:26b", thinking=True),
 ]
 
 

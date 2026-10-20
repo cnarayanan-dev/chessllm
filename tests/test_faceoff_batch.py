@@ -57,3 +57,21 @@ def test_thinking_can_be_turned_on_for_one_model_only(tmp_path):
     [log] = tmp_path.glob("*.jsonl")
     start = json.loads(log.read_text().splitlines()[0])
     assert (start["white"]["thinking"], start["black"]["thinking"]) == (True, False)
+
+
+def test_gemma4_plays_with_thinking_on_against_a_model_that_cannot_think(tmp_path):
+    player = ScriptedPlayer(FOOLS_MATE)
+
+    code = main(
+        ["--models", "gemma4:26b", "llama3:8b", "--games", "1", "--thinking-for", "gemma4:26b",
+         "--games-dir", str(tmp_path), "--no-analysis"],
+        player_for=player.for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    assert code == 0
+    [log] = tmp_path.glob("*.jsonl")
+    start = json.loads(log.read_text().splitlines()[0])
+    assert (start["white"]["model"], start["white"]["thinking"]) == ("gemma4:26b", True)
+    assert (start["black"]["model"], start["black"]["thinking"]) == ("llama3:8b", False)
+    assert json.loads(log.read_text().splitlines()[-1])["result"] == "0-1"
