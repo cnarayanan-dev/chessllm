@@ -339,6 +339,55 @@ Each run: call 1 with `options.num_predict` = the cap; if `done_reason == "lengt
 - **Decision:** the smallest budget whose centipawn loss and legality are within noise of unbounded becomes the default. If a budget below ~1,024 is worse than thinking off, record that: it is the chess version of NoThinking.
 - **Time:** qwen3.8 at ~12.7 tok/s is about 80 s per position unbounded and less under budgets, so ~6-7 h for its 7 conditions. qwen3.5:9b is faster, ~3 h. Run overnight, one model per night, with resumable output like the board-image probe.
 
+## Budget probe (#74): results and recommendation
+
+**Status: not run yet.** The table and the recommendations below are placeholders until the probe has run on an idle machine. **The recommendations are recommendations only: none is applied.** The model list, the app and every default stay as they are; changing a model's default level or budget is a later spec, once this data is in.
+
+**What it does.** `scripts/probe_thinking_budget.py` (built from the experiment plan above) puts the 60 fixed positions of the board-image study (`board-images-positions.json`) to each thinking model as one first attempt, no Retry, through the game's `OllamaPlayer` with its forced answer (ADR 0007), the sampling from `sampling.toml`, and each call's time limit derived from its budget as in games (`time_limit_s`).
+
+- **Conditions per model** (labels as the script takes them):
+  - qwen3.5:9b and gemma4:26b: `off`, `on` (unbounded), `on@512`, `on@1024`, `on@2048`, `on@4096`.
+  - qwen3.8: `off`, `medium` (unbounded), `medium@512` ... `medium@4096`, and `xhigh@2048`, `xhigh@4096`. Thinking on is sent as `medium`, the level it means, so the probe doesn't depend on Ollama's default.
+  - **Why xhigh only with the two largest budgets:** unbounded, xhigh would run into the 300 s limit (≈ 5,400 tokens at 18 tok/s) and the 8,192-token context; LLM Chess measured ~12,800 tokens a move at xhigh. Most calls would end in a timeout, and 120 calls at 300 s are 10 h for one condition. The small budgets cut xhigh as they cut medium, so only the large ones can show what the level changes. 2,048 and 4,096 bracket the starting point of 3,072, paired with medium at the same budgets. [Inference]
+  - Any other label can be run on its own, e.g. `--conditions medium@3072`.
+- **Two passes per condition:** **Free** (the Free prompt, no legal-move list) for first-attempt legality; **Listed enforced** (the Listed prompt, the legal moves as the enum, in a random order seeded by the position, so every condition sees the same list) for move quality: the chosen move's Stockfish centipawn loss, computed as the game's analysis computes it (`chessllm.analysis.mover_evaluations`, depth 16, capped at ±1,000).
+- **Per call** (`thinking-budget-results.jsonl`, one line each): model, condition, level (the thinking value sent), budget, pass, position, FEN, phase, in check, raw answer, move, result (`legal`, `illegal`, `invalid`, `ambiguous`, `cut_off`, `timeout` or `error`), centipawn loss and the evaluations before and after (Listed enforced), thinking, answer and prompt tokens, stop reason, forced, time and time limit.
+- **Resumable:** a rerun skips every call already in the file. A timeout is the condition's outcome and stays; an error (e.g. Ollama not running) is asked again. Within a model the probe goes position by position through every condition, so a run stopped anywhere, or limited with `--limit`, leaves all conditions on the same positions (the sample is interleaved, so any first N are spread over the stages).
+
+**Run** one model at a time, with Ollama otherwise idle (no game from the app, no other client):
+
+```
+# Stage 1: the first 20 positions, one model per session (about a third of the full run)
+uv run python -m scripts.probe_thinking_budget --models gemma4:26b --limit 20 --keep-alive 5m
+uv run python -m scripts.probe_thinking_budget --models qwen3.8:latest --limit 20 --keep-alive 5m
+uv run python -m scripts.probe_thinking_budget --models qwen3.5:9b --limit 20 --keep-alive 5m
+# Stage 2: the same commands with --limit 40, then without --limit; the calls already made are skipped
+# A chunk can also be one condition or pass, e.g.:
+uv run python -m scripts.probe_thinking_budget --models qwen3.8:latest --conditions xhigh@2048 xhigh@4096
+uv run python -m scripts.probe_thinking_budget --models qwen3.5:9b --passes listed_enforced
+# The table, printed and written between the markers below
+uv run python -m scripts.probe_thinking_budget --summary --write-note
+```
+
+**Expected time** [Inference, from the speeds in "Verified" and a 2-call smoke run]: 720 calls per model (960 for qwen3.8). A budgeted call takes at most budget ÷ speed plus a few seconds; the unbounded ones are the unknown.
+
+- gemma4:26b (~36 tok/s): ~4-9 h. The smoke run took 3-5 s a call thinking off and 15 s at 512 tokens (always forced).
+- qwen3.8 (~18 tok/s): ~15-22 h, about a third of it the two xhigh conditions.
+- qwen3.5:9b (~20 tok/s): ~12-23 h; it thinks long, so its unbounded condition may often time out at 300 s.
+- So roughly 30-50 h in all: stage 1 (20 positions) is one session of ~4-7 h per model, and gives a first read before the rest.
+
+**Summary** (from `--summary --write-note`). Legality counts every Free call that ended, so a timeout or cut-off is no legal move; mean centipawn loss is over the Listed enforced moves (n in brackets); thinking tokens, the forced share and time are over both passes, a timeout counting at its time limit.
+
+<!-- budget-probe:start -->
+_Not run yet._
+<!-- budget-probe:end -->
+
+**Recommendation per model (a recommendation, not applied).** The decision rule from the experiment plan: the smallest budget whose centipawn loss and legality are within noise of unbounded; a budget worse than thinking off is recorded as such (the chess version of NoThinking).
+
+- **qwen3.8:** _to fill in from the table._ Starting point from the spec (#67): `medium` with 3,072 tokens, above its p90 of ~2,050 thinking tokens in the game logs, so it only trims the long tail. Check it against `medium@2048` and `medium@4096`, and whether `xhigh` at the same budget plays better.
+- **qwen3.5:9b:** _to fill in from the table:_ the smallest budget that matches unbounded, or thinking off if no budget does.
+- **gemma4:26b:** _to fill in from the table._ It is the fastest of the three, so a larger budget costs it least time.
+
 ## Caveats
 
 - Ollama facts are from source at `v0.40.0`. The prefill trick (`content: " "`) rests on the Qwen parser's `Init`. The format-after-prefill behaviour rests on `ThinkingClose()` returning nil in content mode. Both are internal and could change, so pin them with a test that renders and parses a prefilled request.
