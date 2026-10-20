@@ -3,7 +3,8 @@
     uv run python -m chessllm.faceoff_batch --models gemma3:12b llama3:8b --games 9
 
 Colours alternate game by game, the first model as White in the first game. Both sides share the LLM's settings
-(thinking, LLM constraints, Retry feedback, rules, attempts per turn), as a faceoff started in the app does by default.
+(thinking, LLM constraints, Retry feedback, rules, attempts per turn), as a faceoff started in the app does by default;
+--thinking-for MODEL turns thinking on for one model only.
 Each game is analysed as it ends, with Maia-2 and Stockfish (--no-analysis to skip). Ctrl-C stops it, leaving every
 finished game's log complete."""
 
@@ -21,7 +22,7 @@ from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.move_model import MoveModel
 from chessllm.players import LlmPlayer
-from chessllm.prompt import LlmConstraints, RetryFeedback
+from chessllm.prompt import LlmConstraints, PositionFormat, RetryFeedback
 
 
 def parser() -> argparse.ArgumentParser:
@@ -34,8 +35,21 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--models", nargs=2, required=True, metavar="MODEL", help="the two Ollama models")
     parser.add_argument("--games", type=int, default=2, help="how many games (default 2)")
     parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=defaults.thinking)
+    parser.add_argument(
+        "--thinking-for",
+        action="append",
+        default=[],
+        metavar="MODEL",
+        help="turn thinking on for this model only (repeatable), e.g. a thinking model against one that can't think",
+    )
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
+    parser.add_argument(
+        "--position",
+        choices=get_args(PositionFormat),
+        default=defaults.position,
+        help="how each turn gives the position: fen, or described (also the pieces, last move and check)",
+    )
     parser.add_argument("--rules", choices=get_args(Rules), default=Settings.rules)
     parser.add_argument(
         "--max-attempts",
@@ -54,9 +68,10 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
     def side(model: str) -> LlmSide:
         return LlmSide(
             model=model,
-            thinking=args.thinking,
+            thinking=args.thinking or model in args.thinking_for,
             llm_constraints=args.llm_constraints,
             retry_feedback=args.retry_feedback,
+            position=args.position,
         )
 
     settings = Settings(

@@ -14,6 +14,9 @@ RetryFeedback = Literal["explained", "bare", "hinted"]
 # Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
 # free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
 LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
+# How the position is given in each turn's message: fen (the PGN and FEN, the default) or described (also the last
+# move, where every piece stands and whether the LLM is in check, so it needn't decode the FEN).
+PositionFormat = Literal["fen", "described"]
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
@@ -53,14 +56,52 @@ def system_prompt(llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE)
     )
 
 
+PIECE_NAMES = {
+    chess.KING: ("King", "King"),
+    chess.QUEEN: ("Queen", "Queens"),
+    chess.ROOK: ("Rook", "Rooks"),
+    chess.BISHOP: ("Bishop", "Bishops"),
+    chess.KNIGHT: ("Knight", "Knights"),
+    chess.PAWN: ("Pawn", "Pawns"),
+}
+
+
+def describe_position(board: chess.Board, last_move: str | None) -> str:
+    """The position in words for the side to move: the last move, each side's pieces by square, and whether it is
+    in check. Pieces of a kind are listed by file, then rank, so the text depends only on the position."""
+
+    def pieces(color: chess.Color) -> str:
+        kinds = []
+        for piece_type, (one, many) in PIECE_NAMES.items():
+            squares = sorted(board.pieces(piece_type, color), key=lambda square: (chess.square_file(square), square))
+            if squares:
+                kinds.append(f"{one if len(squares) == 1 else many} {', '.join(map(chess.square_name, squares))}")
+        return "; ".join(kinds) or "none"
+
+    mover, other = board.turn, not board.turn
+    lines = [f"Last move: {last_move}"] if last_move else []
+    lines.append(f"Your pieces ({chess.COLOR_NAMES[mover].capitalize()}): {pieces(mover)}")
+    lines.append(f"Opponent's pieces ({chess.COLOR_NAMES[other].capitalize()}): {pieces(other)}")
+    if board.is_check():
+        lines.append("You are in check.")
+    return "\n".join(lines)
+
+
 def turn_messages(
-    pgn: str, fen: str, llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE, legal_moves: str | None = None
+    pgn: str,
+    fen: str,
+    llm_color: str,
+    system_prompt_file: Path = SYSTEM_PROMPT_FILE,
+    legal_moves: str | None = None,
+    description: str | None = None,
 ) -> list[Message]:
-    """A fresh prompt for one turn: the system prompt plus the game so far, with no earlier turns, and the
-    legal moves (space-separated SAN) under them when given.
+    """A fresh prompt for one turn: the system prompt plus the game so far, with no earlier turns, the position's
+    description under them when given, and then the legal moves (space-separated SAN) when given.
 
     The file is read every turn, so edits apply without restarting the app."""
     position = f"PGN: {pgn or NO_MOVES_YET}\nFEN: {fen}"
+    if description is not None:
+        position += f"\n{description}"
     if legal_moves is not None:
         position += f"\nLegal moves: {legal_moves}"
     return [Message("system", system_prompt(llm_color, system_prompt_file)), Message("user", position)]

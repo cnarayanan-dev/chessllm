@@ -4,10 +4,10 @@ import random
 import threading
 from dataclasses import asdict, dataclass, field
 from datetime import date
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import chess
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from chessllm import chaos
 from chessllm.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable
@@ -19,7 +19,9 @@ from chessllm.prompt import (
     LISTED,
     SYSTEM_PROMPT_FILES,
     LlmConstraints,
+    PositionFormat,
     RetryFeedback,
+    describe_position,
     retry_feedback,
     turn_messages,
 )
@@ -53,6 +55,17 @@ class LlmSide:
     thinking: bool = False
     llm_constraints: LlmConstraints = "free"
     retry_feedback: RetryFeedback = "explained"
+    # How each turn gives the position; None is the default, fen. Left out of the API's output and the game log
+    # (log_shape) when it is fen, so games from before the setting read the same.
+    position: Annotated[PositionFormat | None, Field(exclude_if=lambda position: position in (None, "fen"))] = None
+
+    def log_shape(self) -> dict[str, Any]:
+        """The side as game_start logs it: without position when it is the default, so that logs from before the
+        setting existed and logs since describe the same Player configuration the same way."""
+        shape = asdict(self)
+        if self.position in (None, "fen"):
+            del shape["position"]
+        return shape
 
     def name(self) -> str:
         """The side's name in the PGN, e.g. "llama3:8b (no thinking)"."""
@@ -80,6 +93,11 @@ class AnchorSide:
 
 
 Side = HumanSide | LlmSide | AnchorSide
+
+
+def side_log_shape(side: Side) -> dict[str, Any]:
+    """A side as game_start logs it (ADR 0004)."""
+    return side.log_shape() if isinstance(side, LlmSide) else asdict(side)
 # How many sides of each kind each Mode has.
 MODE_SIDES: dict[Mode, dict[str, int]] = {
     "play_llm": {"human": 1, "llm": 1, "anchor": 0},
@@ -291,8 +309,8 @@ class GameSession:
             game_id=log.game_id,
             log_version=2,
             mode=settings.mode,
-            white=asdict(settings.white),
-            black=asdict(settings.black),
+            white=side_log_shape(settings.white),
+            black=side_log_shape(settings.black),
             sampling=settings.sampling or "model_default",
             max_retries=settings.max_attempts - 1,
             **logged_prompts,
@@ -444,7 +462,9 @@ class GameSession:
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
         prompt_file = SYSTEM_PROMPT_FILES[side.llm_constraints]
-        messages = turn_messages(pgn, fen, color, prompt_file, listed_moves)
+        last_move = self._moves[-1][1] if self._moves else None
+        description = describe_position(board, last_move) if side.position == "described" else None
+        messages = turn_messages(pgn, fen, color, prompt_file, listed_moves, description)
         attempts: list[dict[str, Any]] = []
         turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None, "reasoning": None}
         self._llm_turns.append(turn)
@@ -525,7 +545,8 @@ class GameSession:
             "check": board.is_check(),  # the side to move's king, so the page needn't work it out (ADR 0001)
             "llm_turn": self._llm_turns[-1] if self._llm_turns else None,
             "llm_turns": self._llm_turns,
-            "settings": asdict(self._settings),
+            "settings": asdict(self._settings)
+            | {color: side_log_shape(self._settings.side(color)) for color in COLORS},
             "status": "over" if self._end else "playing",
             "result": self._end.result if self._end else None,
             "end_reason": self._end.reason if self._end else None,

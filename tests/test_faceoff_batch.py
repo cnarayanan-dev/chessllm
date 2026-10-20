@@ -41,3 +41,19 @@ def test_a_model_not_in_the_list_is_refused_before_any_game(tmp_path, capsys):
     assert code == 1
     assert "nonesuch:1b" in capsys.readouterr().err
     assert not list(tmp_path.glob("*.jsonl"))
+
+
+def test_thinking_can_be_turned_on_for_one_model_only(tmp_path):
+    player = ScriptedPlayer(FOOLS_MATE)
+
+    code = main(
+        ["--models", "qwen3.8:latest", "gemma3:12b", "--games", "1", "--thinking-for", "qwen3.8:latest",
+         "--games-dir", str(tmp_path), "--no-analysis"],
+        player_for=player.for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    assert code == 0
+    [log] = tmp_path.glob("*.jsonl")
+    start = json.loads(log.read_text().splitlines()[0])
+    assert (start["white"]["thinking"], start["black"]["thinking"]) == (True, False)

@@ -25,7 +25,7 @@ from chessllm.game import COLORS, AnchorEngine, AnchorSide, Color, GameSession, 
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.players import LlmPlayer
-from chessllm.prompt import LlmConstraints, RetryFeedback
+from chessllm.prompt import LlmConstraints, PositionFormat, RetryFeedback
 
 
 def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
@@ -35,6 +35,12 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=defaults.thinking)
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
+    parser.add_argument(
+        "--position",
+        choices=get_args(PositionFormat),
+        default=defaults.position,
+        help="how each turn gives the position: fen, or described (also the pieces, last move and check)",
+    )
     # Part of the Player configuration. Chaos rules only with the Stockfish Anchor, which copes with chaos positions.
     parser.add_argument("--rules", choices=get_args(Rules), default=Settings.rules)
     parser.add_argument(
@@ -75,6 +81,7 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         thinking=args.thinking,
         llm_constraints=args.llm_constraints,
         retry_feedback=args.retry_feedback,
+        position=args.position,
     )
     anchor_side = AnchorSide(engine=args.engine, skill=skill)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)

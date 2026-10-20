@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from chessllm.analysis import analysis_path
 from chessllm.anchors import ANCHOR_RATINGS, AnchorRating, anchor_name
@@ -24,7 +24,7 @@ from chessllm.move_quality import (
     read_analysed_moves,
     read_validation,
 )
-from chessllm.prompt import ENFORCED, SYSTEM_PROMPT_FILES, LlmConstraints, RetryFeedback
+from chessllm.prompt import ENFORCED, SYSTEM_PROMPT_FILES, LlmConstraints, PositionFormat, RetryFeedback
 from chessllm.rating import RatedGame, Rating, ratings
 
 
@@ -39,10 +39,15 @@ class PlayerConfiguration(BaseModel):
     max_retries: int  # per turn, before the LLM forfeits
     sampling: dict[str, int | float]  # from the config file; empty means the model's defaults
     prompt: str  # the system prompt's file name, e.g. "system.txt"
+    # How each turn gives the position; None is the default, fen. Left out when it is fen, as in the game log, so
+    # the API's configurations and their ids stay as they were before the setting existed.
+    position: PositionFormat | None = Field(None, exclude_if=lambda position: position in (None, "fen"))
 
     def id(self) -> str:
-        """A short fingerprint of the settings, the same for the same settings on every request."""
-        canonical = json.dumps(self.model_dump(), sort_keys=True, separators=(",", ":"))
+        """A short fingerprint of the settings, the same for the same settings on every request. The default
+        position is left out, so configurations from before the setting keep their id."""
+        settings = self.model_dump()  # without the default position
+        canonical = json.dumps(settings, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
@@ -294,6 +299,7 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         max_retries=start["max_retries"],
         sampling=sampling if isinstance(sampling, dict) else {},
         prompt=PurePath(prompt_file).name,
+        position=side.get("position"),
     )
 
 
@@ -309,6 +315,7 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         max_retries=settings.max_attempts - 1,
         sampling=dict(settings.sampling),
         prompt=SYSTEM_PROMPT_FILES[side.llm_constraints].name,
+        position=side.position,
     )
 
 

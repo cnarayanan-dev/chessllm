@@ -6,7 +6,7 @@ Run:
     uv run python -m scripts.analyse_games --mode anchor_match --model llama3 --since 2026-10-19
     uv run python -m scripts.analyse_games --include-unfinished --json  # the same report as JSON
 
-A Player configuration is grouped here by model, LLM constraints, thinking, rules and retry feedback (the leaderboard
+A Player configuration is grouped here by model, LLM constraints, thinking, rules, retry feedback and position (the leaderboard
 also splits by sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for
 each side. Both log versions are read (ADR 0004) through chessllm.leaderboard.read_sides; a file that isn't a
 readable game log is skipped and counted.
@@ -22,7 +22,7 @@ import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -91,10 +91,15 @@ class Configuration:
     thinking: bool
     rules: str
     retry_feedback: str
+    position: str = "fen"
 
     def label(self) -> str:
         thinking = "thinking" if self.thinking else "no thinking"
-        return f"{self.model} / {self.llm_constraints} / {thinking} / {self.rules} / {self.retry_feedback} feedback"
+        described = " / described position" if self.position != "fen" else ""
+        return (
+            f"{self.model} / {self.llm_constraints} / {thinking} / {self.rules} / {self.retry_feedback} feedback"
+            f"{described}"
+        )
 
 
 @dataclass
@@ -157,6 +162,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             thinking=bool(side["thinking"]),
             rules=game.rules,
             retry_feedback=str(side["retry_feedback"]),
+            position=str(side.get("position") or "fen"),
         )
         other = game.sides["black" if color == "white" else "white"]
         outcome = None if game.end is None else SCORES.get(str(game.end.get("result")), {}).get(color, "draw")
@@ -179,7 +185,7 @@ class Filters:
     constraints: str | None = None
     rules: str | None = None
     finished_only: bool = True
-    since: date | None = None
+    since: datetime | None = None  # in the logs' own local time
 
     def side_matches(self, side: LlmSide) -> bool:
         configuration = side.configuration
@@ -196,7 +202,7 @@ class Filters:
             return False
         if self.since is not None:
             started = game.started
-            if started is None or started.date() < self.since:
+            if started is None or started.replace(tzinfo=None) < self.since:
                 return False
         return any(self.side_matches(side) for side in llm_sides(game))
 
@@ -577,7 +583,11 @@ def parser() -> argparse.ArgumentParser:
                           help="only games with a game_end (the default)")
     finished.add_argument("--include-unfinished", dest="finished_only", action="store_false",
                           help="also games still being played or abandoned")
-    parser.add_argument("--since", type=date.fromisoformat, help="only games started on or after this date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--since",
+        type=datetime.fromisoformat,
+        help="only games started at or after this date or time (YYYY-MM-DD or YYYY-MM-DDTHH:MM)",
+    )
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
     return parser
 
