@@ -206,17 +206,23 @@ test('Rematch after an LLM faceoff: the two LLMs change sides, each with its own
   expect(started.ok()).toBe(true)
   await page.goto('/')
   const card = page.getByRole('region', { name: 'Game' })
-  const players = card.getByRole('list', { name: 'Players' }).getByRole('listitem')
+  // Only the player rows: each one nests its side's settings list.
+  const players = card.getByRole('list', { name: 'Players' }).locator('> li')
+  const whiteSettings = card.getByRole('list', { name: "White's settings" })
+  const blackSettings = card.getByRole('list', { name: "Black's settings" })
   await expect(page.getByTestId('result')).toContainText('by checkmate')
-  await expect(players).toHaveText(['White qwen3.5:9b', 'Black llama3:8b'])
+  await expect(players).toHaveText([/^White qwen3\.5:9b/, /^Black llama3:8b/])
+  await expect(whiteSettings).toHaveText('Thinking on')
+  await expect(blackSettings).toHaveText('Thinking off')
 
   const rematch = card.getByRole('button', { name: 'Rematch' })
   await expect(rematch).toHaveAttribute('aria-description', 'Same settings, the LLMs swap colours')
   await rematch.click()
 
-  await expect(players).toHaveText(['White llama3:8b', 'Black qwen3.5:9b'])
-  await expect(card.getByRole('img', { name: 'White: Thinking off' })).toBeVisible()
-  await expect(card.getByRole('img', { name: 'Black: Thinking on' })).toBeVisible()
+  // Each LLM takes its Thinking setting to the other side.
+  await expect(players).toHaveText([/^White llama3:8b/, /^Black qwen3\.5:9b/])
+  await expect(whiteSettings).toHaveText('Thinking off')
+  await expect(blackSettings).toHaveText('Thinking on')
   await expect(page.getByTestId('result')).toContainText('by checkmate')
   await expectOver(page)
 })
