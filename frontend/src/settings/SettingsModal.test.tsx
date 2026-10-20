@@ -370,16 +370,11 @@ describe('Game section', () => {
     expect(onStartNext).toHaveBeenCalledWith(expect.objectContaining({ mode: 'llm_faceoff', rules: 'chaos' }))
   })
 
-  test('the Move sound switch is kept in this browser', async () => {
-    const { user } = await openSettings()
-    const sound = screen.getByRole('switch', { name: 'Move sound' })
+  test('has no Move sound: it is in Preferences', async () => {
+    await openSettings()
 
-    expect(sound).toHaveAttribute('aria-checked', 'true')
-    await user.click(sound)
-
-    expect(sound).toHaveAttribute('aria-checked', 'false')
-    expect(localStorage.getItem('chessllm.moveSound')).toBe('off')
-    expect(screen.queryByText('changes apply next game')).not.toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Move sound' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Move sound')).not.toBeInTheDocument()
   })
 })
 

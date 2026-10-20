@@ -1,7 +1,8 @@
-// The top bar of every page: the ChessLLM mark, then Analytics, New game and Settings.
+// The top bar of every page: the ChessLLM mark, then Analytics, New game and Settings, and Preferences at the end.
 import { ChartNoAxesColumn, Plus, Settings2 } from 'lucide-react'
 import { useEffect } from 'react'
 import rook from '@/assets/chessllm-rook.svg'
+import { Preferences } from '@/components/top-bar/Preferences'
 import { thenHref } from '@/components/top-bar/then'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
@@ -76,6 +77,9 @@ export function TopBar({ onNewGame, onSettings, current }: TopBarProps) {
           Settings <Kbd>⌘K</Kbd>
         </TooltipContent>
       </Tooltip>
+      <div className="ml-auto">
+        <Preferences />
+      </div>
     </header>
   )
 }

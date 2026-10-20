@@ -16,15 +16,27 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('the move sound is on unless switched off, and plays the click', () => {
-  expect(isMoveSoundOn()).toBe(true)
+test('the move sound is off in a browser that never switched it on', () => {
+  expect(isMoveSoundOn()).toBe(false)
 
   playMoveSound()
+
+  expect(played).toEqual([])
+})
+
+test('switched on, the move sound plays the click, and the browser remembers it', () => {
+  setMoveSoundOn(true)
+
+  playMoveSound()
+
+  expect(localStorage.getItem('chessllm.moveSound')).toBe('on')
+  expect(isMoveSoundOn()).toBe(true)
 
   expect(played).toEqual(['/static/sounds/move.mp3'])
 })
 
-test('switched off, the move sound stays silent, and the browser remembers it', () => {
+test('switched off again, the move sound stays silent, and the browser remembers it', () => {
+  setMoveSoundOn(true)
   setMoveSoundOn(false)
 
   playMoveSound()
@@ -36,6 +48,7 @@ test('switched off, the move sound stays silent, and the browser remembers it', 
 
 test('a browser that refuses to play the sound is not an error', async () => {
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new DOMException('no click yet', 'NotAllowedError'))
+  setMoveSoundOn(true)
 
   expect(() => playMoveSound()).not.toThrow()
   await new Promise((resolve) => setTimeout(resolve))

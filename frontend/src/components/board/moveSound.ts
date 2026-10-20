@@ -1,11 +1,11 @@
-// One sound for every legal move, the human's and the LLM's. A page setting, kept in the browser across games and
-// reloads under the old page's key.
+// One sound for every legal move, the human's and the LLM's. A Preference, kept in the browser across games and
+// reloads under the old page's key, and off until switched on there.
 const MOVE_SOUND_KEY = 'chessllm.moveSound'
 
 let moveSound: HTMLAudioElement | null = null
 
 export function isMoveSoundOn(): boolean {
-  return localStorage.getItem(MOVE_SOUND_KEY) !== 'off'
+  return localStorage.getItem(MOVE_SOUND_KEY) === 'on'
 }
 
 export function setMoveSoundOn(on: boolean) {

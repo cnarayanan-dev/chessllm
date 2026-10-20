@@ -21,8 +21,12 @@ async function openGame(page: Page) {
   await yourMove(page)
 }
 
-/** The top bar's links and buttons, in order. */
-const actions = (page: Page) => page.getByRole('banner').locator('a, button')
+/** The top bar's links and buttons, in order, by their accessible names. */
+const actions = (page: Page) =>
+  page
+    .getByRole('banner')
+    .locator('a, button')
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label') ?? element.textContent))
 
 test('the browser tab shows the rook', async ({ page }) => {
   await openGame(page)
@@ -63,10 +67,13 @@ test('Inter is the only interface font: the game page, the Settings modal and th
   expect(await fonts(page)).toEqual(INTER)
 })
 
-test('the top bar on the game page: the mark, then Analytics, New game and Settings; ⌘K shows only in the tooltip', async ({ page }) => {
+test('the top bar on the game page: the mark, then Analytics, New game and Settings, and Preferences at the end; ⌘K shows only in the tooltip', async ({ page }) => {
   await openGame(page)
 
-  await expect(actions(page)).toHaveText(['ChessLLM', 'Analytics', 'New game', 'Settings'])
+  expect(await actions(page)).toEqual(['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences'])
+  const bar = (await page.getByRole('banner').boundingBox())!
+  const preferences = (await page.getByRole('button', { name: 'Preferences' }).boundingBox())!
+  expect(bar.x + bar.width - (preferences.x + preferences.width)).toBeLessThan(40) // on the right
   const settings = page.getByRole('banner').getByRole('button', { name: 'Settings' })
   await expect(settings).toHaveText('Settings')
 
@@ -82,11 +89,23 @@ test('the top bar on the Analytics page: its Settings opens the modal on the gam
   await openGame(page)
   await page.goto('/analytics')
 
-  await expect(actions(page)).toHaveText(['ChessLLM', 'Analytics', 'New game', 'Settings'])
+  expect(await actions(page)).toEqual(['ChessLLM', 'Analytics', 'New game', 'Settings', 'Preferences'])
   await page.getByRole('banner').getByRole('link', { name: 'Settings' }).click()
 
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
   await expect(page).toHaveURL(/\/$/)
+})
+
+test('the top bar on the Analytics page: Preferences opens there, with Move sound', async ({ page }) => {
+  await page.goto('/analytics')
+
+  const preferences = page.getByRole('banner').getByRole('button', { name: 'Preferences' })
+  await preferences.hover()
+  await expect(page.locator('[data-slot=tooltip-content]')).toHaveText('Preferences')
+  await preferences.click()
+
+  await expect(page.getByRole('dialog', { name: 'Preferences' }).getByRole('switch', { name: 'Move sound' })).not.toBeChecked()
+  await expect(page).toHaveURL(/\/analytics$/)
 })
 
 test('the top bar on the Analytics page: its New game starts one on the game page', async ({ page }) => {

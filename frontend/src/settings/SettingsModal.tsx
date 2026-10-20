@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { isMoveSoundOn, setMoveSoundOn } from '@/components/board/moveSound'
 import {
   COLORS,
   MAX_ATTEMPTS_CHOICES,
@@ -199,7 +198,6 @@ type SectionProps = { next: NextGame; models: Models; onNextChange: (next: NextG
 
 function GameSection({ next, models, onNextChange }: SectionProps) {
   const isFaceoff = next.mode === 'llm_faceoff'
-  const [sound, setSound] = useState(isMoveSoundOn)
   // When customizing, a White block and a Black block, each labelled with its side and model; else one for both.
   const shownColors = next.custom ? COLORS : (['white'] as Color[])
   const blocks = (build: (color: Color) => ReactNode) =>
@@ -325,16 +323,6 @@ function GameSection({ next, models, onNextChange }: SectionProps) {
           checked={next.rules === 'chaos' && chaosAllowed(next)}
           disabled={!chaosAllowed(next)}
           onCheckedChange={(on) => onNextChange(chooseRules(next, on ? 'chaos' : 'standard'))}
-        />
-      </Row>
-      <Row title="Move sound" description="A click on every move, yours and the LLM's. Applies at once, in this browser.">
-        <Switch
-          aria-label="Move sound"
-          checked={sound}
-          onCheckedChange={(on) => {
-            setMoveSoundOn(on)
-            setSound(on)
-          }}
         />
       </Row>
     </section>

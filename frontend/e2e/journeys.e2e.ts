@@ -290,6 +290,38 @@ test('the page at / credits the Merida pieces, the move sound and the model logo
   await expect(page.locator('.chessboard g[data-piece="wk"]')).toHaveCount(1)
 })
 
+test('Move sound is off until switched on in Preferences; then every move clicks, in this browser across reloads', async ({ page }) => {
+  // Counts the sounds the page plays, as the paths of their files.
+  await page.addInitScript(() => {
+    const played: string[] = []
+    Object.assign(window, { played })
+    HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+      played.push(new URL(this.src).pathname)
+      return Promise.resolve()
+    }
+  })
+  const played = () => page.evaluate(() => (window as unknown as { played: string[] }).played)
+  await playLlm(page, { black: ['e5', 'Nc6'] })
+
+  await move(page, 'e2e4', 'e5')
+  expect(await played()).toEqual([])
+
+  await page.getByRole('button', { name: 'Preferences' }).click()
+  const sound = page.getByRole('dialog', { name: 'Preferences' }).getByRole('switch', { name: 'Move sound' })
+  await expect(sound).not.toBeChecked()
+  await sound.click()
+  await expect(sound).toBeChecked()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Preferences' })).toHaveCount(0)
+
+  await move(page, 'g1f3', 'Nc6')
+  await expect.poll(played).toEqual(['/static/sounds/move.mp3', '/static/sounds/move.mp3']) // Nf3 and Nc6
+
+  await page.reload()
+  await page.getByRole('button', { name: 'Preferences' }).click()
+  await expect(page.getByRole('dialog', { name: 'Preferences' }).getByRole('switch', { name: 'Move sound' })).toBeChecked()
+})
+
 /** The strips above and below the board, top first, by their side, each checked to be at the board's width. */
 async function stripsAroundBoard(page: Page) {
   const board = (await page.locator('.chessboard').boundingBox())!

@@ -2,6 +2,13 @@
 
 The frontend's design system as shipped by the restyle (#52), recorded from the code in `frontend/`. Three surfaces share it: the game page (`/`), the Analytics page (`/analytics`) and the Settings modal. The board keeps its lichess look and is not part of it.
 
+## Rules for the whole UI
+
+- **Icon and short name, the explanation on hover.** A choice or control shows an icon and its short name. Its description, hint, or the reason it is disabled appears in a `Tooltip` on hover and on keyboard focus, and the same text is the control's `aria-description` for screen readers. No secondary text lines under options. The trigger is the control itself, or a row holding the control's name and the control (as Move sound in Preferences), so hovering the name and focusing the control both show it.
+- **Icons: Lucide** for every interface icon, **Lobe Icons** for model logos (as in the player strips). No other icon set; an icon Lucide lacks is drawn in Lucide's line style (e.g. thinking off is Lucide `Brain` with a slash, as Lucide draws its `*Off` icons). No text glyphs (♔ ♚ ⇄ ▸).
+
+The Settings modal predates both rules and still has description lines; the New game sheet replacing it follows them.
+
 ## Style: shadcn Luma
 
 `"style": "base-luma"` in `frontend/components.json` (Base UI primitives, Lucide icons). Its traits, as the installed components in `frontend/src/components/ui/` carry them:
@@ -13,7 +20,7 @@ The frontend's design system as shipped by the restyle (#52), recorded from the 
 
 The radius scale comes from `--radius: 0.625rem` (`--radius-sm` to `--radius-4xl` in `@theme inline`).
 
-Installed components: Alert, Avatar, Badge, Button, Card, Collapsible (not used yet), Dialog, Item, Kbd, Radio group, Scroll area, Select, Separator, Switch, Table, Tooltip. Add more with `pnpm dlx shadcn@latest add <name>` in `frontend/`.
+Installed components: Alert, Avatar, Badge, Button, Card, Collapsible (not used yet), Dialog, Item, Kbd, Popover, Radio group, Scroll area, Select, Separator, Switch, Table, Tooltip. Add more with `pnpm dlx shadcn@latest add <name>` in `frontend/`.
 
 A link styled as a button merges `buttonVariants` with `cn`, as `Button` does (`linkClass` in `TopBar.tsx`); on their own the variant's classes conflict with the base ones (an `outline` link loses its border).
 
@@ -25,7 +32,7 @@ The `:root` variables in `frontend/src/index.css`: shadcn's lightness steps with
 | --- | --- | --- |
 | `--background` | `oklch(0.963 0.006 75)` | the page, a warm off-white |
 | `--foreground`, `--card-foreground`, `--popover-foreground` | `oklch(0.16 0.006 55)` | text |
-| `--card`, `--popover` | `oklch(0.997 0.001 90)` | cards, the Dialog, Select popups |
+| `--card`, `--popover` | `oklch(0.997 0.001 90)` | cards, the Dialog, Select popups, the Preferences panel |
 | `--primary` | `oklch(0.23 0.008 55)` | default Button, timer, turn ring, checked Switch |
 | `--primary-foreground` | `oklch(0.985 0.002 80)` | text on primary |
 | `--secondary`, `--muted` | `oklch(0.948 0.006 70)` | filled surfaces, `secondary` Badges |
@@ -87,13 +94,21 @@ The board keeps its own small face for the coordinates and its flashes (`board.c
 
 ## Icons: Lucide
 
-All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Swords` Play LLM, `Bot` LLM faceoff, `ArrowRight` the result's New game, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
+All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings2` Settings and the pending-settings Badge, `Settings` (the gear) Preferences, `Swords` Play LLM, `Bot` LLM faceoff, `ArrowRight` the result's New game, `User` the human, `Sparkles` spawned pieces, `X` illegal tries, `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Zap` chaos moves, `ArrowUp` / `ArrowDown` the sorted column. In the Settings modal: `Swords` Game, `Bot` Model and `SlidersHorizontal` Advanced for its sections, and `ArrowLeftRight` to swap the sides. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
 
 ## Layout
 
 ### Top bar
 
-`frontend/src/components/top-bar/TopBar.tsx`, on every page, everything on the left: the **ChessLLM** mark (the Merida rook on a light square, `frontend/src/assets/chessllm-rook.svg`, also the browser tab's icon in `frontend/index.html`) linking to the game, then **Analytics** (`ghost`, filled `muted` on its own page), **New game** (`outline`) and **Settings** (`ghost`). ⌘K shows only in the Settings button's Tooltip ("Settings" + `Kbd`). On a page without the game, New game and Settings (and ⌘K) link to the game page with `?then=new-game` / `?then=settings`, which does it once the game is shown. No settings show in the top bar.
+`frontend/src/components/top-bar/TopBar.tsx`, on every page: on the left the **ChessLLM** mark (the Merida rook on a light square, `frontend/src/assets/chessllm-rook.svg`, also the browser tab's icon in `frontend/index.html`) linking to the game, then **Analytics** (`ghost`, filled `muted` on its own page), **New game** (`outline`) and **Settings** (`ghost`), and on the right (`ml-auto`) the gear **Preferences** icon button (below). ⌘K shows only in the Settings button's Tooltip ("Settings" + `Kbd`). On a page without the game, New game and Settings (and ⌘K) link to the game page with `?then=new-game` / `?then=settings`, which does it once the game is shown. No game settings show in the top bar; Preferences holds only this browser's own choices.
+
+### Preferences
+
+`frontend/src/components/top-bar/Preferences.tsx`, the same on every page: a `ghost` `size="icon"` Button with Lucide `Settings` (the gear), named "Preferences" for screen readers and in its Tooltip. It opens a `Popover` (`w-64`, aligned to its end, so it opens leftwards under the gear) titled **Preferences**, holding the preferences of this browser rather than of a game:
+
+- **Move sound**: its name and a `Switch` on one row, the explanation "A click on every move. Applies at once, in this browser." in a Tooltip on the row (hover, and focus on the switch) and as the switch's `aria-description`. It applies at once and is kept in `localStorage` (`chessllm.moveSound`, `frontend/src/components/board/moveSound.ts`), **off by default**: on only when stored as `'on'`.
+
+Opening the panel moves focus to its first control; Esc or a click outside closes it.
 
 The page footer is one muted line of credits: the Merida pieces, the move sound and the model logos.
 
@@ -117,7 +132,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 
 | Box | Components |
 | --- | --- |
-| Top bar | ghost / outline `Button`s (links as `buttonVariants`), `Tooltip` + `Kbd` |
+| Top bar | ghost / outline `Button`s (links as `buttonVariants`), `Tooltip` + `Kbd`; Preferences: icon `Button`, `Popover`, `Switch`, `Tooltip` |
 | Game card | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Separator`, `Button size="lg"`, `Badge variant="secondary"` |
 | Reasoning panel | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Badge` (`secondary`, or `destructive` when forfeited) |
 | Player strip | `Item` holding a pill with `Avatar` / `AvatarFallback`; Merida pieces; `Badge variant="secondary"` for +N |
