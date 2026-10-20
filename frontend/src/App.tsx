@@ -10,7 +10,7 @@ import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { Captures } from '@/components/player-strip/Captures'
 import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
-import { ReasoningPanel } from '@/components/reasoning/ReasoningPanel'
+import { TurnPanelPrototype } from '@/components/reasoning/TurnPanel.prototype'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -127,7 +127,7 @@ export default function App() {
           game && shown ? (
             <>
               <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
-              <ReasoningPanel game={game} ply={shown.ply} live={!history} />
+              <TurnPanelPrototype game={game} ply={shown.ply} live={!history} />
             </>
           ) : (
             startError !== null && (
