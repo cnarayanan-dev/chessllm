@@ -216,23 +216,22 @@ test('an invalid try before a chaos move stays struck through under it', () => {
   expect(within(moveList()).getByText('Bb4')).toHaveClass('chaos')
 })
 
-/** The totals, a line per LLM side. */
-const totals = () => [...screen.getByTestId('totals').children].map((line) => line.textContent)
+/** The LLM mistakes card's rows, cell by cell: White's number, the metric, Black's number, for the LLM sides. */
+const mistakes = () =>
+  [...screen.getByTestId('mistakes-card').querySelectorAll('tbody tr')].map((row) =>
+    [...row.children].map((cell) => cell.textContent),
+  )
 
-test("the totals line counts the LLM's illegal tries and notation slips", () => {
+test("the LLM mistakes card counts the LLM's illegal tries and notation slips", () => {
   const game = withMistakes()
   const stats = { ...game.stats.black!, illegal_moves: { invalid: 1, illegal: 1, ambiguous: 0 }, notation_slips: 1 }
   render(<MovesCard game={{ ...game, stats: { white: null, black: stats } }} />)
 
-  expect(totals()).toEqual(['2 illegal tries · 1 notation slip'])
-  expect(icons(screen.getByTestId('totals'))).toEqual(['lucide-x', 'lucide-pen-line'])
-})
-
-test('the totals say one illegal try, and no notation slips', () => {
-  const turn = aTurn('e5', { attempts: [anAttempt('Ke7', 'illegal'), anAttempt('e5', 'legal')] })
-  render(<MovesCard game={aGame({ pgn: '1. e4 e5', llm_turn: turn, llm_turns: [turn] })} />)
-
-  expect(totals()).toEqual(['1 illegal try · 0 notation slips'])
+  expect(mistakes()).toEqual([
+    ['Illegal tries', '2'],
+    ['Notation slips', '1'],
+  ])
+  expect(icons(screen.getByTestId('mistakes-card'))).toEqual(['lucide-x', 'lucide-pen-line'])
 })
 
 test('under Enforced decoding illegal tries are not applicable, unless one gets through anyway', () => {
@@ -240,16 +239,16 @@ test('under Enforced decoding illegal tries are not applicable, unless one gets 
   enforced.stats.black = { ...enforced.stats.black!, legal_move_streak: null, illegal_moves: null, recovered_turns: null }
   const { unmount } = render(<MovesCard game={enforced} />)
 
-  expect(totals()).toEqual(['illegal tries n/a · 0 notation slips'])
+  expect(mistakes()[0]).toEqual(['Illegal tries', '–'])
   unmount()
 
   const turn = aTurn('e5', { attempts: [anAttempt('Ke7', 'illegal'), anAttempt('e5', 'legal')] })
   render(<MovesCard game={{ ...enforced, llm_turn: turn, llm_turns: [turn] }} />)
 
-  expect(totals()).toEqual(['1 illegal try · 0 notation slips'])
+  expect(mistakes()[0]).toEqual(['Illegal tries', '1'])
 })
 
-test('in a faceoff there is a total per LLM side, named by its model', () => {
+test('in a faceoff the sides are head to head, White left and Black right, the side with more in red', () => {
   const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
   const white = aTurn('e4', { ply: 1, color: 'white', attempts: [anAttempt('Ke2', 'illegal'), anAttempt('e4', 'legal')] })
   const game = aGame({
@@ -260,13 +259,46 @@ test('in a faceoff there is a total per LLM side, named by its model', () => {
   game.stats.white = game.stats.black
   render(<MovesCard game={game} />)
 
-  expect(totals()).toEqual([
-    'White · gemma3:4b 1 illegal try · 0 notation slips',
-    'Black · qwen3.5:9b 0 illegal tries · 0 notation slips',
+  const card = screen.getByTestId('mistakes-card')
+  expect([...card.querySelectorAll('thead th')].map((head) => head.textContent)).toEqual(['White', '', 'Black'])
+  expect(within(card).getByText('White')).toHaveAttribute('aria-description', 'gemma3:4b')
+  expect(within(card).getByText('Black')).toHaveAttribute('aria-description', 'qwen3.5:9b')
+  expect(mistakes()).toEqual([
+    ['1', 'Illegal tries', '0'],
+    ['0', 'Notation slips', '0'],
   ])
+  expect([...card.querySelectorAll('[data-more]')].map((cell) => cell.textContent)).toEqual(['1'])
 })
 
-test('"Show LLM mistakes" hides the mistakes and the totals, and is kept in the browser', async () => {
+test("a metric's name and meaning show in its tooltip on hover, and in aria-description", async () => {
+  render(<MovesCard game={withMistakes()} />)
+  const slips = within(screen.getByTestId('mistakes-card')).getByText('Notation slips')
+
+  expect(slips).toHaveAttribute('aria-description', 'Legal moves written in the wrong notation.')
+  await userEvent.hover(slips)
+  const tooltip = (await screen.findByText('Legal moves written in the wrong notation.')).closest(
+    '[data-slot=tooltip-content]',
+  )
+  expect(tooltip).toHaveTextContent('Notation slips Legal moves written in the wrong notation.')
+})
+
+test('in a faceoff a tie is not in red', () => {
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const white = aTurn('e4', { ply: 1, color: 'white', attempts: [anAttempt('Ke2', 'illegal'), anAttempt('e4', 'legal')] })
+  const black = aTurn('e5', { attempts: [anAttempt('Ke7', 'illegal'), anAttempt('e5', 'legal')] })
+  const game = aGame({
+    pgn: '1. e4 e5',
+    settings: { ...aGame().settings, mode: 'llm_faceoff', white: { ...llm, model: 'gemma3:4b' }, black: llm },
+    llm_turns: [white, black],
+  })
+  game.stats.white = game.stats.black
+  render(<MovesCard game={game} />)
+
+  expect(mistakes()[0]).toEqual(['1', 'Illegal tries', '1'])
+  expect(screen.getByTestId('mistakes-card').querySelector('[data-more]')).toBeNull()
+})
+
+test('"Show LLM mistakes" hides the mistakes and the LLM mistakes card, and is kept in the browser', async () => {
   localStorage.clear()
   const { unmount } = render(<MovesCard game={withMistakes()} />)
   const toggle = screen.getByRole('switch', { name: 'Show LLM mistakes' })
@@ -277,7 +309,7 @@ test('"Show LLM mistakes" hides the mistakes and the totals, and is kept in the 
   expect(toggle).not.toBeChecked()
   expect(chips()).toEqual([])
   expect(within(moveList()).getByText('Nf6')).not.toHaveClass('slip')
-  expect(screen.queryByTestId('totals')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('mistakes-card')).not.toBeInTheDocument()
   expect(rows()).toEqual([['1.', 'e4', 'Nf6']])
   expect(localStorage.getItem('chessllm.showMistakes')).toBe('off')
 

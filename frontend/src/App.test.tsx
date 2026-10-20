@@ -63,14 +63,19 @@ const gameCard = () => screen.getByRole('region', { name: 'Game' })
 const reasoning = () => screen.getByRole('region', { name: 'Reasoning' })
 /** The Game card's players, White first, each as its side and name. */
 const players = () =>
-  within(within(gameCard()).getByRole('list', { name: 'Players' }))
+  [...within(gameCard()).getByRole('list', { name: 'Players' }).querySelectorAll(':scope > li')].map((item) => {
+    // The side and the model; a setting the LLMs differ in, on the row too, is left out.
+    const row = item.cloneNode(true) as Element
+    row.querySelector('ul')?.remove()
+    return row.textContent
+  })
+/** The Game card's settings: the Rules chip by its accessible name, then the line of the others, item by item. */
+const settingsItems = () => [
+  within(gameCard()).getByRole('img', { name: /rules$/ }).getAttribute('aria-label'),
+  ...within(within(gameCard()).getByRole('list', { name: 'Settings' }))
     .getAllByRole('listitem')
-    .map((item) => item.textContent)
-/** The Game card's settings, chip by chip, by their accessible names. */
-const settingsItems = () =>
-  within(within(gameCard()).getByRole('list', { name: 'Settings' }))
-    .getAllByRole('img')
-    .map((chip) => chip.getAttribute('aria-label'))
+    .map((item) => item.textContent!.replace(/^\u00a0·\u00a0/, '')),
+]
 
 /** Plays a move on the board, once the board takes moves. */
 async function drop(from: string, to: string) {
@@ -100,8 +105,8 @@ test('shows the current game: the Game card, the player strips and the board', a
   expect(screen.queryByTestId('status')).not.toBeInTheDocument()
   expect(within(gameCard()).getByText('Play LLM')).toBeInTheDocument()
   expect(settingsItems()).toEqual([
-    'Board only (Free)',
     'Standard rules',
+    'Board only (Free)',
     'Explained feedback',
     'Thinking off',
     'Forfeit after 5 illegal moves',
@@ -651,7 +656,11 @@ test("an LLM turn's mistakes land in the moves card and flash on the board until
   const moves = screen.getByTestId('moves')
   expect(within(moves).getByText('e4')).toBeInTheDocument()
   expect(within(moves).getByText('illegal · try 1', { exact: false })).toHaveClass('mistake', 'illegal')
-  expect(screen.getByTestId('totals')).toHaveTextContent('1 illegal try · 0 notation slips')
+  expect(screen.getByTestId('mistakes-card')).toHaveTextContent('Illegal tries1Notation slips0')
+  // The LLM mistakes card is a card of its own, directly under the Moves card.
+  const card = screen.getByTestId('mistakes-card')
+  expect(card.parentElement).toBe(screen.getByTestId('moves-column'))
+  expect(card.previousElementSibling).toContainElement(moves)
 
   // The flashes go at the start, before the new game has arrived.
   const sheet = await openSheet()
@@ -899,12 +908,12 @@ describe('Chaos rules', () => {
     expect(ahead('white')).toBe('+9')
   })
 
-  test('the totals add the chaos moves and spawns', async () => {
+  test('the LLM mistakes card adds the chaos moves and spawns', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(chaosGame(8)))
     renderApp()
 
-    expect(await screen.findByTestId('totals')).toHaveTextContent(
-      '3 illegal tries · 0 notation slips · 3 chaos moves (1 spawn)',
+    expect(await screen.findByTestId('mistakes-card')).toHaveTextContent(
+      'Illegal tries3Notation slips0Chaos moves3Spawns1',
     )
   })
 

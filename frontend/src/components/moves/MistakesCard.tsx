@@ -1,0 +1,144 @@
+/*
+  The LLM mistakes card, under the Moves card: the LLM sides' totals head to head, White's number | the metric |
+  Black's number. A row per metric: illegal tries and notation slips, and under Chaos rules chaos moves and spawns.
+  In a faceoff the side with more of a mistake is in red. The metric's meaning is in its tooltip (the hover rule).
+*/
+import { PenLine, Sparkles, X, Zap, type LucideIcon } from 'lucide-react'
+import type { Color, GameState } from '@/api/types'
+import { Card, CardContent, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { COLOR_NAMES, llmColors } from '@/game/wording'
+import { cn } from '@/lib/utils'
+
+type Metric = 'illegal' | 'slips' | 'chaos' | 'spawns'
+
+const METRICS: Record<Metric, { icon: LucideIcon; name: string; description: string }> = {
+  illegal: { icon: X, name: 'Illegal tries', description: 'Moves tried that were not legal, or could not be read.' },
+  slips: { icon: PenLine, name: 'Notation slips', description: 'Legal moves written in the wrong notation.' },
+  chaos: { icon: Zap, name: 'Chaos moves', description: 'Illegal moves played anyway, under Chaos rules.' },
+  spawns: { icon: Sparkles, name: 'Spawns', description: 'Chaos moves that put a new piece on the board.' },
+}
+
+/** A side's counts; null where a metric does not apply to it. */
+type Counts = Record<Metric, number | null>
+
+function counts(game: GameState, color: Color): Counts {
+  // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
+  const attempts = game.llm_turns.filter((turn) => turn.color === color).flatMap((turn) => turn.attempts)
+  const illegal = attempts.filter((attempt) => attempt.result !== 'legal' && !attempt.error).length
+  const stats = game.stats[color]
+  const chaos = stats?.chaos_moves ?? null
+  return {
+    // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
+    illegal: stats?.illegal_moves === null && illegal === 0 ? null : illegal,
+    slips: stats?.notation_slips ?? 0,
+    chaos,
+    spawns: chaos === null ? null : (stats?.spawns ?? 0),
+  }
+}
+
+/** A side's column head: its colour and dot, the model in the tooltip. */
+function SideHead({ color, model }: { color: Color; model: string }) {
+  const dot = (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'size-2.5 flex-none rounded-full border-[1.5px] border-foreground',
+        color === 'white' ? 'bg-card' : 'bg-foreground',
+      )}
+    />
+  )
+  return (
+    <TableHead className={color === 'black' ? 'text-right' : undefined}>
+      <Tooltip>
+        <TooltipTrigger
+          delay={150}
+          render={
+            <span tabIndex={0} aria-description={model} className="inline-flex cursor-help items-center gap-1.5" />
+          }
+        >
+          {color === 'white' && dot}
+          {COLOR_NAMES[color]}
+          {color === 'black' && dot}
+        </TooltipTrigger>
+        <TooltipContent>{model}</TooltipContent>
+      </Tooltip>
+    </TableHead>
+  )
+}
+
+function MetricName({ metric }: { metric: Metric }) {
+  const { icon: Icon, name, description } = METRICS[metric]
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={150}
+        render={
+          <span tabIndex={0} aria-description={description} className="inline-flex cursor-help items-center gap-1.5" />
+        }
+      >
+        <Icon className="size-3.5" aria-hidden="true" />
+        {name}
+      </TooltipTrigger>
+      <TooltipContent className="block max-w-64">
+        <span className="font-semibold">{name}</span> {description}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+export function MistakesCard({ game }: { game: GameState }) {
+  const sides = new Map(llmColors(game).map((color) => [color, counts(game, color)]))
+  const metrics: Metric[] = [...sides.values()].some((side) => side.chaos !== null)
+    ? ['illegal', 'slips', 'chaos', 'spawns']
+    : ['illegal', 'slips']
+  const model = (color: Color) => {
+    const side = game.settings[color]
+    return side.player === 'llm' ? side.model : ''
+  }
+  const countCell = (color: Color, metric: Metric) => {
+    const mine = sides.get(color)![metric]
+    const other = sides.get(color === 'white' ? 'black' : 'white')?.[metric]
+    const more = mine !== null && other != null && mine > other
+    return (
+      <TableCell
+        data-more={more || undefined}
+        className={cn(
+          'text-base tabular-nums',
+          color === 'black' && 'text-right',
+          more ? 'font-semibold text-destructive' : !mine && 'text-muted-foreground',
+        )}
+      >
+        {mine === null ? '–' : mine}
+      </TableCell>
+    )
+  }
+  return (
+    <Card size="sm" data-testid="mistakes-card">
+      <CardContent>
+        <CardTitle className="mb-2 font-semibold text-card-foreground">LLM mistakes</CardTitle>
+        <Table className="text-xs [&_td]:px-1.5 [&_th]:px-1.5">
+          <TableHeader>
+            <TableRow>
+              {sides.has('white') && <SideHead color="white" model={model('white')} />}
+              <TableHead />
+              {sides.has('black') && <SideHead color="black" model={model('black')} />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {metrics.map((metric) => (
+              <TableRow key={metric}>
+                {sides.has('white') && countCell('white', metric)}
+                <TableCell className="text-center text-muted-foreground">
+                  <MetricName metric={metric} />
+                </TableCell>
+                {sides.has('black') && countCell('black', metric)}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}

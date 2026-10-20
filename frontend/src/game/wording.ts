@@ -62,13 +62,16 @@ export function resultText(game: GameState): { result: string; detail: string | 
   return { result: `${title} ${reason}`, detail }
 }
 
-/** A setting of the running game as the Game card shows it: one icon, its name and meaning in the tooltip. */
+/** A setting of the running game as the Game card shows it: the Rules as an icon, the rest as text, the meaning in
+ * the tooltip. */
 export type GameSetting = {
   setting: 'llm_constraints' | 'rules' | 'retry_feedback' | 'thinking' | 'max_attempts'
   /** The setting's value as the API names it ('free', 'chaos', …), 'on' / 'off' for thinking, the number of moves. */
   value: string
   /** The short name, e.g. "Board only (Free)"; in a faceoff whose LLMs differ in it, after the side ("White: …"). */
   name: string
+  /** The short name without the side, for where the side is already shown (the Game card's player rows). */
+  plainName: string
   description: string
   /** The LLM's side, when the two LLMs of a faceoff differ in the setting; otherwise null. */
   color: Color | null
@@ -134,17 +137,21 @@ export function gameSettings(game: GameState): GameSetting[] {
   const sides = colors.map((color) => llmSide(game, color))
   const perSide = (setting: GameSetting['setting'], shown: (side: LlmSide) => Shown | null): GameSetting[] => {
     const values = sides.map(shown)
-    if (new Set(values).size === 1) return values[0] ? [{ setting, ...values[0], color: null }] : []
+    if (new Set(values).size === 1) {
+      return values[0] ? [{ setting, ...values[0], plainName: values[0].name, color: null }] : []
+    }
     return colors.flatMap((color, i) => {
       const value = values[i]
-      return value ? [{ setting, ...value, name: `${COLOR_NAMES[color]}: ${value.name}`, color }] : []
+      if (!value) return []
+      return [{ setting, ...value, name: `${COLOR_NAMES[color]}: ${value.name}`, plainName: value.name, color }]
     })
   }
+  const rules = RULES[game.settings.rules ?? 'standard']
   const attempts = game.settings.max_attempts
   const moves = `${attempts} illegal ${attempts === 1 ? 'move' : 'moves'}`
   return [
     ...perSide('llm_constraints', (side) => LLM_CONSTRAINTS[side.llm_constraints]),
-    { setting: 'rules', ...RULES[game.settings.rules ?? 'standard'], color: null },
+    { setting: 'rules', ...rules, plainName: rules.name, color: null },
     ...perSide('retry_feedback', (side) => (enforced(side) ? null : RETRY_FEEDBACK[side.retry_feedback])),
     ...perSide('thinking', (side) => THINKING[side.thinking ? 'on' : 'off']),
     ...(sides.some((side) => !enforced(side))
@@ -153,6 +160,7 @@ export function gameSettings(game: GameState): GameSetting[] {
             setting: 'max_attempts' as const,
             value: String(attempts),
             name: `Forfeit after ${moves}`,
+            plainName: `Forfeit after ${moves}`,
             description: `An LLM loses after ${moves} in one turn.`,
             color: null,
           },

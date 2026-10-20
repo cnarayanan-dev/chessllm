@@ -25,9 +25,14 @@ const icons = (element: Element) =>
   [...element.querySelectorAll('svg.lucide')].map((svg) =>
     [...svg.classList].find((name) => name.startsWith('lucide-'))!.replace('lucide-', ''),
   )
-const chips = () => within(within(gameCard()).getByRole('list', { name: 'Settings' })).getAllByRole('listitem')
-/** The setting chips, each as its icon and its accessible name. */
-const settingIcons = () => chips().map((item) => `${icons(item).join(' ')}: ${within(item).getByRole('img').getAttribute('aria-label')}`)
+/** The Rules chip, the one setting shown as an icon: its icon and its name beside it. */
+const rules = () => {
+  const chip = within(gameCard()).getByRole('img', { name: /rules$/ })
+  return `${icons(chip).join(' ')}: ${chip.textContent}`
+}
+/** A line of settings as text: the shared one ("Settings") or a player's ("White's settings"). */
+const line = (name: string) =>
+  within(within(gameCard()).getByRole('list', { name })).getAllByRole('listitem').map((item) => item.textContent!.replace(/^\u00a0·\u00a0/, ''))
 
 test("the Mode icon shows the players beside the Mode's name: you against an LLM, or an LLM against an LLM", () => {
   const { unmount } = renderCard(aGame())
@@ -42,49 +47,43 @@ test("the Mode icon shows the players beside the Mode's name: you against an LLM
   expect(within(gameCard()).getByText('LLM faceoff')).toBeInTheDocument()
 })
 
-test('each setting is one icon, named for screen readers, with no settings text line', () => {
+test('the Rules are the one setting shown as an icon, named beside it; the others are a line of text', () => {
   renderCard(aGame())
 
-  expect(settingIcons()).toEqual([
-    'eye: Board only (Free)',
-    'chess-knight: Standard rules',
-    'message-square-text: Explained feedback',
-    'brain-off: Thinking off',
-    'flag: Forfeit after 5 illegal moves',
-  ])
-  expect(gameCard()).not.toHaveTextContent(/Board only|Standard rules|feedback|Thinking|Forfeit/)
+  expect(rules()).toBe('chess-knight: Standard rules')
+  expect(line('Settings')).toEqual(['Board only (Free)', 'Explained feedback', 'Thinking off', 'Forfeit after 5 illegal moves'])
+  expect(icons(within(gameCard()).getByRole('list', { name: 'Settings' }))).toEqual([])
 })
 
-test('the icons of the other values', () => {
+test('the other values: Chaos rules as a zap', () => {
   renderCard(
     chaosGame(1, {
       settings: { ...chaosGame(1).settings, black: { ...llm, llm_constraints: 'listed', retry_feedback: 'hinted', thinking: true } },
     }),
   )
 
-  expect(settingIcons()).toEqual([
-    'list-checks: Board + legal moves (Listed)',
-    'zap: Chaos rules',
-    'lightbulb: Hinted feedback',
-    'brain: Thinking on',
-    'flag: Forfeit after 5 illegal moves',
+  expect(rules()).toBe('zap: Chaos rules')
+  expect(line('Settings')).toEqual([
+    'Board + legal moves (Listed)',
+    'Hinted feedback',
+    'Thinking on',
+    'Forfeit after 5 illegal moves',
   ])
 })
 
 test('under an enforced constraint there is no Retry feedback and no forfeit limit', () => {
   renderCard(faceoffOf({ llm_constraints: 'blind_enforced' }, { llm_constraints: 'listed_enforced', retry_feedback: 'bare' }))
 
-  expect(settingIcons()).toEqual([
-    'lock: White: Kept legal, not told (Blind enforced)',
-    'shield-check: Black: Shown and kept legal (Listed enforced)',
-    'chess-knight: Standard rules',
-    'brain-off: Thinking off',
-  ])
+  expect(line('Settings')).toEqual(['Thinking off'])
+  expect(line("White's settings")).toEqual(['Kept legal, not told (Blind enforced)'])
+  expect(line("Black's settings")).toEqual(['Shown and kept legal (Listed enforced)'])
 })
 
 test("a setting's meaning shows in its tooltip on hover and keyboard focus, and in aria-description", async () => {
   renderCard(aGame())
-  const free = within(chips()[0]).getByRole('img')
+  const standard = within(gameCard()).getByRole('img', { name: 'Standard rules' })
+  expect(standard).toHaveAttribute('aria-description', 'Normal chess. Rated.')
+  const free = within(gameCard()).getByText('Board only (Free)')
 
   expect(free).toHaveAttribute('aria-description', 'The LLM finds its own moves and can play an illegal one.')
   await userEvent.hover(free)
@@ -95,24 +94,18 @@ test("a setting's meaning shows in its tooltip on hover and keyboard focus, and 
   await userEvent.unhover(free)
 
   await userEvent.tab()
+  await userEvent.tab()
   expect(free).toHaveFocus()
   expect(await screen.findByText('The LLM finds its own moves and can play an illegal one.')).toBeInTheDocument()
 })
 
-test('in a faceoff a setting the LLMs share is one icon; one that differs is one per side, with a colour dot', () => {
+test("in a faceoff a setting the LLMs share is in the line; one that differs is on each player's row", () => {
   renderCard(faceoffOf({ thinking: true }, { retry_feedback: 'bare' }))
 
-  expect(settingIcons()).toEqual([
-    'eye: Board only (Free)',
-    'chess-knight: Standard rules',
-    'message-square-text: White: Explained feedback',
-    'message-square: Black: Bare feedback',
-    'brain: White: Thinking on',
-    'brain-off: Black: Thinking off',
-    'flag: Forfeit after 5 illegal moves',
-  ])
-  const dots = chips().map((item) => item.querySelector('[data-side]')?.getAttribute('data-side') ?? null)
-  expect(dots).toEqual([null, null, 'white', 'black', 'white', 'black', null])
+  expect(line('Settings')).toEqual(['Board only (Free)', 'Forfeit after 5 illegal moves'])
+  expect(line("White's settings")).toEqual(['Explained feedback', 'Thinking on'])
+  expect(line("Black's settings")).toEqual(['Bare feedback', 'Thinking off'])
+  expect(within(gameCard()).getByText('Thinking on')).toHaveAttribute('aria-description', 'The LLM reasons before each move.')
 })
 
 test('the players are shown by name with their colour, without a model logo', () => {

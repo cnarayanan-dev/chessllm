@@ -131,3 +131,16 @@ test('in a faceoff a setting the LLMs share is one item; one that differs is one
     'Black: Thinking on',
   ])
 })
+
+test("each setting also has its name without the side, for where the side is already shown", () => {
+  const game = faceoffOf({ thinking: false }, { thinking: true })
+
+  expect(gameSettings(game).map((item) => item.plainName)).toEqual([
+    'Board only (Free)',
+    'Standard rules',
+    'Explained feedback',
+    'Thinking off',
+    'Thinking on',
+    'Forfeit after 5 illegal moves',
+  ])
+})
