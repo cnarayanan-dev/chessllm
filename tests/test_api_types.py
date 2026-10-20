@@ -34,7 +34,7 @@ def test_whole_number_sampling_stays_a_whole_number_in_the_json(scripted, tmp_pa
     config = tmp_path / "sampling.toml"
     config.write_text("top_k = 40\ntemperature = 0.5\n")
     defaults = {"llama3:8b": {"seed": 7, "top_p": 1.0}}
-    models = [LlmModel("llama3:8b", thinking=False)]
+    models = [LlmModel("llama3:8b")]
     client, _ = scripted([], models=models, sampling_defaults=defaults.__getitem__, sampling_file=config)
 
     assert '"sampling":{"seed":7,"top_p":1.0,"top_k":40,"temperature":0.5}' in client.get("/api/models").text

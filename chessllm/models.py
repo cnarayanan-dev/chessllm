@@ -29,20 +29,32 @@ SAMPLING_OPTIONS = frozenset(
 @dataclass(frozen=True)
 class LlmModel:
     name: str  # the Ollama model name
-    thinking: bool  # whether it can think before it answers (Ollama's "thinking" capability)
+    # The thinking values `ollama show` lists for it: false and true for on/off, or false and its Thinking levels,
+    # e.g. "xhigh". Empty when it can't think (no "thinking" capability).
+    thinking_values: tuple[bool | str, ...] = ()
+
+    @property
+    def thinking(self) -> bool:
+        """Whether it can think before it answers. Thinking on is always offered then, at Ollama's default level."""
+        return any(value is not False for value in self.thinking_values)
+
+    @property
+    def thinking_levels(self) -> tuple[str, ...]:
+        """The Thinking levels it offers besides on and off, e.g. ("low", "medium", "xhigh")."""
+        return tuple(value for value in self.thinking_values if isinstance(value, str))
 
 
-# The models offered in the New game sheet. Their thinking was checked on 2026-10-19 against the capabilities
-# `ollama show` reports and the Ollama library (ollama.com/library/qwen3.5, ollama.com/library/llama3,
-# ollama.com/library/gemma3).
+# The models offered in the New game sheet, with the thinking values `ollama show` lists for each under Ollama
+# 0.40.0, checked on 2026-10-20 (and their capabilities on 2026-10-19 against the Ollama library:
+# ollama.com/library/qwen3.5, ollama.com/library/llama3, ollama.com/library/gemma3).
 LLM_MODELS = [
-    LlmModel("qwen3.5:9b", thinking=True),  # Qwen 3.5, 9.7B parameters
-    LlmModel("qwen3.8:latest", thinking=True),  # Qwen 3.8, 27.8B parameters
-    LlmModel("llama3:8b", thinking=False),  # Llama 3, 8B parameters
-    LlmModel("gemma3:12b", thinking=False),  # Gemma 3, 11.8B parameters
-    # Gemma 4, 26.2B parameters (a 16 GB nvfp4 build). Checked on 2026-10-20 against `ollama show gemma4:26b`:
-    # thinking false or true, true by default, so the player must always send it.
-    LlmModel("gemma4:26b", thinking=True),
+    LlmModel("qwen3.5:9b", (False, True)),  # Qwen 3.5, 9.7B parameters; thinking on by default
+    # Qwen 3.8, 27.8B parameters. Thinking on means Ollama's default level, medium.
+    LlmModel("qwen3.8:latest", (False, "low", "medium", "xhigh")),
+    LlmModel("llama3:8b"),  # Llama 3, 8B parameters
+    LlmModel("gemma3:12b"),  # Gemma 3, 11.8B parameters
+    # Gemma 4, 26.2B parameters (a 16 GB nvfp4 build). Thinking on by default, so the player must always send it.
+    LlmModel("gemma4:26b", (False, True)),
 ]
 
 

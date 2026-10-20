@@ -4,7 +4,8 @@
 
 Colours alternate game by game, the first model as White in the first game. Both sides share the LLM's settings
 (thinking, LLM constraints, Retry feedback, rules, attempts per turn), as a faceoff started in the app does by default;
---thinking-for MODEL turns thinking on for one model only.
+--thinking-for MODEL turns thinking on for one model only, and --thinking-for MODEL=LEVEL at one of the Thinking levels
+it offers, e.g. qwen3.8:latest=xhigh.
 Each game is analysed as it ends, with Maia-2 and Stockfish (--no-analysis to skip). Ctrl-C stops it, leaving every
 finished game's log complete."""
 
@@ -17,7 +18,7 @@ from typing import get_args
 from chessllm.anchor_batch import Analyser, default_evaluator, default_move_model
 from chessllm.anchor_match import default_player_for, play_anchor_match
 from chessllm.evaluator import Evaluator
-from chessllm.game import COLORS, Color, LlmSide, Rules, Settings
+from chessllm.game import COLORS, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.move_model import MoveModel
@@ -38,9 +39,11 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--thinking-for",
         action="append",
+        type=model_thinking,
         default=[],
-        metavar="MODEL",
-        help="turn thinking on for this model only (repeatable), e.g. a thinking model against one that can't think",
+        metavar="MODEL[=LEVEL]",
+        help="turn thinking on for this model only (repeatable), e.g. a thinking model against one that can't think; "
+        "=LEVEL thinks at one of the Thinking levels the model offers, e.g. qwen3.8:latest=xhigh",
     )
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
@@ -62,13 +65,26 @@ def parser() -> argparse.ArgumentParser:
     return parser
 
 
+def model_thinking(value: str) -> tuple[str, str | None]:
+    """A --thinking-for value: the model, and the Thinking level after "=", if any."""
+    model, _, level = value.partition("=")
+    return model, level or None
+
+
 def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_file: Path) -> Settings:
     """The settings of a faceoff of model white against model black. Raises ValueError when they can't be played."""
 
+    levels: dict[str, str | None] = {}
+    for model, level in args.thinking_for:
+        if levels.get(model, level) != level:
+            raise ValueError(f"--thinking-for gives {model} two Thinking levels, {levels[model]} and {level}")
+        levels[model] = level
+
     def side(model: str) -> LlmSide:
-        return LlmSide(
+        return BenchmarkLlmSide(
             model=model,
-            thinking=args.thinking or model in args.thinking_for,
+            thinking=args.thinking or model in levels,
+            thinking_level=levels.get(model),
             llm_constraints=args.llm_constraints,
             retry_feedback=args.retry_feedback,
             position=args.position,

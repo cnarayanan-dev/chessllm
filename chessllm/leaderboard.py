@@ -12,10 +12,11 @@ from pathlib import Path, PurePath
 from typing import Any
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 from chessllm.analysis import analysis_path
 from chessllm.anchors import ANCHOR_RATINGS, AnchorRating, anchor_name
-from chessllm.game import COLORS, Color, Rules, Settings
+from chessllm.game import COLORS, BenchmarkLlmSide, Color, Rules, Settings
 from chessllm.move_quality import (
     VALIDATION_FILE,
     ConfigurationMoves,
@@ -42,11 +43,16 @@ class PlayerConfiguration(BaseModel):
     # How each turn gives the position; None is the default, fen. Left out when it is fen, as in the game log, so
     # the API's configurations and their ids stay as they were before the setting existed.
     position: PositionFormat | None = Field(None, exclude_if=lambda position: position in (None, "fen"))
+    # The Thinking level, None for plain thinking on or off. Set only by the benchmark's commands, so it is kept out
+    # of the API's schema and output, which stay as they were (#67); it still gives the configuration its own id.
+    thinking_level: SkipJsonSchema[str | None] = Field(None, exclude=True)
 
     def id(self) -> str:
         """A short fingerprint of the settings, the same for the same settings on every request. The default
-        position is left out, so configurations from before the setting keep their id."""
-        settings = self.model_dump()  # without the default position
+        position and no Thinking level are left out, so configurations from before those settings keep their id."""
+        settings = self.model_dump()  # without the default position or the Thinking level
+        if self.thinking_level is not None:
+            settings["thinking_level"] = self.thinking_level
         canonical = json.dumps(settings, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
@@ -300,6 +306,7 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         sampling=sampling if isinstance(sampling, dict) else {},
         prompt=PurePath(prompt_file).name,
         position=side.get("position"),
+        thinking_level=side.get("thinking_level"),
     )
 
 
@@ -316,6 +323,7 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         sampling=dict(settings.sampling),
         prompt=SYSTEM_PROMPT_FILES[side.llm_constraints].name,
         position=side.position,
+        thinking_level=side.thinking_level if isinstance(side, BenchmarkLlmSide) else None,
     )
 
 

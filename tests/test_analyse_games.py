@@ -167,3 +167,20 @@ def test_token_statistics_per_configuration_and_none_from_logs_without_them(tmp_
     assert main(["--games-dir", str(games_dir)]) == 0
     text = capsys.readouterr().out
     assert "thinking tokens median 550, p90 910; prompt tokens median 606; stopped for length: 2" in text
+
+
+def test_a_thinking_level_is_its_own_configuration_and_plain_thinking_on_keeps_its_label(tmp_path):
+    games_dir = tmp_path / "games"
+    qwen38 = QWEN | {"model": "qwen3.8:latest"}
+    write_log(games_dir, "2026-10-19T10-00-00_a", game(qwen38, GEMMA, ["e4", "e5"], "1/2-1/2", "move_cap"))
+    write_log(games_dir, "2026-10-19T10-00-01_b",
+              game(qwen38 | {"thinking_level": "xhigh"}, GEMMA, ["e4", "e5"], "1/2-1/2", "move_cap"))
+
+    report = analyse(load_games(games_dir)[0], Filters())
+
+    labels = sorted(entry["configuration"]["label"] for entry in report["configurations"])
+    assert labels == [
+        "gemma3:12b / free / no thinking / standard / explained feedback",
+        "qwen3.8:latest / free / thinking / standard / explained feedback",
+        "qwen3.8:latest / free / thinking xhigh / standard / explained feedback",
+    ]

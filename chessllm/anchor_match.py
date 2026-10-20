@@ -21,7 +21,17 @@ from chessllm.anchors import (
     configured_dragon_path,
     configured_stockfish_path,
 )
-from chessllm.game import COLORS, AnchorEngine, AnchorSide, Color, GameSession, LlmSide, Rules, Settings
+from chessllm.game import (
+    COLORS,
+    AnchorEngine,
+    AnchorSide,
+    BenchmarkLlmSide,
+    Color,
+    GameSession,
+    LlmSide,
+    Rules,
+    Settings,
+)
 from chessllm.game_log import GAMES_DIR, GameLog
 from chessllm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.players import LlmPlayer
@@ -33,6 +43,11 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     defaults = LlmSide()
     parser.add_argument("--model", default=defaults.model, help=f"the Ollama model (default {defaults.model})")
     parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=defaults.thinking)
+    parser.add_argument(
+        "--thinking-level",
+        metavar="LEVEL",
+        help="think at one of the Thinking levels the model offers, e.g. xhigh for qwen3.8:latest (turns thinking on)",
+    )
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
     parser.add_argument(
@@ -76,9 +91,10 @@ def parser() -> argparse.ArgumentParser:
 def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int, sampling_file: Path) -> Settings:
     """The settings of an Anchor match of the LLM in args at llm_color against Dragon at skill. Raises ValueError
     with the reason when they can't be played."""
-    llm = LlmSide(
+    llm = BenchmarkLlmSide(
         model=args.model,
-        thinking=args.thinking,
+        thinking=args.thinking or args.thinking_level is not None,
+        thinking_level=args.thinking_level,
         llm_constraints=args.llm_constraints,
         retry_feedback=args.retry_feedback,
         position=args.position,

@@ -67,9 +67,38 @@ class LlmSide:
             del shape["position"]
         return shape
 
+    def think(self) -> bool | str:
+        """The thinking sent to Ollama: on or off, on meaning the model's default level."""
+        return self.thinking
+
     def name(self) -> str:
         """The side's name in the PGN, e.g. "llama3:8b (no thinking)"."""
         return f"{self.model} ({'thinking' if self.thinking else 'no thinking'})"
+
+
+@dataclass(frozen=True)
+class BenchmarkLlmSide(LlmSide):
+    """An LLM side with the settings only the benchmark's commands can set: never the API, whose sides are LlmSide,
+    so its types and output don't change (#67). Each is left out of the game log (log_shape) when unset, so a side
+    without them logs, and keeps its Player configuration id, as a plain LlmSide."""
+
+    # One of the Thinking levels the model offers, e.g. "xhigh", sent instead of plain thinking on; needs thinking on.
+    thinking_level: str | None = None
+
+    def log_shape(self) -> dict[str, Any]:
+        shape = super().log_shape()
+        if self.thinking_level is None:
+            del shape["thinking_level"]
+        return shape
+
+    def think(self) -> bool | str:
+        return self.thinking_level if self.thinking_level is not None else self.thinking
+
+    def name(self) -> str:
+        """The side's name in the PGN, e.g. "qwen3.8:latest (thinking xhigh)"."""
+        if self.thinking_level is None:
+            return super().name()
+        return f"{self.model} (thinking {self.thinking_level})"
 
 
 AnchorEngine = Literal["dragon", "stockfish"]
@@ -159,6 +188,16 @@ class Settings:
             model = next((model for model in models if model.name == side.model), None)
             if model is None:
                 return f"{side.model} ({color}) is not in the model list"
+            if isinstance(side, BenchmarkLlmSide) and (level := side.thinking_level) is not None:
+                if not model.thinking:
+                    return f"{side.model} ({color}) cannot think, so it has no Thinking levels"
+                if not model.thinking_levels:
+                    return f"{side.model} ({color}) has no Thinking levels, only thinking on or off"
+                if level not in model.thinking_levels:
+                    offered = ", ".join(model.thinking_levels)
+                    return f"{side.model} ({color}) has no Thinking level {level}: it offers {offered}"
+                if not side.thinking:
+                    return f"{side.model} ({color}) has Thinking level {level}, so thinking must be on"
             if side.thinking and not model.thinking:
                 return f"{side.model} ({color}) cannot think, so thinking must be off"
             if self.rules == "chaos" and side.llm_constraints in ENFORCED:

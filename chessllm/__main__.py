@@ -16,7 +16,7 @@ def player_for(settings: Settings, color: Color) -> OllamaPlayer:
     """The LLM player of one LLM side of a game, built when the game starts."""
     side = settings.side(color)
     assert isinstance(side, LlmSide)
-    return OllamaPlayer(side.model, side.thinking, sampling=settings.sampling)
+    return OllamaPlayer(side.model, side.think(), sampling=settings.sampling)
 
 
 def main() -> None:

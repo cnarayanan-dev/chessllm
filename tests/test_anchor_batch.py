@@ -326,6 +326,7 @@ def test_a_dragon_that_fails_mid_batch_stops_it_with_the_finished_games_logged(t
         (["--rules", "chaos"], "Only Stockfish can be the Anchor under Chaos rules"),
         (["--skill", "8"], "plays at Skill 1-7, not 8"),
         (["--model", "llama3:8b", "--thinking"], "llama3:8b (white) cannot think"),
+        (["--model", "qwen3.8:latest", "--thinking-level", "high"], "has no Thinking level high: it offers low"),
         (["--games", "0"], "the budget must be at least one game"),
     ],
 )

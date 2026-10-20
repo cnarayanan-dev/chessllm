@@ -18,12 +18,14 @@ class OllamaPlayer:
     With thinking off, the schema asks for the reasoning before the move instead. Under Enforced decoding the move
     is an enum of the allowed moves, so Ollama can only produce one of them; the reasoning stays free.
 
-    A call that takes longer than timeout_s is cancelled: closing the connection also stops Ollama generating."""
+    A call that takes longer than timeout_s is cancelled: closing the connection also stops Ollama generating.
+
+    thinking is sent to Ollama exactly as given: on, off, or a Thinking level the model offers, e.g. "xhigh"."""
 
     def __init__(
         self,
         model: str,
-        thinking: bool = True,
+        thinking: bool | str = True,
         chat: Callable[..., ollama.ChatResponse] | None = None,
         timeout_s: float = TIMEOUT_S,
         sampling: dict[str, float] | None = None,

@@ -23,7 +23,7 @@ def test_each_model_shows_its_sampling_defaults_overridden_by_the_config(scripte
     config = tmp_path / "sampling.toml"
     config.write_text("temperature = 0.2\n")
     defaults = {"qwen3.5:9b": {"temperature": 1, "top_p": 0.95}, "llama3:8b": {}}
-    models = [LlmModel("qwen3.5:9b", thinking=True), LlmModel("llama3:8b", thinking=False)]
+    models = [LlmModel("qwen3.5:9b", (False, True)), LlmModel("llama3:8b")]
     client, _ = scripted([], models=models, sampling_defaults=defaults.__getitem__, sampling_file=config)
 
     assert client.get("/api/models").json() == [
@@ -36,7 +36,7 @@ def test_a_model_ollama_cannot_show_is_still_offered_without_sampling(scripted):
     def not_installed(model: str) -> dict[str, float]:
         raise ConnectionError("Failed to connect to Ollama")
 
-    client, _ = scripted([], models=[LlmModel("llama3:8b", thinking=False)], sampling_defaults=not_installed)
+    client, _ = scripted([], models=[LlmModel("llama3:8b")], sampling_defaults=not_installed)
 
     assert client.get("/api/models").json() == [{"name": "llama3:8b", "thinking": False, "sampling": None}]
 

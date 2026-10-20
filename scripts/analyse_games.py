@@ -6,8 +6,8 @@ Run:
     uv run python -m scripts.analyse_games --mode anchor_match --model llama3 --since 2026-10-19
     uv run python -m scripts.analyse_games --include-unfinished --json  # the same report as JSON
 
-A Player configuration is grouped here by model, LLM constraints, thinking, rules, retry feedback and position (the leaderboard
-also splits by sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for
+A Player configuration is grouped here by model, LLM constraints, thinking and its Thinking level, rules, retry
+feedback and position (the leaderboard also splits by sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for
 each side. Both log versions are read (ADR 0004) through chessllm.leaderboard.read_sides; a file that isn't a
 readable game log is skipped and counted.
 
@@ -92,9 +92,12 @@ class Configuration:
     rules: str
     retry_feedback: str
     position: str = "fen"
+    thinking_level: str | None = None  # None for plain thinking on or off
 
     def label(self) -> str:
         thinking = "thinking" if self.thinking else "no thinking"
+        if self.thinking_level is not None:
+            thinking = f"thinking {self.thinking_level}"
         described = " / described position" if self.position != "fen" else ""
         return (
             f"{self.model} / {self.llm_constraints} / {thinking} / {self.rules} / {self.retry_feedback} feedback"
@@ -163,6 +166,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             rules=game.rules,
             retry_feedback=str(side["retry_feedback"]),
             position=str(side.get("position") or "fen"),
+            thinking_level=side.get("thinking_level"),
         )
         other = game.sides["black" if color == "white" else "white"]
         outcome = None if game.end is None else SCORES.get(str(game.end.get("result")), {}).get(color, "draw")

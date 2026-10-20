@@ -151,6 +151,18 @@ def test_an_anchor_match_not_ended_after_150_moves_per_side_is_a_draw_at_the_mov
     assert (len(anchor.moves), len(player.replies)) == (1, 1)  # the 151st moves never asked for
 
 
+def test_a_thinking_level_reaches_the_llms_player_and_is_logged(anchor_match, tmp_path):
+    code, player, _, _ = anchor_match(
+        ["e5", "Qh4#"], ["f3", "g4"], "--model", "qwen3.8:latest", "--thinking-level", "xhigh", "--color", "black"
+    )
+
+    assert code == 0
+    black = events(tmp_path / "games")[0]["black"]
+    assert (black["thinking"], black["thinking_level"]) == (True, "xhigh")
+    assert player.built_for[0].black.think() == "xhigh"
+    assert pgn_game(tmp_path / "games").headers["Black"] == "qwen3.8:latest (thinking xhigh)"
+
+
 @pytest.mark.parametrize(
     ("args", "error"),
     [

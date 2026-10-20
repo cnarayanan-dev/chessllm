@@ -126,6 +126,21 @@ def test_thinking_off_is_sent_as_off_for_a_model_that_thinks_by_default():
     assert request["think"] is False
 
 
+def test_a_thinking_level_is_sent_as_it_is_with_the_thinking_on_schema():
+    calls = []
+
+    def chat(**request):
+        calls.append(request)
+        return ChatResponse(message=OllamaMessage(role="assistant", content='{"move": "e5"}', thinking="Mirror it."))
+
+    reply = OllamaPlayer("qwen3.8:latest", thinking="xhigh", chat=chat).reply([Message("user", "PGN: 1. e4")])
+
+    [request] = calls
+    assert request["think"] == "xhigh"
+    assert request["format"]["required"] == ["move"]
+    assert reply.thinking == "Mirror it."
+
+
 def test_the_reply_carries_the_token_counts_and_stop_reason_with_the_thinking_and_answer_split_by_characters():
     def chat(**request):
         message = OllamaMessage(role="assistant", content='{"move": "e5"}', thinking="M" * 42)  # 14 + 42 characters

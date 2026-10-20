@@ -100,6 +100,10 @@ _Avoid_: Round, step
 The long internal reasoning a model produces before it answers, when thinking is on for its side. Part of the **Player configuration**.
 _Avoid_: Chain of thought, reasoning, explanation
 
+**Thinking level**:
+One of the effort levels a model offers for its **Thinking**, as Ollama lists them, such as qwen3.8's low, medium and xhigh, sent instead of plain thinking on. Plain on means the model's default level. Set only in the benchmark's commands, never from the app. Part of the **Player configuration**; plain on or off is no level.
+_Avoid_: Thinking effort, reasoning effort, thinking mode
+
 **Reasoning**:
 The short explanation an LLM writes in its answer, before its move, when thinking is off. A model with thinking on gives none.
 _Avoid_: Explanation, thinking, justification
@@ -131,7 +135,7 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
+An LLM together with every setting it plays a game with: model, thinking and its **Thinking level**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Rating**:
