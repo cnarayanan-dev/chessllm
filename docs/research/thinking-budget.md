@@ -211,6 +211,89 @@ def think_until(client: ollama.Client, deadline_s: float | None, max_chunks: int
 
 A streamed chunk is about one token, but not exactly; use `num_predict` (b) when the count must be exact.
 
+## Verified, 2026-10-20
+
+The forced answer (sketch (b)), tried against Ollama 0.40.0 for each thinking model (spike #70). Throwaway scripts called the HTTP API directly with the request `OllamaPlayer` sends: `turn_messages` with the Listed system prompt and the legal-move list, `format` = the `MoveAnswer` schema with `move` as an enum of the legal moves (**Listed enforced**), `think` as below, no sampling options (model defaults). Position: `docs/research/board-images-positions.json` #1 (`r1bqkb1r/ppp2ppp/3p1n2/n3p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 6`, 33 legal moves, prompt 372-405 tokens), plus #0 (a late middlegame, prompt 680 tokens) for one qwen3.8 run. In this section **[Measured]** means these calls, not game logs.
+
+Each run: call 1 with `options.num_predict` = the cap; if `done_reason == "length"` with empty `content`, call 2 with the thinking so far + the budget sentence handed back as `{"role": "assistant", "thinking": ..., "content": " "}`, the same `think` and `format`, and `num_predict: 64`. Call 2's prompt was checked with `"_debug_render_only": true` (the rendered text comes back in `_debug_info.rendered_template`; `ollama show --template` prints only `{{ .Prompt }}` for all three, since they use built-in Go renderers). Two checks on top: call 2 three more times, and call 2 with the enum swapped for three unlikely moves (`Kf1`, `Rg1`, `a3`), to show the grammar holds from call 2's first token rather than the model happening to comply.
+
+### Verdict
+
+| Model (runner) | Chat route | Forced answers (JSON, in enum) | Restricted enum held | Generation speed | Build |
+|---|---|---|---|---|---|
+| qwen3.5:9b, `think: true` (llama.cpp) | works | 8/8 | 2/2 | 19.7-21.9 tok/s | chat prefill |
+| qwen3.8, `think: "medium"` (MLX) | works | 12/12 (2 positions, 3 caps) | 2/2 | 18.0-20.5 tok/s | chat prefill |
+| gemma4:26b, `think: true` (MLX) | works, but as a new turn | 5/5 chat, 3/3 raw | 1/1 chat, 1/1 raw | 36.1-41.7 tok/s | chat prefill; raw verified as fallback |
+
+[Measured] Every forced answer was valid JSON (`{"move": "..."}`, 7-10 tokens, `done_reason: "stop"`, empty `thinking`) and every move was in the enum. With `content: ""` instead of `" "`, call 2 failed for both families: the model thought again into `message.thinking`, hit the 64-token cap, and `content` was empty (qwen3.8 5/5, gemma4 5/5; once qwen3.8 even wrote `{"move": "Bb5+"}` outside the restricted enum, inside its thinking). **`content: " "` is required.** [Measured]
+
+### qwen3.5:9b
+
+- **Render** [Measured]: the thinking appears closed, in Qwen's format, and the assistant turn is left open:
+
+  ```
+  ...Legal moves: Bxf7+ Be6 Ba6 ... b4 a4<|im_end|>
+  <|im_start|>assistant
+  <think>
+  {thinking so far}
+
+  Considering the limited time, I have to give my move now, based on the thinking so far.
+  </think>
+
+  ```
+
+  With `think: false` the renderer drops the handed-back thinking entirely and ends at `<|im_start|>assistant\n`, so call 2 must send the same `think` as call 1 (a budget with thinking off is refused anyway).
+- **Chat route: works.** Cap 256: forced answer `{"move": "Bxf7+"}`; repeats `Ba6`, `Ng5`, `Be2`. Cap 1,024: `Ng5`; repeats `O-O`, `Bxf7+`, `Ba6`. Restricted enum: `a3` both times. [Measured]
+- **Speed** [Measured]: 19.7 tok/s (256 tokens), 21.9 tok/s (1,024); another client's unbounded qwen3.5:9b turn in the server log held 22.5 tok/s out to 6,618 tokens. Prompt 405 tokens cold in 1.8 s. Call 2 reused the cache: 0.28 s of prompt for 1,453 tokens, 0.6-0.7 s in all.
+- **Time limit** [Inference]: budget ÷ 20 tok/s + ~2 s prompt + ~1 s call 2. 2,048 tokens ≈ 105 s, 4,096 ≈ 210 s, 6,144 ≈ 310 s.
+
+### qwen3.8
+
+- **Render** [Measured]: identical to qwen3.5:9b after the system prompt (renderer `qwen3.8`, parser `qwen3.5`). `low` and `xhigh` prepend their sentence to the system prompt ("Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, ..."); `medium` adds nothing. So call 2 must send the same level as call 1, or the prompt (and its cache) differs.
+- **Chat route: works.** Position #1, cap 256: `{"move": "Bb5+"}`; repeats `Bxf7+` ×3. Cap 1,024: `Ba6`; repeats `Bxf7+`, `Ba6`, `Bb5+`. Position #0, cap 1,536: `Nxc5` (×4). Restricted enum: `a3` both times on #1. A cap of 2,048 on #1 didn't bind: it finished at 524 tokens with `Ba6`. [Measured]
+- **Speed** [Measured]: 18.0-20.5 tok/s alone on the GPU (16.9-18.8 while another client's game was swapping models in and out). That is faster than the 12.7 tok/s fitted from game logs above, which shared the GPU and include prompt time. Prompt processing cold: ~78 tok/s (405 tokens in 5.1 s, 2,240 in 28.7 s).
+- **Call 2's cache is not reliable on MLX** [Measured]: after the 256 cap, call 2 reprocessed 25 of 685 tokens (0.4 s). After the 1,024 cap, the MLX prefix cache matched 1,428 tokens but held only the 404 of the prompt, so it reprocessed 1,049 tokens (13.3 s; the server log: `cache hit total=1453 matched=1428 cached=404 left=1049`). After the 1,536 cap another client's request had swapped the model out, so call 2 reloaded it (17.4 s) and reprocessed all 2,240 tokens (28.7 s). In a real game call 2 follows call 1 at once, so a swap between them shouldn't happen; the re-prefill can.
+- **Time limit** [Inference]: worst case = prompt (~10 s for a late-game prompt) + budget ÷ 18 tok/s + call 2 re-prefilling prompt + budget at ~78 tok/s + 64 ÷ 18 ≈ 4 s. 2,048 tokens ≈ 10 + 114 + 33 + 4 ≈ 160 s; **3,072 ≈ 10 + 171 + 47 + 4 ≈ 230 s**; 4,096 ≈ 10 + 228 + 60 + 4 ≈ 300 s. Add ~10-20 s of model load when a faceoff swaps models between turns (`load_s` 6.8-20.9 s measured).
+
+### gemma4:26b
+
+- **Render** [Measured]: the thinking appears closed in Gemma's own channel format, but **Ollama's gemma4 renderer closes the handed-back assistant message as a finished turn and opens a new model turn** (no prefill continuation):
+
+  ```
+  <bos><|turn>system
+  <|think|>
+  You are playing chess as White ...<turn|>
+  <|turn>user
+  PGN: ... Legal moves: Bxf7+ Be6 ... b4 a4<turn|>
+  <|turn>model
+  <|channel>thought
+  {thinking so far}
+
+  Considering the limited time, I have to give my move now, based on the thinking so far.
+  <channel|><turn|>
+  <|turn>model
+
+  ```
+
+  The thought is carried, not dropped, despite the card's advice not to carry earlier thinking in the history. The model then sees a thought-only turn and answers in a fresh turn. The rendered text is the same for `content: " "` and `""`. The difference is the parser state: with `" "` the parser starts in content mode, so the grammar applies from the first token of the new turn and the model can't open a new `<|channel>thought`. With `""` it re-thinks (see the Verdict). With `think: false` the renderer also adds an empty `<|channel>thought\n<channel|>` after the new `<|turn>model\n`. That shows Gemma's in-turn answer format: content follows `<channel|>` directly.
+- **Chat route: works.** Cap 256: `{"move": "Bb3"}`. Cap 1,024: `Bxf7+`; repeats `Bxf7+`, `Bb3`, `d3`. Restricted enum: `a3` (7 tokens, no thinking). [Measured]
+- **Raw route: also works** [Measured]. `/api/generate` with `raw: true`, the same `format` and `num_predict: 64`, and the prompt = the `_debug_render_only` render of the turn's messages (with `think: true`, so `<|think|>` is in the system turn; it ends `<turn|>\n<|turn>model\n`) + `<|channel>thought\n` + thinking so far + budget sentence + `\n<channel|>`. That continues the same model turn, as Gemma would produce it. 3/3: `{"move": "d3"}` twice, and `a3` under the restricted enum, 7 tokens each, empty `thinking`, prompt 651 tokens in 0.5-1.6 s. The rendered text starts with the literal `<bos>`; it worked as is.
+- **Speed** [Measured]: 36.1-41.7 tok/s; prompt 372 tokens cold in 1.7 s. Call 2 reused the cache (1,424 tokens in 0.23 s).
+- **Time limit** [Inference]: budget ÷ 36 tok/s + ~2 s + ~1 s. 3,072 tokens ≈ 90 s, 6,144 ≈ 175 s.
+
+### What #72 and #73 should build
+
+- **Thinking budget (#72), all three models, one code path.** Call 1: today's `chat` request plus `options.num_predict = budget` (merged into the sampling options). If `done_reason == "length"` and `content` is empty: call 2 = the same `model`, `think` (the identical value, level included) and `format` (the same schema object, enum included), `messages = [*turn messages, {"role": "assistant", "thinking": thinking + "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far.", "content": " "}]`, `options = sampling | {"num_predict": 64}`. Answers took 7-10 tokens, so 64 has ample room. Token counts come from call 1's `eval_count` and `prompt_eval_count`. The thinking/answer split isn't reported, so derive it from where the answer starts, or treat call 1's `eval_count` as thinking when it was cut while thinking. [Measured + Inference]
+- **Gemma 4 (#73): use the same chat route.** It is verified, needs no Gemma-specific code, and the answer stays under the same `format`. Its live test should assert the forced flag and a move from the enum. [Inference] Keep the raw route as the documented fallback if a later Ollama renderer changes: `POST /api/generate {"model": "gemma4:26b", "prompt": render + "<|channel>thought\n" + thinking + BUDGET + "\n<channel|>", "raw": true, "format": schema, "stream": false, "options": sampling | {"num_predict": 64}}`, where `render` comes from `/api/chat` with the same messages, `think: true` and `"_debug_render_only": true`. Open question for the probe: whether answering in a new turn (chat) plays worse than continuing the turn (raw). Both give legal moves; this spike didn't measure their quality.
+- **Time limit: derive it from the budget, and refuse budgets that don't fit the context window.** Deriving can't refuse a sane budget because of this machine's speed, and it keeps the "tokens, not seconds" meaning. A per-call `timeout_s = max(300, 60 + 1.5 × budget ÷ speed)`, with a conservative speed per model in the model list (qwen3.5:9b 20, qwen3.8 18, gemma4:26b 36 tok/s), covers the worst cases above with ~50% margin, the 60 s covering prompt, re-prefill and a model swap. For qwen3.8 at 3,072 it gives 316 s. `ollama.Client(timeout=...)` is httpx's per-read timeout, and a non-streamed call sends nothing until it is done, so each of the two calls gets the limit separately; call 2 is short except for the re-prefill. [Inference] **Refuse** instead what can't work at all: every model loaded here with `CONTEXT 8192` (`ollama ps`), so prompt (≤ ~1,500 tokens late in a long game) + budget + 64 must stay under 8,192. A budget above ~6,144 needs a larger `num_ctx`, which would be a new setting. [Measured: `ollama ps`; Inference: the bound]
+
+### Caveats of this check
+
+- **Ollama wasn't free.** Another client's game (qwen3.5:9b and qwen3.8, later gemma3:12b) ran through the same server and swapped models during the spike. Speeds are from `eval_duration`, which counts generation only, but loads and some prompt times are inflated. Treat the speeds as a lower bound for a free GPU.
+- One position for most runs, model-default sampling (temperature 1), 2-6 forced answers per model. Mechanism only, not move quality: that is the probe's job.
+- `qwen3.5:9b` resolved to the llama.cpp build (`c97eb11d70b1`). The second, ggml build of the same name wasn't tried.
+- Models were left to Ollama's keep-alive rather than force-stopped. gemma4:26b and qwen3.5:9b had already been evicted; qwen3.8 and gemma3:12b were in use by the other game.
+
 ## Recommendations for this benchmark
 
 1. **Adopt (b): a token Thinking budget enforced by `num_predict` and a forced answer.** It is exact, it works on Ollama 0.40.0, it costs one short call, and it doesn't depend on the machine. Should [PR #17566](https://github.com/ollama/ollama/pull/17566) ship (`options.think_budget`, enforced in the sampler), switch to it. It does the same thing in one call, but needs llama-server-runner models and its own check on MLX models.
