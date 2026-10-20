@@ -25,6 +25,9 @@ const moves = (page: Page) => page.getByTestId('moves')
 const lastMove = (page: Page) => moves(page).locator('.ply.last')
 /** The move viewed in the move history. */
 const viewedMove = (page: Page) => moves(page).locator('[aria-current=step]')
+/** A metric's row in the LLM mistakes card: White's number, the metric, Black's number, for the LLM sides. */
+const mistakes = (page: Page, metric: string) =>
+  page.getByTestId('mistakes-card').getByRole('row', { name: new RegExp(metric) }).getByRole('cell')
 
 /** The human's move, as UCI, by clicking its two squares; waits until the move list ends with `then`. */
 async function move(page: Page, uci: string, then: string) {
@@ -59,7 +62,7 @@ async function startFromSheet(
   await expect(sheet).toBeHidden()
 }
 
-test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castle, then King capture', async ({ page }) => {
+test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castle, then King left in check', async ({ page }) => {
   await startFromSheet(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Kh6'] }, async (sheet) => {
     await sheet.getByRole('radio', { name: 'Chaos' }).click()
   })
@@ -106,7 +109,10 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   const result = page.getByTestId('result')
   await expect(result).toContainText('White wins by King left in check')
   await expect(result).toContainText(/.+ left its own king in check/)
-  await expect(page.getByTestId('totals')).toHaveText('5 illegal tries · 0 notation slips · 5 chaos moves (1 spawn)')
+  await expect(mistakes(page, 'Illegal tries')).toHaveText(['Illegal tries', '5'])
+  await expect(mistakes(page, 'Notation slips')).toHaveText(['Notation slips', '0'])
+  await expect(mistakes(page, 'Chaos moves')).toHaveText(['Chaos moves', '5'])
+  await expect(mistakes(page, 'Spawns')).toHaveText(['Spawns', '1'])
 
   // The history replays the spawn and the chaos move, with their marker, arrow and caption.
   for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft')
@@ -147,7 +153,8 @@ test('an LLM faceoff under Chaos rules, started from the New game sheet, ends wi
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
   await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)
-  await expect(page.getByTestId('totals')).toContainText('1 chaos move (0 spawns)')
+  await expect(mistakes(page, 'Chaos moves')).toHaveText(['1', 'Chaos moves', '1'])
+  await expect(mistakes(page, 'Spawns')).toHaveText(['0', 'Spawns', '0'])
   await expectPiece(page, 'f7', 'wq')
 
   await page.keyboard.press('ArrowLeft')
