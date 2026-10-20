@@ -18,7 +18,7 @@ The frontend's design system as shipped by the restyle (#52), recorded from the 
 
 The radius scale comes from `--radius: 0.625rem` (`--radius-sm` to `--radius-4xl` in `@theme inline`).
 
-Installed components: Alert, Avatar, Badge, Button, Card, Collapsible, Dialog, Item, Kbd, Popover, Radio group, Scroll area, Select, Separator, Switch, Table, Tooltip. Add more with `pnpm dlx shadcn@latest add <name>` in `frontend/`.
+Installed components: Alert, Avatar, Badge, Button, Card, Collapsible, Dialog, Item, Kbd, Popover, Radio group, Scroll area, Select, Separator, Switch, Table, Tabs, Tooltip. Add more with `pnpm dlx shadcn@latest add <name>` in `frontend/`.
 
 A link styled as a button merges `buttonVariants` with `cn`, as `Button` does (`linkClass` in `TopBar.tsx`); on their own the variant's classes conflict with the base ones (an `outline` link loses its border).
 
@@ -86,7 +86,7 @@ Checks: `frontend/src/theme.test.ts` (with `frontend/src/test/contrast.ts`) read
 
 **Inter** (`@fontsource-variable/inter`, bundled, no CDN) is `--font-sans` and `--font-heading`, so the only interface face. Numbers that line up or tick use tabular figures (`tabular-nums`: the timer, +N, the move list, the Analytics numbers).
 
-The scale in use: 14px body (`text-sm` on the page), 15px in the Game card and Reasoning panel, 16px moves and strip names, 18px the ChessLLM name, 20px the result line and the timer, 24px the Analytics title. Headings are sentence case at `font-semibold` with `tracking-tight` on the larger ones. Secondary text is `text-muted-foreground`, never a smaller uppercase label.
+The scale in use: 14px body (`text-sm` on the page), 15px in the Game card and Turn panel, 16px moves and strip names, 18px the ChessLLM name, 20px the result line and the timer, 24px the Analytics title. Headings are sentence case at `font-semibold` with `tracking-tight` on the larger ones. Secondary text is `text-muted-foreground`, never a smaller uppercase label.
 
 The board keeps its own small face for the coordinates and its flashes (`board.css`, `flashes.css`).
 
@@ -116,9 +116,9 @@ The page footer is one muted line of credits: the Merida pieces, the move sound 
 
 | window | columns | order |
 | --- | --- | --- |
-| over 1100px | **¼ \| ½ \| ¼** | Game card and Reasoning panel · board with its strips · Moves |
-| 760 to 1100px | 3fr \| 2fr | the board on the left; Moves, then the Game card and Reasoning panel under them, on the right |
-| under 760px | one | board, Moves, Game card, Reasoning panel |
+| over 1100px | **¼ \| ½ \| ¼** | Game card and Turn panel · board with its strips · Moves |
+| 760 to 1100px | 3fr \| 2fr | the board on the left; Moves, then the Game card and Turn panel under them, on the right |
+| under 760px | one | board, Moves, Game card, Turn panel |
 
 The board column is a stack at the board's width, `min(100%, 100svh - 206px)`, so the board fits the window's height together with a player strip above and below it; what sits directly above and below the board takes its width. Under 760px the stack is the full width.
 
@@ -132,7 +132,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 | --- | --- |
 | Top bar | ghost / outline `Button`s (links as `buttonVariants`), `Tooltip` + `Kbd`; Preferences: icon `Button`, `Popover`, `Switch`, `Tooltip` |
 | Game card | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Separator`, `SettingChip` with `Tooltip` (Rematch: its button form), `Badge variant="secondary"` |
-| Reasoning panel | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Badge` (`secondary`, or `destructive` when forfeited) |
+| Turn panel | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Badge` (`secondary`, or `destructive` when forfeited or not legal), `Tabs` (`line`), `Collapsible`, ghost icon `Button`s |
 | Player strip | `Item` holding a pill with `Avatar` / `AvatarFallback`; Merida pieces; `Badge variant="secondary"` for +N |
 | Board | cm-chessboard in `Board.tsx`, unchanged |
 | Moves panel | `Card size="sm"`, `CardTitle`, `Switch size="sm"`, `ScrollArea` |
@@ -167,13 +167,17 @@ There is no sentence saying whose move it is: the ring and the timer say it.
 - **When the game is over**, after a `Separator`: the **result line** (20px semibold, e.g. "Black wins by checkmate", or in a faceoff by model, "qwen3.5:9b (White) wins by checkmate") with the reason's detail under it in muted text, and **Rematch**: a setting chip button, `RotateCcw` and "Rematch". **Rematch** (CONTEXT.md) starts a new game at once, no sheet, with the same Mode and settings and the colours swapped: in Play LLM the human takes the other colour, so the board turns; in a faceoff the two LLMs change sides, each with its own settings. Its tooltip and `aria-description` say what happens: "Same settings, you play Black" / "… you play White" / "Same settings, the LLMs swap colours" (`rematchOf` and `rematchDescription` in `frontend/src/game/rematch.ts`). New game stays in the top bar. This replaces the old result banner.
 - **Last**, when there is one: a request error as a `text-destructive` line. There is no note about the next game's settings: the New game sheet starts the game it sets up, or forgets its changes.
 
-## Reasoning panel
+## Turn panel
 
-`frontend/src/components/reasoning/ReasoningPanel.tsx`, a `Card` under the Game card, 15px. The header is the title **Reasoning** and a `secondary` Badge naming the LLM and the move: "qwen3.5:9b · 10… Nxa1", or in a faceoff "White · gemma3:4b · 1. e4". Under it the **Reasoning** (CONTEXT.md) in the card's foreground, relaxed leading, line breaks kept.
+`frontend/src/components/turn/TurnPanel.tsx`, a `Card` under the Game card, 15px. The header is the title **Turn** and a `secondary` Badge naming only the move, "10… Nxa1": the board and the player strips already say whose it is. Under it three line `Tabs`, each a Lucide icon and a short name, what it holds in its tooltip and `aria-description`:
 
-It follows the position on the board, live or in the move history: on an LLM's move its Reasoning; on the human's move or the start position, the LLM's last move before it, else a muted "The LLM has not moved yet." ("No LLM has moved yet." in a faceoff). It shows only the Reasoning of the turn's last attempt (the one played); illegal tries stay as chips in the Moves panel. Live after a Forfeit, the Badge is `destructive`, "… · forfeited", over the last attempt's Reasoning. With thinking on, or a last attempt with no answer, a quiet muted line says why there is none.
+- **Thinking** (`Brain`) with thinking on, or **Reasoning** with it off: the attempt's **Thinking** or **Reasoning** (CONTEXT.md) in the card's foreground, relaxed leading, line breaks kept. With no answer, a muted line says why there is none.
+- **Prompt** (`MessageSquareText`): the **Prompt** as the backend recorded it, one bordered block per message in monospace, labelled System prompt, Position, Answer and Retry feedback. The System prompt is folded behind a `Collapsible`, as it is the same every turn. A turn from before prompts were recorded says so.
+- **Answer** (`CornerDownLeft`): a Badge with the result and latency ("Legal · 1.2 s", `destructive` unless legal) over the raw reply in monospace on `bg-muted`, its JSON laid out; with no reply, the error.
 
-The Thinking itself is not shown anywhere; it stays in the API and the game log.
+The tab chosen is kept in this browser across turns, games and reloads. A turn with retries shows "Attempt 2 of 3" between ghost chevron buttons under the tabs, each named (or, at either end, why it is disabled) in its tooltip; it opens on the last attempt, and every tab shows the attempt picked.
+
+It follows the position on the board, live or in the move history: on an LLM's move its turn; on the human's move or the start position, the LLM's last move before it, else a muted "The LLM has not moved yet." ("No LLM has moved yet." in a faceoff). Live after a Forfeit, the Badge is `destructive`, "forfeited". The Thinking appears once the attempt has finished; it is never streamed.
 
 ## Moves panel
 
@@ -244,4 +248,4 @@ The React port (#29) carried the old page's generic look. These are gone; don't 
 | The result banner | The result line and Rematch in the Game card |
 | Players shown only as chips | Player strips with logo, name, captures, spawns and +N |
 | A move list that grows with the game, and Back to live | A fixed-height list of 8 rows that scrolls itself, and the pulse on a new move |
-| "Show thinking" | The Reasoning panel (the Thinking stays in the API and the log) |
+| "Show thinking" and "Show prompt" switches | The Turn panel's tabs, the last one chosen remembered |

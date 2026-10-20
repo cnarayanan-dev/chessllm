@@ -80,3 +80,19 @@ def test_the_default_isnt_logged_so_older_games_keep_their_configuration(tmp_pat
     start = json.loads(log.read_text().splitlines()[0])
     assert "position" not in start["white"]
     assert "Your pieces" not in player.prompts[-1][-1].content
+
+
+def test_a_described_attempt_logs_its_prompt_with_the_description(tmp_path):
+    player = ScriptedPlayer(["f3", "e5", "g4", "Qh4#"])
+
+    main(
+        ["--models", "gemma3:12b", "llama3:8b", "--games", "1", "--position", "described", "--games-dir",
+         str(tmp_path), "--no-analysis"],
+        player_for=player.for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    [log] = tmp_path.glob("*.jsonl")
+    attempts = [event for event in map(json.loads, log.read_text().splitlines()) if event["type"] == "llm_attempt"]
+    position = attempts[-1]["prompt"][-1]["content"]
+    assert "Last move: g4" in position and "Your pieces (Black):" in position

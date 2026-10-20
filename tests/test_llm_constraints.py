@@ -73,6 +73,15 @@ def test_listed_sends_the_listed_system_prompt_and_every_legal_move_under_the_pg
     assert set(shown) == BLACK_MOVES_AFTER_E4
 
 
+def test_under_listed_the_prompt_in_the_state_shows_the_legal_moves_in_the_order_sent(scripted):
+    client, player = listed_game(scripted, ["e5"])
+
+    state = play_move(client, "e2e4").json()
+
+    position = state["llm_turn"]["attempts"][0]["prompt"][1]["content"]
+    assert position.endswith(f"\nLegal moves: {shown_legal_moves(player.prompts[0])}")
+
+
 def test_the_listed_system_prompt_announces_the_list_and_its_random_order():
     prompt = system_prompt("black", LISTED_SYSTEM_PROMPT_FILE)
 

@@ -83,8 +83,12 @@ A **Chaos move** by a piece the LLM does not have on the board, which then appea
 _Avoid_: Resurrection, summon, phantom piece
 
 **King capture**:
-The end of a game under **Chaos rules** in which one side takes the other's king, left en prise by a **Chaos move**; the capturing side wins at once.
+The end of a game under **Chaos rules** in which a **Chaos move** takes a king; the side left with its king wins at once.
 _Avoid_: Regicide, king taken
+
+**King left in check**:
+The end of a game under **Chaos rules** in which a **Chaos move** leaves the mover's own king in check, whether it ignores a check or walks into one; the mover loses at once, without the opponent having to take the king.
+_Avoid_: Hanging king, self-check, exposed king
 
 **Move record**:
 The moves of a game so far in PGN movetext form, each written as it was played, a **Chaos move** in the LLM's own spelling. Under **Standard rules** it is valid PGN; under **Chaos rules** it may not be.
@@ -107,6 +111,14 @@ _Avoid_: Thinking effort, reasoning effort, thinking mode
 **Reasoning**:
 The short explanation an LLM writes in its answer, before its move, when thinking is off. A model with thinking on gives none.
 _Avoid_: Explanation, thinking, justification
+
+**Prompt**:
+Everything sent to the LLM in a **Turn**, exactly as it received it: the **System prompt**, the position (with the **Legal-move list** when shown), and for each **Retry** its previous answer and the **Retry feedback**. Recorded as sent, since the system prompt file can change between turns.
+_Avoid_: Input, context, query
+
+**System prompt**:
+The fixed instructions that open every **Prompt**: the rules of the answer and a worked example, the same for every turn of a side unless its file is edited.
+_Avoid_: Instructions, template (for the text sent)
 
 **Illegal move**:
 A move proposed by the LLM that cannot be played in the current position: badly formed notation, a rule-breaking move, or an ambiguous move all count, each recorded with its kind.

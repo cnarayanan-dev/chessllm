@@ -50,6 +50,13 @@ test('a chaos move that takes its own king loses', () => {
   expect(resultText(game).detail).toBe('qwen3.5:9b took its own king')
 })
 
+test('a chaos move that leaves its own king in check loses, naming the LLM that played it', () => {
+  expect(resultText(kingCaptured({ result: '1-0', end_reason: 'king_left_in_check' }))).toEqual({
+    result: 'White wins by a king left in check',
+    detail: 'qwen3.5:9b left its own king in check',
+  })
+})
+
 test('in a faceoff the King capture names both LLMs by their side', () => {
   const llm = aGame().settings.black
   const faceoff = { mode: 'llm_faceoff' as const, white: { ...llm, model: 'gemma3:4b' }, black: llm, sampling: {}, rules: 'chaos' as const, max_attempts: 5 }

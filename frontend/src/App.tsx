@@ -10,9 +10,9 @@ import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { Captures } from '@/components/player-strip/Captures'
 import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
-import { ReasoningPanel } from '@/components/reasoning/ReasoningPanel'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
+import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, type ChaosShown } from '@/game/chaos'
 import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
@@ -122,12 +122,11 @@ export default function App() {
       )}
       <GameLayout
         game={
-          // The Reasoning panel follows the position on the board. "Show thinking" is hidden for now; the Thinking
-          // stays in the API and the game log. (`shown` is set whenever `game` is.)
+          // The Turn panel follows the position on the board. (`shown` is set whenever `game` is.)
           game && shown ? (
             <>
               <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
-              <ReasoningPanel game={game} ply={shown.ply} live={!history} />
+              <TurnPanel game={game} ply={shown.ply} live={!history} />
             </>
           ) : (
             startError !== null && (

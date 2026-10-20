@@ -59,7 +59,7 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
     }
     assert start["prompt_file"].endswith("system.txt")
     assert human == {"type": "human_move", "color": "white", "ply": 1, "move": "e4", "fen_after": E4_FEN}
-    assert without(attempt_1, "latency_s") == {
+    assert without(attempt_1, "latency_s", "prompt") == {
         "type": "llm_attempt",
         "color": "black",
         "ply": 2,
@@ -84,6 +84,17 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
     assert attempt_2["feedback_sent"].startswith('Your move "Qh4" is illegal')
     assert (attempt_2["move"], attempt_2["result"]) == ("e5", "legal")
     assert attempt_2["latency_s"] == 0.0
+
+
+def test_each_attempt_logs_its_prompt_as_sent_to_the_llm(scripted, tmp_path):
+    client, player = scripted(["Qh4", "e5"])
+
+    play(client, "e2e4")
+
+    *_, attempt_1, attempt_2 = events(logs(tmp_path / "games", ".jsonl")[0])
+    assert [attempt_1["prompt"], attempt_2["prompt"]] == [
+        [{"role": message.role, "content": message.content} for message in prompt] for prompt in player.prompts
+    ]
 
 
 def test_with_thinking_off_the_log_keeps_the_reasoning_as_the_attempts_thinking(scripted, tmp_path):

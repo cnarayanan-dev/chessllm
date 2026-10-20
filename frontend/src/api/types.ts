@@ -14,6 +14,7 @@ export type GameSettings = Omit<Schemas['GameSettings'], 'mode' | 'white' | 'bla
 export type GameState = Omit<Schemas['GameState'], 'settings'> & { settings: GameSettings }
 export type LlmTurn = Schemas['LlmTurn']
 export type Attempt = Schemas['Attempt']
+export type PromptMessage = Schemas['PromptMessage']
 export type Ply = Schemas['Ply']
 export type NewGame = Schemas['NewGame']
 export type ModelInfo = Schemas['ModelInfo']

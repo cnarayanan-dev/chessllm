@@ -1,5 +1,5 @@
-// The Reasoning panel under the Game card, against FastAPI with scripted LLM players (tests/e2e_server.py): with
-// thinking off each scripted reply carries the Reasoning "Reasoning for <move>.".
+// The Turn panel under the Game card, against FastAPI with scripted LLM players (tests/e2e_server.py): with thinking
+// off each scripted reply carries the Reasoning "Reasoning for <move>.".
 import { expect, test, type Page } from '@playwright/test'
 
 /** Scripts Black's LLM, then opens the page on a new Play LLM game in which the human plays White. */
@@ -21,10 +21,15 @@ async function clickMove(page: Page, uci: string) {
 }
 
 const lastMove = (page: Page) => page.locator('[data-testid="moves"] .ply.last')
-const panel = (page: Page) => page.getByRole('region', { name: 'Reasoning' })
-const heading = (page: Page) => panel(page).getByTestId('reasoning-move')
+const panel = (page: Page) => page.getByRole('region', { name: 'Turn' })
+const badge = (page: Page) => panel(page).getByTestId('turn-move')
+const tab = (page: Page, name: string) => panel(page).getByRole('tab', { name })
 
-test('the Reasoning panel sits under the Game card and follows the move history', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.removeItem('chessllm.turnTab'))
+})
+
+test('the Turn panel sits under the Game card and follows the move history', async ({ page }) => {
   await playLlm(page, ['e5', 'Nc6'])
   await expect(panel(page)).toContainText('The LLM has not moved yet.')
   const card = await page.getByRole('region', { name: 'Game' }).boundingBox()
@@ -35,36 +40,56 @@ test('the Reasoning panel sits under the Game card and follows the move history'
   await expect(lastMove(page)).toHaveText('e5')
   await clickMove(page, 'g1f3')
   await expect(lastMove(page)).toHaveText('Nc6')
-  await expect(heading(page)).toHaveText('qwen3.5:9b · 2… Nc6')
+  await expect(badge(page)).toHaveText('2… Nc6')
   await expect(panel(page)).toContainText('Reasoning for Nc6.')
 
   await page.keyboard.press('ArrowLeft') // 2. Nf3, the human's: the LLM's move before it
-  await expect(heading(page)).toHaveText('qwen3.5:9b · 1… e5')
+  await expect(badge(page)).toHaveText('1… e5')
   await expect(panel(page)).toContainText('Reasoning for e5.')
 
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
-  await expect(heading(page)).toHaveCount(0)
+  await expect(badge(page)).toHaveCount(0)
   await expect(panel(page)).toContainText('The LLM has not moved yet.')
-  await expect(page.getByText('Show thinking')).toHaveCount(0)
 })
 
-test("after a Forfeit, the last attempt's Reasoning, marked as forfeited", async ({ page }) => {
+test('the Prompt tab shows what was sent, and the Answer tab what came back', async ({ page }) => {
+  await playLlm(page, ['e5'])
+
+  await clickMove(page, 'e2e4')
+  await expect(badge(page)).toHaveText('1… e5')
+  await tab(page, 'Prompt').click()
+
+  await expect(panel(page)).toContainText('PGN: 1. e4')
+  await expect(panel(page)).not.toContainText('You are playing chess as Black')
+  await panel(page).getByRole('button', { name: 'System prompt' }).click()
+  await expect(panel(page)).toContainText('You are playing chess as Black')
+
+  await tab(page, 'Answer').click()
+  await expect(panel(page)).toContainText('"move": "e5"')
+  await expect(panel(page)).toContainText('Legal')
+})
+
+test("after a Forfeit, the last attempt's Reasoning, marked as forfeited, and every attempt one step away", async ({
+  page,
+}) => {
   await playLlm(page, ['Qh4', 'Qh4', 'Ke7', 'Ke7', 'Bb4'])
 
   await clickMove(page, 'e2e4')
 
   await expect(page.getByTestId('result')).toContainText('by forfeit')
-  await expect(heading(page)).toHaveText('qwen3.5:9b · forfeited')
+  await expect(badge(page)).toHaveText('forfeited')
   await expect(panel(page)).toContainText('Reasoning for Bb4.')
+  await expect(panel(page)).toContainText('Attempt 5 of 5')
+  await panel(page).getByRole('button', { name: 'Earlier attempt' }).click()
+  await expect(panel(page)).toContainText('Reasoning for Ke7.')
 })
 
-test('with thinking on, the panel says there is no Reasoning', async ({ page }) => {
+test('with thinking on, the tab is Thinking', async ({ page }) => {
   await playLlm(page, ['e5'], true)
 
   await clickMove(page, 'e2e4')
 
-  await expect(heading(page)).toHaveText('qwen3.5:9b · 1… e5')
-  await expect(panel(page)).toContainText('qwen3.5:9b plays with thinking on, so it gives no Reasoning.')
-  await expect(page.getByText('Show thinking')).toHaveCount(0)
+  await expect(badge(page)).toHaveText('1… e5')
+  await expect(tab(page, 'Thinking')).toHaveAttribute('aria-selected', 'true')
 })

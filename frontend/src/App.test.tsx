@@ -60,7 +60,7 @@ async function openSheet() {
   return screen.findByRole('dialog', { name: 'New game' })
 }
 const gameCard = () => screen.getByRole('region', { name: 'Game' })
-const reasoning = () => screen.getByRole('region', { name: 'Reasoning' })
+const turnPanel = () => screen.getByRole('region', { name: 'Turn' })
 /** The Game card's players, White first, each as its side and name. */
 const players = () =>
   [...within(gameCard()).getByRole('list', { name: 'Players' }).querySelectorAll(':scope > li')].map((item) => {
@@ -303,7 +303,7 @@ test("the human's move lands at once, then the LLM's turn runs, timed in its str
   expect(playMoveSound).toHaveBeenCalledTimes(2)
 })
 
-test("a thinking LLM's move is timed too, and once its move lands its Thinking is not shown", async () => {
+test("a thinking LLM's move is timed too, and once its move lands its Thinking is shown", async () => {
   const thinking = (game: GameState) => ({
     ...game,
     settings: { ...game.settings, black: { ...afterE4().settings.black, thinking: true } },
@@ -316,13 +316,14 @@ test("a thinking LLM's move is timed too, and once its move lands its Thinking i
 
   await llmMoving('black')
 
-  const landed = aTurn('e5', { thinking: 'The king pawn, to fight for the centre.' })
+  const thought = 'The king pawn, to fight for the centre.'
+  const e5 = aTurn('e5')
+  const landed = { ...e5, attempts: [{ ...e5.attempts[0], thinking: thought, reasoning: null }], thinking: thought }
   await act(async () => turn.resolve(Response.json(thinking(afterE5({ llm_turn: landed, llm_turns: [landed] })))))
 
-  // "Show thinking" is hidden for now; the Reasoning panel says a thinking LLM gives no Reasoning.
-  expect(await within(reasoning()).findByText('qwen3.5:9b plays with thinking on, so it gives no Reasoning.')).toBeVisible()
-  expect(screen.queryByText('Show thinking')).not.toBeInTheDocument()
-  expect(screen.queryByText('The king pawn, to fight for the centre.')).not.toBeInTheDocument()
+  // The Turn panel opens on the Thinking of the move that landed.
+  expect(await within(turnPanel()).findByText('The king pawn, to fight for the centre.')).toBeVisible()
+  expect(within(turnPanel()).getByRole('tab', { name: 'Thinking' })).toHaveAttribute('aria-selected', 'true')
 })
 
 test('a rejected move shows the error and snaps the piece back', async () => {
@@ -703,22 +704,22 @@ describe('the move history', () => {
     expect(viewedMove()).not.toBeInTheDocument()
   })
 
-  test('the Reasoning panel under the Game card follows the position stepped to', async () => {
+  test('the Turn panel under the Game card follows the position stepped to', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(afterE5()))
     renderApp()
     const board = await waitFor(theBoard)
     await waitFor(() => expect(board.input?.color).toBe('w'))
-    expect(gameCard().nextElementSibling).toBe(reasoning())
-    expect(within(reasoning()).getByText('Reasoning for e5.')).toBeVisible()
+    expect(gameCard().nextElementSibling).toBe(turnPanel())
+    expect(within(turnPanel()).getByText('Reasoning for e5.')).toBeVisible()
 
     await userEvent.keyboard('{ArrowLeft}')
 
-    expect(within(reasoning()).getByText('The LLM has not moved yet.')).toBeVisible()
+    expect(within(turnPanel()).getByText('The LLM has not moved yet.')).toBeVisible()
 
     await userEvent.keyboard('{ArrowRight}')
 
-    expect(within(reasoning()).getByTestId('reasoning-move')).toHaveTextContent('qwen3.5:9b · 1… e5')
-    expect(within(reasoning()).getByText('Reasoning for e5.')).toBeVisible()
+    expect(within(turnPanel()).getByTestId('turn-move')).toHaveTextContent('1… e5')
+    expect(within(turnPanel()).getByText('Reasoning for e5.')).toBeVisible()
   })
 
   test('there is no Back to live button, and no status line', async () => {

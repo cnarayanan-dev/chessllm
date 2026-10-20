@@ -90,6 +90,13 @@ class Resolution(BaseModel):
     reason: str
 
 
+class PromptMessage(BaseModel):
+    """One message of the Prompt, as sent to the LLM."""
+
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
 class Attempt(BaseModel):
     """One try of an LLM turn, as the game log has it. Most fields are None until the LLM has answered."""
 
@@ -103,6 +110,7 @@ class Attempt(BaseModel):
     reasoning: str | None  # the Reasoning in the answer, with thinking off
     error: str | None  # why the call failed or timed out
     latency_s: float | None
+    prompt: list[PromptMessage] | None = None  # the messages sent for this try; None in games from before it was kept
     # Only under Chaos rules, and only when there was a move to resolve; a chaos move or spawn was played.
     resolution: Resolution | None = Field(None, exclude_if=is_none)
 

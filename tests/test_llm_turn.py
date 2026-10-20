@@ -36,6 +36,18 @@ def test_each_turn_sends_only_the_system_prompt_and_the_current_pgn_and_fen(scri
     ]
 
 
+def test_each_attempt_in_the_state_carries_the_prompt_exactly_as_sent(scripted):
+    client, _ = scripted(["e5"])
+    client.post("/api/games")
+
+    state = play_move(client, "e2e4").json()
+
+    assert state["llm_turn"]["attempts"][0]["prompt"] == [
+        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+        {"role": "user", "content": "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"},
+    ]
+
+
 def test_there_is_no_llm_turn_before_the_llm_has_moved(scripted):
     client, _ = scripted([])
 
@@ -51,6 +63,7 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
 
     assert state["pgn"] == "1. e4 e5 2. Nf3 Nc6"
     assert state["last_move"] == "b8c6"
+    del state["llm_turn"]["attempts"][0]["prompt"]  # the prompt has its own test
     assert state["llm_turn"] == {
         "ply": 4,
         "color": "black",

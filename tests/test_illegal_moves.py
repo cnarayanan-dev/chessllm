@@ -74,6 +74,19 @@ def test_a_retry_adds_the_rejected_answer_and_the_explained_feedback(scripted):
     assert [attempt["feedback_sent"] for attempt in state["llm_turn"]["attempts"]] == [None, feedback_1, feedback_2]
 
 
+def test_a_retrys_prompt_in_the_state_ends_with_the_rejected_answer_and_the_feedback(scripted):
+    client, player = start(scripted, ["Qh4", "e5"])
+
+    state = play_move(client, "e2e4").json()
+
+    first, retry = (attempt["prompt"] for attempt in state["llm_turn"]["attempts"])
+    assert first[-1] == {"role": "user", "content": f"PGN: 1. e4\nFEN: {E4_FEN}"}
+    assert retry == first + [
+        {"role": "assistant", "content": '{"move": "Qh4"}'},
+        {"role": "user", "content": explained("Qh4", "illegal", 1)},
+    ]
+
+
 def test_each_attempt_records_the_raw_reply_and_its_thinking(scripted):
     client, _ = start(scripted, ["Qh4", "e5"], thinking=["The queen attacks f2.", "Take the centre."])
 
