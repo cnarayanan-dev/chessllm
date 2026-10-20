@@ -57,6 +57,26 @@ describe('opening the page', () => {
     expect(phase(state)).toBe('llm')
     expect(state.request).toMatchObject({ kind: 'llm-turn' })
   })
+
+  test('with no current game, stays idle and starts none', () => {
+    expect(initialGameLoop.noGame).toBe(false)
+
+    const state = run({ type: 'no-game', requestId: 1 })
+
+    expect(phase(state)).toBe('idle')
+    expect(state.noGame).toBe(true)
+    expect(state.request).toBeNull()
+    expect(state.error).toBeNull()
+  })
+
+  test('with no current game, the game the visitor starts is shown', () => {
+    const none = run({ type: 'no-game', requestId: 1 })
+    const starting = gameLoop(none, { type: 'new-game', newGame: null })
+    const state = gameLoop(starting, received(starting, aGame()))
+
+    expect(phase(state)).toBe('human')
+    expect(state.noGame).toBe(false)
+  })
 })
 
 describe('the human moves', () => {

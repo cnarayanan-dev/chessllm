@@ -50,7 +50,7 @@ SideOut = Annotated[HumanSide | LlmSide | AnchorSide, Field(discriminator="playe
 
 
 class NewGame(BaseModel):
-    """The settings chosen in the settings modal: the Mode and who plays each side, with the settings of each LLM
+    """The settings chosen in the New game sheet: the Mode and who plays each side, with the settings of each LLM
     side, and the rules for every LLM in the game. Sampling isn't one of them: it comes from the config file."""
 
     model_config = ConfigDict(extra="forbid")
@@ -252,6 +252,12 @@ def create_app(
             return load_sampling(sampling_file)
         except ValueError as error:
             raise HTTPException(500, str(error)) from None
+
+    @app.get("/api/games/defaults")
+    def new_game_defaults() -> NewGame:
+        """The settings a new game is started with when none are given. The New game sheet starts from them when
+        there is no game to copy."""
+        return NewGame()
 
     @app.post("/api/games")
     def start_game(new_game: NewGame | None = None) -> GameState:

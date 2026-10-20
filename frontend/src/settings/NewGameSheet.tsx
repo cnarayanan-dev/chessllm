@@ -79,8 +79,8 @@ type NewGameSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   /**
-   * The settings it opens with, each time: the last game's. Closing it drops its changes, so the next opening starts
-   * from these again.
+   * The settings it opens with, each time: the last game's, or with no game the API's defaults. Closing it drops its
+   * changes, so the next opening starts from these again.
    */
   initial: NextGame
   /** Play as White, Play as Black or Start faceoff: the game as set up in the sheet, which then closes. */

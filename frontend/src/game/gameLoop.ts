@@ -17,7 +17,7 @@ import { played } from '@/game/chaos'
 
 /** The one request to the backend in flight. */
 export type Request =
-  | { id: number; kind: 'load' } // the current game, or a default one if there is none
+  | { id: number; kind: 'load' } // the current game, if there is one
   | { id: number; kind: 'start'; newGame: NewGame | null } // null: the backend's default settings
   | { id: number; kind: 'move'; uci: string }
   | { id: number; kind: 'llm-turn'; game: GameState } // the turn of this game, as it was when asked for
@@ -27,6 +27,8 @@ type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> :
 export type GameLoop = {
   /** The game shown: the last state the backend sent, or null before the first. */
   game: GameState | null
+  /** The backend has no current game (a first visit, or after it restarted): none is shown until one is started. */
+  noGame: boolean
   request: Request | null
   /** The error line. */
   error: string | null
@@ -52,6 +54,7 @@ export type GameLoopAction =
   | { type: 'new-game'; newGame: NewGame | null }
   | { type: 'human-move'; uci: string }
   | { type: 'received'; requestId: number; game: GameState }
+  | { type: 'no-game'; requestId: number } // the load's answer when the backend has no current game
   | { type: 'failed'; requestId: number; message: string }
   // The move history: view the position after a ply (0: the start; the last ply: live), or step back or forward a ply.
   | { type: 'view'; ply: number }
@@ -62,6 +65,7 @@ export type Phase = 'idle' | 'human' | 'llm' | 'over'
 
 export const initialGameLoop: GameLoop = {
   game: null,
+  noGame: false,
   request: { id: 1, kind: 'load' },
   error: null,
   moveSounds: 0,
@@ -169,8 +173,12 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
         : state.flash
       // The view stays where it is in the same game; another game is shown live.
       const history = state.game?.game_id === action.game.game_id ? state.history : null
-      return show({ ...state, moveSounds: state.moveSounds + (sound ? 1 : 0), flash, history }, action.game)
+      const moveSounds = state.moveSounds + (sound ? 1 : 0)
+      return show({ ...state, noGame: false, moveSounds, flash, history }, action.game)
     }
+    case 'no-game':
+      if (state.request?.id !== action.requestId) return state
+      return { ...state, noGame: true, request: null }
     case 'failed': {
       const request = state.request
       if (request?.id !== action.requestId) return state

@@ -30,6 +30,9 @@ async function api<T>(method: string, path: string, body?: unknown, signal?: Abo
 
 export const getGame = (signal?: AbortSignal) => api<GameState>('GET', '/api/games/current', undefined, signal)
 
+/** The settings a new game takes by default: the New game sheet starts from them when there is no game. */
+export const getNewGameDefaults = (signal?: AbortSignal) => api<NewGame>('GET', '/api/games/defaults', undefined, signal)
+
 /** Starts a game with these settings, or the backend's default settings with null. */
 export const startGame = (newGame: NewGame | null, signal?: AbortSignal) =>
   api<GameState>('POST', '/api/games', newGame ?? undefined, signal)

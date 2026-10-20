@@ -61,6 +61,40 @@ async function clickMove(page: Page, uci: string) {
   await square(page, uci.slice(2, 4)).click()
 }
 
+test('a first visit: an empty board and the New game sheet with the defaults; closed, New game and ⌘K open it again; a reload keeps the game started', async ({ page }) => {
+  await page.request.post('/e2e/restart')
+  await page.request.post('/e2e/script', { data: { black: ['e5'] } })
+  await page.goto('/')
+
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByRole('radio', { name: 'Play LLM' })).toBeChecked()
+  await expect(sheet.getByRole('combobox', { name: 'Opponent' })).toContainText('llama3:8b')
+  await expect(page.locator('.chessboard rect.square')).toHaveCount(64)
+  await expect(page.locator('.chessboard g[data-piece]')).toHaveCount(0)
+  expect((await page.request.get('/api/games/current')).status()).toBe(404)
+
+  await page.keyboard.press('Escape')
+  await expect(sheet).toBeHidden()
+  await expect(page.locator('.chessboard g[data-piece]')).toHaveCount(0)
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  await expect(sheet).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(sheet).toBeHidden()
+  await page.keyboard.press('ControlOrMeta+k')
+  await expect(sheet).toBeVisible()
+  expect((await page.request.get('/api/games/current')).status()).toBe(404)
+
+  await sheet.getByRole('button', { name: 'Play as White' }).click()
+  await expect(sheet).toBeHidden()
+  await move(page, 'e2e4', 'e5')
+  await expect(page.getByTestId('strip-black')).toContainText('llama3:8b')
+
+  await page.reload()
+  await expect(lastMove(page)).toHaveText('e5')
+  await expect(sheet).toBeHidden()
+})
+
 test('a Play LLM game to checkmate', async ({ page }) => {
   await playLlm(page, { black: ['e5', 'Nc6', 'Nf6'] })
 

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { getNewGameDefaults } from '@/api/client'
 import { modelsQuery } from '@/api/models'
 import type { Color, GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
@@ -23,6 +24,7 @@ import { newGameRequest, nextGameFrom, type Models, type NextGame } from '@/sett
 
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
+const EMPTY_BOARD = '8/8/8/8/8/8/8/8 w - - 0 1'
 
 /** Whether a key press belongs to a field or a dialog rather than to the move history. */
 const keyTakenElsewhere = (event: KeyboardEvent) =>
@@ -53,6 +55,16 @@ export default function App() {
   // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
   const models: Models = modelsList.isError ? null : (modelsList.data ?? null)
+  // The API's defaults for a new game, which the New game sheet starts from while there is no game to copy.
+  const defaults = useQuery({
+    queryKey: ['new-game-defaults'],
+    queryFn: ({ signal }) => getNewGameDefaults(signal),
+    enabled: state.noGame,
+    staleTime: Infinity,
+  })
+  const initial = game ? nextGameFrom(game.settings) : defaults.data ? nextGameFrom(defaults.data) : null
+  // Without the defaults the sheet can't open, so no game can be started.
+  const startError = error ?? defaults.error?.message ?? null
   const running = waitingForLlm(state)
   // A new array with every state, so the same position given again snaps a rejected move's piece back.
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
@@ -74,14 +86,19 @@ export default function App() {
   /** Starts a game set up as `next`, replacing the running one at once: the New game sheet's start buttons. */
   const startGame = useCallback((next: NextGame) => newGame(newGameRequest(next, models)), [newGame, models])
 
-  // New game chosen in the top bar of another page: the sheet opens once the game is shown.
+  // The sheet opens by itself once the page knows what to show: with no current game (a first visit, or the backend
+  // restarted), as no game starts until the visitor starts one; and after New game in the top bar of another page,
+  // which also drops the request from the address.
   const then = useRef(thenFrom(window.location.search))
   useEffect(() => {
-    if (!then.current || !game) return
-    then.current = null
-    window.history.replaceState(null, '', window.location.pathname)
+    const asked = then.current !== null && (game !== null || state.noGame)
+    if (!asked && !state.noGame) return
+    if (asked) {
+      then.current = null
+      window.history.replaceState(null, '', window.location.pathname)
+    }
     setSheetOpen(true)
-  }, [game])
+  }, [game, state.noGame])
 
   // ← and → step through the move history, unless a field or the New game sheet has the keys.
   useEffect(() => {
@@ -99,14 +116,9 @@ export default function App() {
   return (
     <div className="min-h-svh text-sm">
       <TopBar onNewGame={openSheet} />
-      {game && (
-        // It opens with the last game's settings, each time.
-        <NewGameSheet
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-          initial={nextGameFrom(game.settings)}
-          onStart={startGame}
-        />
+      {initial && (
+        // It opens with the last game's settings each time, or with no game, the defaults.
+        <NewGameSheet open={sheetOpen} onOpenChange={setSheetOpen} initial={initial} onStart={startGame} />
       )}
       <GameLayout
         game={
@@ -118,10 +130,10 @@ export default function App() {
               <ReasoningPanel game={game} ply={shown.ply} live={!history} />
             </>
           ) : (
-            error !== null && (
+            startError !== null && (
               <Alert variant="destructive">
                 <AlertTitle>Could not start a game</AlertTitle>
-                <AlertDescription className="text-destructive">{error}</AlertDescription>
+                <AlertDescription className="text-destructive">{startError}</AlertDescription>
               </Alert>
             )
           )
@@ -150,6 +162,8 @@ export default function App() {
               {strip(game, orientation(game))}
               {chaos && <ChaosCaption chaos={chaos} />}
             </>
+          ) : state.noGame ? (
+            <Board fen={EMPTY_BOARD} orientation="white" />
           ) : (
             <div className="aspect-square w-full" />
           )

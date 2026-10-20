@@ -8,7 +8,10 @@ it; each game's LLM plays its own copy of the script, from the start (a Scripted
 thinking off each reply carries a Reasoning, "Reasoning for <san>.", as Ollama's answers do.
 
 POST /e2e/leaderboard-games replaces every game log with the synthetic games of tests/e2e_leaderboard.py, for the
-analytics page."""
+analytics page.
+
+POST /e2e/restart stands in for restarting the server: the app is built afresh, with no current game, as on a first
+visit. The script and the game logs are kept."""
 
 import argparse
 import json
@@ -16,7 +19,9 @@ import tempfile
 from pathlib import Path
 
 import uvicorn
+from fastapi import FastAPI
 from pydantic import BaseModel
+from starlette.types import Receive, Scope, Send
 
 from chessllm.app import create_app
 from chessllm.game import Color, Settings
@@ -44,23 +49,37 @@ def main() -> None:
 
     temp = Path(tempfile.mkdtemp(prefix="chessllm-e2e-"))
     games_dir = temp / "games"
-    app = create_app(
-        player_for,
-        games_dir=games_dir,
-        sampling_file=temp / "no-sampling.toml",
-        move_quality_validation=temp / "no-validation.json",  # no validation has run: estimates are unvalidated
-    )
 
-    @app.post("/e2e/script", include_in_schema=False)
-    def set_script(new: Script) -> None:
-        nonlocal script
-        script = new
+    def build() -> FastAPI:
+        app = create_app(
+            player_for,
+            games_dir=games_dir,
+            sampling_file=temp / "no-sampling.toml",
+            move_quality_validation=temp / "no-validation.json",  # no validation has run: estimates are unvalidated
+        )
 
-    @app.post("/e2e/leaderboard-games", include_in_schema=False)
-    def set_leaderboard_games() -> None:
-        write_leaderboard_games(games_dir)
+        @app.post("/e2e/script", include_in_schema=False)
+        def set_script(new: Script) -> None:
+            nonlocal script
+            script = new
 
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+        @app.post("/e2e/leaderboard-games", include_in_schema=False)
+        def set_leaderboard_games() -> None:
+            write_leaderboard_games(games_dir)
+
+        @app.post("/e2e/restart", include_in_schema=False)
+        def restart() -> None:
+            nonlocal current
+            current = build()
+
+        return app
+
+    current = build()
+
+    async def serve(scope: Scope, receive: Receive, send: Send) -> None:
+        await current(scope, receive, send)
+
+    uvicorn.run(serve, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":

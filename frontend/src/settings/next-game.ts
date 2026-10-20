@@ -4,8 +4,8 @@ import type { GameSettings, ModelInfo, NewGame } from '@/api/types'
 export type { GameSettings, ModelInfo, NewGame }
 
 type Schemas = components['schemas']
-type LlmSide = Schemas['LlmSide-Input']
-type Side = Schemas['HumanSide-Input'] | LlmSide
+type LlmSide = Schemas['LlmSide']
+type Side = Schemas['HumanSide'] | LlmSide
 
 export type Mode = NewGame['mode']
 export type Color = 'white' | 'black'
@@ -54,8 +54,11 @@ const sameSide = (a: object, b: object) => {
   return Object.keys({ ...x, ...y }).every((key) => x[key] === y[key])
 }
 
-/** The next game, set up as `settings` were: the New game sheet opens with the last game's. */
-export function nextGameFrom(settings: GameSettings): NextGame {
+/**
+ * The next game, set up as `settings` were: the New game sheet opens with the last game's, or with no game, the API's
+ * defaults for a new game.
+ */
+export function nextGameFrom(settings: GameSettings | NewGame): NextGame {
   const first = COLORS.map((color) => settings[color]).find(isLlm)
   if (!first) throw new Error('A game has at least one LLM side')
   const of = (color: Color) => {

@@ -37,17 +37,18 @@ export async function requestLlmTurn(game: GameState, signal: AbortSignal): Prom
   }
 }
 
-// After a reload the current game is shown again, and its LLM turn started, or waited for if one is running.
-async function load(signal: AbortSignal): Promise<GameState> {
+// After a reload the current game is shown again, and its LLM turn started, or waited for if one is running. With no
+// current game (404: a first visit, or the backend restarted), null: none is started until the visitor starts one.
+async function load(signal: AbortSignal): Promise<GameState | null> {
   try {
     return await getGame(signal)
   } catch (error) {
-    if (signal.aborted) throw error
-    return startGame(null, signal)
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
   }
 }
 
-function perform(request: Request, signal: AbortSignal): Promise<GameState> {
+function perform(request: Request, signal: AbortSignal): Promise<GameState | null> {
   switch (request.kind) {
     case 'load':
       return load(signal)
@@ -69,7 +70,11 @@ export function useGameLoop() {
     perform(request, controller.signal).then(
       (received) => {
         if (controller.signal.aborted) return
-        dispatch({ type: 'received', requestId: request.id, game: received })
+        dispatch(
+          received
+            ? { type: 'received', requestId: request.id, game: received }
+            : { type: 'no-game', requestId: request.id },
+        )
       },
       (error: unknown) => {
         if (controller.signal.aborted) return

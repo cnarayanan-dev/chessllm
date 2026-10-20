@@ -159,28 +159,117 @@ test('credits the Merida pieces, the move sound and the model logos', async () =
   expect(screen.getByText(/Model logos: LobeHub Icons, MIT/)).toBeVisible()
 })
 
-test('starts a game with the default settings when there is none', async () => {
-  const backend = fakeBackend()
-    .on('GET /api/games/current', Response.json({ detail: 'no game started' }, { status: 404 }))
-    .on('POST /api/games', Response.json(aGame()))
+describe('with no current game', () => {
+  const noGame = () => Response.json({ detail: 'no game started' }, { status: 404 })
+  // The API's defaults for a new game, here with a model and limit the test can tell apart.
+  const defaults = {
+    mode: 'play_llm',
+    white: { player: 'human' },
+    black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'listed', retry_feedback: 'explained' },
+    rules: 'standard',
+    max_attempts: 7,
+  }
 
+  test('the page shows an empty board and the New game sheet with the default settings, and starts no game', async () => {
+    const backend = fakeBackend()
+      .on('GET /api/games/current', noGame())
+      .on('GET /api/games/defaults', Response.json(defaults))
+      .on('GET /api/models', Response.json(models))
+    renderApp()
+
+    const sheet = await screen.findByRole('dialog', { name: 'New game' })
+    expect(within(sheet).getByRole('radio', { name: 'Play LLM' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(sheet).getByRole('combobox', { name: 'Opponent' })).toHaveTextContent('qwen3.5:9b')
+    expect(within(sheet).getByRole('button', { name: 'Play as White' })).toBeInTheDocument()
+    // The board with no pieces, taking no move, and no player strips or Game card.
+    expect(theBoard().position).toBe('8/8/8/8/8/8/8/8')
+    expect(theBoard().input).toBeNull()
+    expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Game' })).not.toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games')).toHaveLength(0)
+  })
+
+  test('starting from the sheet plays the default settings as set', async () => {
+    const backend = fakeBackend()
+      .on('GET /api/games/current', noGame())
+      .on('GET /api/games/defaults', Response.json(defaults))
+      .on('GET /api/models', Response.json(models))
+      .on('POST /api/games', Response.json(aGame()))
+    renderApp()
+
+    const sheet = await screen.findByRole('dialog', { name: 'New game' })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Play as White' }))
+
+    await yourMove()
+    expect(backend.sentTo('POST /api/games')[0].body).toEqual(defaults)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('closing the sheet leaves the empty board; New game and ⌘K open it again', async () => {
+    const backend = fakeBackend()
+      .on('GET /api/games/current', noGame())
+      .on('GET /api/games/defaults', Response.json(defaults))
+      .on('GET /api/models', Response.json(models), Response.json(models), Response.json(models))
+    renderApp()
+
+    await screen.findByRole('dialog', { name: 'New game' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
+
+    expect(await openSheet()).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    expect(await screen.findByRole('dialog', { name: 'New game' })).toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games')).toHaveLength(0)
+  })
+
+  test('says so when the game started from the sheet cannot start', async () => {
+    fakeBackend()
+      .on('GET /api/games/current', noGame())
+      .on('GET /api/games/defaults', Response.json(defaults))
+      .on('GET /api/models', Response.json(models))
+      .on('POST /api/games', Response.json({ detail: 'Ollama is not running' }, { status: 400 }))
+    renderApp()
+
+    const sheet = await screen.findByRole('dialog', { name: 'New game' })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Play as White' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('Could not start a game')).toBeInTheDocument()
+    expect(alert).toHaveTextContent('Ollama is not running')
+    expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
+  })
+
+  test("says so when the defaults can't be loaded", async () => {
+    fakeBackend()
+      .on('GET /api/games/current', noGame())
+      .on('GET /api/games/defaults', Response.json({ detail: 'Internal Server Error' }, { status: 500 }))
+    renderApp()
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('Could not start a game')).toBeInTheDocument()
+    expect(alert).toHaveTextContent('Internal Server Error')
+  })
+
+  test("says so when the current game can't be loaded, and opens no sheet", async () => {
+    fakeBackend().on('GET /api/games/current', Response.json({ detail: 'Internal Server Error' }, { status: 500 }))
+    renderApp()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Internal Server Error')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+test('a reload with a current game shows that game and opens no sheet', async () => {
+  const backend = fakeBackend().on('GET /api/games/current', Response.json(aGame()))
   renderApp()
 
   await yourMove()
-  expect(backend.sentTo('POST /api/games')).toEqual([{ method: 'POST', path: '/api/games', body: undefined }])
-})
-
-test('says so when no game can be started', async () => {
-  fakeBackend()
-    .on('GET /api/games/current', Response.json({ detail: 'no game started' }, { status: 404 }))
-    .on('POST /api/games', Response.json({ detail: 'Ollama is not running' }, { status: 400 }))
-
-  renderApp()
-
-  const alert = await screen.findByRole('alert')
-  expect(within(alert).getByText('Could not start a game')).toBeInTheDocument()
-  expect(alert).toHaveTextContent('Ollama is not running')
-  expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(backend.sentTo('GET /api/games/defaults')).toHaveLength(0)
+  expect(backend.sentTo('POST /api/games')).toHaveLength(0)
 })
 
 test("the human's move lands at once, then the LLM's turn runs, timed in its strip, and its move lands", async () => {
@@ -461,6 +550,21 @@ describe('the New game sheet', () => {
       expect(window.location.search).toBe('')
       expect(backend.sentTo('POST /api/games')).toHaveLength(0)
       await yourMove()
+    })
+
+    test('with no current game, its New game opens the sheet with the defaults, and the address loses the request', async () => {
+      const defaults = { mode: 'play_llm', white: { player: 'human' }, black: afterE4().settings.black, rules: 'standard', max_attempts: 5 }
+      const backend = fakeBackend()
+        .on('GET /api/games/current', Response.json({ detail: 'no game started' }, { status: 404 }))
+        .on('GET /api/games/defaults', Response.json(defaults))
+        .on('GET /api/models', Response.json(models))
+      window.history.replaceState(null, '', '/?then=new-game')
+      renderApp()
+
+      const sheet = await screen.findByRole('dialog', { name: 'New game' })
+      expect(within(sheet).getByRole('combobox', { name: 'Opponent' })).toHaveTextContent('qwen3.5:9b')
+      expect(window.location.search).toBe('')
+      expect(backend.sentTo('POST /api/games')).toHaveLength(0)
     })
   })
 

@@ -40,6 +40,37 @@ def test_a_model_ollama_cannot_show_is_still_offered_without_sampling(scripted):
     assert client.get("/api/models").json() == [{"name": "llama3:8b", "thinking": False, "sampling": None}]
 
 
+def test_the_settings_of_a_new_game_by_default_are_offered_before_any_game(scripted):
+    client, _ = scripted([])
+
+    response = client.get("/api/games/defaults")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "mode": "play_llm",
+        "white": {"player": "human"},
+        "black": {
+            "player": "llm",
+            "model": "llama3:8b",
+            "thinking": False,
+            "llm_constraints": "free",
+            "retry_feedback": "explained",
+        },
+        "rules": "standard",
+        "max_attempts": 5,
+    }
+    assert client.get("/api/games/current").status_code == 404
+
+
+def test_a_game_started_with_the_defaults_is_the_game_started_without_settings(scripted):
+    client, _ = scripted([])
+
+    with_defaults = client.post("/api/games", json=client.get("/api/games/defaults").json()).json()
+    without = client.post("/api/games").json()
+
+    assert with_defaults["settings"] == without["settings"]
+
+
 def test_a_game_cannot_start_with_a_model_that_isnt_in_the_list(scripted):
     client, player = scripted([])
 
