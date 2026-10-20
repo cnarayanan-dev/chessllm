@@ -108,6 +108,10 @@ _Avoid_: Chain of thought, reasoning, explanation
 One of the effort levels a model offers for its **Thinking**, as Ollama lists them, such as qwen3.8's low, medium and xhigh, sent instead of plain thinking on. Plain on means the model's default level. Set only in the benchmark's commands, never from the app. Part of the **Player configuration**; plain on or off is no level.
 _Avoid_: Thinking effort, reasoning effort, thinking mode
 
+**Thinking budget**:
+The most tokens of **Thinking** (and answer) a model may produce in one attempt before it is made to answer: it is handed back its thinking so far and gives its move under the same answer format, and under **Enforced decoding** the same legal-move constraint. In tokens, so it means the same on any machine; each **Retry** gets a fresh one. Needs thinking on. Set only in the benchmark's commands, never from the app. Part of the **Player configuration**; no budget is the default.
+_Avoid_: Token limit, thinking limit, time budget, max tokens
+
 **Reasoning**:
 The short explanation an LLM writes in its answer, before its move, when thinking is off. A model with thinking on gives none.
 _Avoid_: Explanation, thinking, justification
@@ -129,7 +133,7 @@ A legal move the LLM writes in anything other than its exact standard SAN, such 
 _Avoid_: Format error, non-SAN move
 
 **Retry**:
-A further attempt the LLM gets after an illegal move, told why the previous move was rejected. The attempts per turn, retries included, are set for the whole game, 1 to 25 and 5 by default, the same for every LLM in it; a Player configuration includes them.
+A further attempt the LLM gets after an illegal move, told why the previous move was rejected, or after a forced answer that was itself cut off before it gave a move (with a **Thinking budget** only; not an illegal move). The attempts per turn, retries included, are set for the whole game, 1 to 25 and 5 by default, the same for every LLM in it; a Player configuration includes them.
 _Avoid_: Re-prompt, second chance
 
 **Retry feedback**:
@@ -147,7 +151,7 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking and its **Thinking level**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
+An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Rating**:

@@ -32,6 +32,9 @@ class LlmModel:
     # The thinking values `ollama show` lists for it: false and true for on/off, or false and its Thinking levels,
     # e.g. "xhigh". Empty when it can't think (no "thinking" capability).
     thinking_values: tuple[bool | str, ...] = ()
+    # A conservative generation speed in tokens per second on this machine, from which a Thinking budget's time
+    # limit is derived (ADR 0007). None for a model that can't think, which can't have a budget.
+    tokens_per_s: float | None = None
 
     @property
     def thinking(self) -> bool:
@@ -46,16 +49,25 @@ class LlmModel:
 
 # The models offered in the New game sheet, with the thinking values `ollama show` lists for each under Ollama
 # 0.40.0, checked on 2026-10-20 (and their capabilities on 2026-10-19 against the Ollama library:
-# ollama.com/library/qwen3.5, ollama.com/library/llama3, ollama.com/library/gemma3).
+# ollama.com/library/qwen3.5, ollama.com/library/llama3, ollama.com/library/gemma3). The thinking models' speeds are
+# the low end of those measured on 2026-10-20 (docs/research/thinking-budget.md, "Verified").
 LLM_MODELS = [
-    LlmModel("qwen3.5:9b", (False, True)),  # Qwen 3.5, 9.7B parameters; thinking on by default
+    LlmModel("qwen3.5:9b", (False, True), tokens_per_s=20),  # Qwen 3.5, 9.7B parameters; thinking on by default
     # Qwen 3.8, 27.8B parameters. Thinking on means Ollama's default level, medium.
-    LlmModel("qwen3.8:latest", (False, "low", "medium", "xhigh")),
+    LlmModel("qwen3.8:latest", (False, "low", "medium", "xhigh"), tokens_per_s=18),
     LlmModel("llama3:8b"),  # Llama 3, 8B parameters
     LlmModel("gemma3:12b"),  # Gemma 3, 11.8B parameters
     # Gemma 4, 26.2B parameters (a 16 GB nvfp4 build). Thinking on by default, so the player must always send it.
-    LlmModel("gemma4:26b", (False, True)),
+    LlmModel("gemma4:26b", (False, True), tokens_per_s=36),
 ]
+
+# The cap on a forced answer, given when a Thinking budget runs out: the JSON move took 7-10 tokens in the spike.
+FORCED_ANSWER_TOKENS = 64
+# The context Ollama loads every model here with (`ollama ps`). A Thinking budget must fit in it with the prompt (up
+# to about 1,500 tokens late in a long game) and the forced answer, so at most 6,144, rounded down to a multiple of
+# 1,024; a budget smaller than the forced answer's cap can't hold an answer (ADR 0007).
+CONTEXT_TOKENS = 8192
+THINKING_BUDGET_RANGE = range(FORCED_ANSWER_TOKENS, 6144 + 1)
 
 
 def load_sampling(path: Path = SAMPLING_FILE) -> dict[str, float]:

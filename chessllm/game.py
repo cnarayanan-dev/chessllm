@@ -13,7 +13,7 @@ from chessllm import chaos
 from chessllm.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable
 from chessllm.players import LlmPlayer, LlmReply, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.game_log import GameLog, now
-from chessllm.models import LlmModel
+from chessllm.models import CONTEXT_TOKENS, THINKING_BUDGET_RANGE, LlmModel
 from chessllm.prompt import (
     ENFORCED,
     LISTED,
@@ -21,6 +21,7 @@ from chessllm.prompt import (
     LlmConstraints,
     PositionFormat,
     RetryFeedback,
+    cut_off_feedback,
     describe_position,
     retry_feedback,
     turn_messages,
@@ -84,21 +85,27 @@ class BenchmarkLlmSide(LlmSide):
 
     # One of the Thinking levels the model offers, e.g. "xhigh", sent instead of plain thinking on; needs thinking on.
     thinking_level: str | None = None
+    # The Thinking budget: the most tokens of thinking and answer per attempt before the model is made to answer
+    # (ADR 0007); needs thinking on. None is no budget.
+    thinking_budget: int | None = None
 
     def log_shape(self) -> dict[str, Any]:
         shape = super().log_shape()
-        if self.thinking_level is None:
-            del shape["thinking_level"]
+        for setting in ("thinking_level", "thinking_budget"):
+            if shape[setting] is None:
+                del shape[setting]
         return shape
 
     def think(self) -> bool | str:
         return self.thinking_level if self.thinking_level is not None else self.thinking
 
     def name(self) -> str:
-        """The side's name in the PGN, e.g. "qwen3.8:latest (thinking xhigh)"."""
-        if self.thinking_level is None:
+        """The side's name in the PGN, e.g. "qwen3.8:latest (thinking xhigh, budget 3072)"."""
+        if self.thinking_level is None and self.thinking_budget is None:
             return super().name()
-        return f"{self.model} (thinking {self.thinking_level})"
+        thinking = "thinking" if self.thinking_level is None else f"thinking {self.thinking_level}"
+        budget = "" if self.thinking_budget is None else f", budget {self.thinking_budget}"
+        return f"{self.model} ({thinking}{budget})"
 
 
 AnchorEngine = Literal["dragon", "stockfish"]
@@ -200,6 +207,18 @@ class Settings:
                     return f"{side.model} ({color}) has Thinking level {level}, so thinking must be on"
             if side.thinking and not model.thinking:
                 return f"{side.model} ({color}) cannot think, so thinking must be off"
+            if isinstance(side, BenchmarkLlmSide) and (budget := side.thinking_budget) is not None:
+                low, high = THINKING_BUDGET_RANGE[0], THINKING_BUDGET_RANGE[-1]
+                has_budget = f"{side.model} ({color}) has a Thinking budget"
+                if not side.thinking:
+                    return f"{has_budget}, so thinking must be on"
+                if budget < low:
+                    return f"{has_budget} of {budget} tokens, too few to hold an answer: at least {low}"
+                if budget > high:
+                    context = f"{CONTEXT_TOKENS:,}-token context"
+                    return f"{has_budget} of {budget} tokens, too many for its {context}: at most {high}"
+                if model.tokens_per_s is None:
+                    return f"{has_budget}, but no measured speed to set its time limit from"
             if self.rules == "chaos" and side.llm_constraints in ENFORCED:
                 wanted = "Chaos rules need every LLM under Free or Listed"
                 return f"{wanted}, not {side.model} ({color}) under {side.llm_constraints}"
@@ -230,6 +249,10 @@ class GameEnd:
 
 
 ILLEGAL_KINDS = ("invalid", "illegal", "ambiguous")
+# A forced answer that was itself cut off at its token cap, so there is no move to judge (ADR 0007). Not an illegal
+# move: it takes an attempt and gets a Retry, with a fresh Thinking budget, but no illegal-move metric counts it.
+# Only a side with a Thinking budget can have one, so never a game from the app.
+CUT_OFF = "cut_off"
 
 
 def reasoning(raw: str) -> str | None:
@@ -242,13 +265,15 @@ def reasoning(raw: str) -> str | None:
 
 def token_accounting(reply: LlmReply) -> dict[str, Any]:
     """What the attempt's call used and why generation stopped. Only the game log has these, not the API's state;
-    an attempt with no answer has none."""
+    an attempt with no answer has none. forced is there only when the Thinking budget forced the answer, so
+    attempts without a budget log as before."""
     return {
         "thinking_tokens": reply.thinking_tokens,
         "answer_tokens": reply.answer_tokens,
         "prompt_tokens": reply.prompt_tokens,
         "stop_reason": reply.stop_reason,
         "token_split_estimated": reply.token_split_estimated,
+        **({"forced": True} if reply.forced else {}),
     }
 
 
@@ -523,6 +548,7 @@ class GameSession:
         turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None, "reasoning": None}
         self._llm_turns.append(turn)
         feedback = None
+        illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._settings.max_attempts
         for number in range(1, max_attempts + 1):
             attempt: dict[str, Any] = {
@@ -549,6 +575,8 @@ class GameSession:
                 turn["reasoning"] = None  # the turn's Reasoning is its last attempt's: none without an answer
                 break
             written, move, result = judge(board, reply.raw)
+            if result == "invalid" and reply.forced and reply.stop_reason == "length":
+                result = CUT_OFF  # the forced answer ran out of tokens too: no answer, rather than a bad one
             # Thinking with thinking on; with it off, the Reasoning written in the answer instead.
             thinking, reasoned = (reply.thinking, None) if side.thinking else (None, reasoning(reply.raw))
             attempt |= {
@@ -558,7 +586,7 @@ class GameSession:
                 attempt["san"] = board.san(move)
                 attempt["notation_slip"] = written != attempt["san"]
             # Under Chaos rules a rule-breaking or ambiguous move is resolved; badly formed notation never is.
-            resolution = chaos.resolve(board, written) if self._chaos and result != "invalid" else None
+            resolution = chaos.resolve(board, written) if self._chaos and result not in ("invalid", CUT_OFF) else None
             if resolution is not None:
                 attempt["resolution"] = resolution.as_dict()
             attempt["latency_s"] = reply.latency_s
@@ -569,13 +597,18 @@ class GameSession:
             turn |= {"thinking": thinking, "reasoning": reasoned}
             if move is not None:
                 self._play_legal(move)
-                if number > 1:
+                if illegal_in_turn:
                     stats.recovered_turns += 1
                 if attempt["notation_slip"]:
                     stats.notation_slips += 1
                 if not stats.streak_broken:
                     stats.legal_move_streak += 1
                 return
+            if result == CUT_OFF:
+                feedback = cut_off_feedback(number, max_attempts)
+                messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
+                continue
+            illegal_in_turn = True
             stats.illegal_moves[result] += 1
             stats.streak_broken = True
             if resolution is not None and resolution.kind in ("chaos", "spawn"):  # played at once, with no retry

@@ -169,6 +169,34 @@ def test_token_statistics_per_configuration_and_none_from_logs_without_them(tmp_
     assert "thinking tokens median 550, p90 910; prompt tokens median 606; stopped for length: 2" in text
 
 
+def test_a_budget_is_its_own_configuration_with_its_forced_share_and_a_cut_off_is_not_an_illegal_move(
+    tmp_path, capsys
+):
+    games_dir = tmp_path / "games"
+    budgeted = QWEN | {"thinking_budget": 512}
+    events = game(budgeted, GEMMA, ["e4", "e5", "Nf3", "Nc6"], "1/2-1/2", "move_cap", illegal={1: ["Ke2"]})
+    cut, _, forced = [event for event in events if event["type"] == "llm_attempt" and event["color"] == "white"]
+    cut |= {"move": ' {"mo', "result": "cut_off", "forced": True, "stop_reason": "length"}
+    forced |= {"forced": True, "stop_reason": "stop"}
+    write_log(games_dir, "2026-10-19T10-00-00_a", events)
+    write_log(games_dir, "2026-10-19T10-00-01_b", game(QWEN, GEMMA, ["e4", "e5"], "1/2-1/2", "move_cap"))
+
+    report = analyse(load_games(games_dir)[0], Filters())
+
+    by_name = {entry["configuration"]["label"]: entry["themes"] for entry in report["configurations"]}
+    themes = by_name["qwen3.5:9b / free / thinking, budget 512 / standard / explained feedback"]
+    # Two of the three answered attempts were forced: the cut-off one and the last.
+    assert (themes["forced_answers"], themes["forced_share"], themes["cut_offs"]) == (2, 2 / 3, 1)
+    assert (themes["illegal_attempts_per_turn"], themes["illegal_turn_rate"], themes["recovered_turns"]) == (0, 0, 0)
+    assert themes["legal_move_streak_median"] == 2
+    unbudgeted = by_name["qwen3.5:9b / free / thinking / standard / explained feedback"]
+    assert (unbudgeted["forced_answers"], unbudgeted["forced_share"], unbudgeted["cut_offs"]) == (0, None, 0)
+    assert main(["--games-dir", str(games_dir)]) == 0
+    text = capsys.readouterr().out
+    # For the budgeted configuration, and for all sides together, whose share is of the budgeted attempts only.
+    assert text.count("forced answers: 2 of 3 attempts with a budget (67%); cut off without an answer: 1") == 2
+
+
 def test_a_thinking_level_is_its_own_configuration_and_plain_thinking_on_keeps_its_label(tmp_path):
     games_dir = tmp_path / "games"
     qwen38 = QWEN | {"model": "qwen3.8:latest"}

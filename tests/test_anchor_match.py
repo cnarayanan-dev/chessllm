@@ -163,6 +163,19 @@ def test_a_thinking_level_reaches_the_llms_player_and_is_logged(anchor_match, tm
     assert pgn_game(tmp_path / "games").headers["Black"] == "qwen3.8:latest (thinking xhigh)"
 
 
+def test_a_thinking_budget_reaches_the_llms_settings_and_is_logged(anchor_match, tmp_path):
+    code, player, _, _ = anchor_match(
+        ["e5", "Qh4#"], ["f3", "g4"], "--model", "qwen3.8:latest", "--thinking-level", "medium",
+        "--thinking-budget", "3072", "--color", "black",
+    )
+
+    assert code == 0
+    black = events(tmp_path / "games")[0]["black"]
+    assert (black["thinking_level"], black["thinking_budget"]) == ("medium", 3072)
+    assert player.built_for[0].black.thinking_budget == 3072
+    assert pgn_game(tmp_path / "games").headers["Black"] == "qwen3.8:latest (thinking medium, budget 3072)"
+
+
 @pytest.mark.parametrize(
     ("args", "error"),
     [

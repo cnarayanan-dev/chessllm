@@ -2,14 +2,27 @@
 
 import time
 from collections.abc import Callable
+from typing import Any
 
 import httpx
 import ollama
 
+from chessllm.models import FORCED_ANSWER_TOKENS
 from chessllm.players import LlmReply, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
 
 # Long thinking can run for many minutes and still end without an answer, so a turn is cut off here.
 TIMEOUT_S = 300.0
+# Closes the thinking handed back when a Thinking budget runs out, so the model gives its move (ADR 0007).
+BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
+
+
+def time_limit_s(budget: int | None, tokens_per_s: float | None) -> float:
+    """The per-call time limit of a side with this Thinking budget, generating at tokens_per_s (ADR 0007): the
+    budget's time with 50% to spare, plus 60 s for the prompt, a re-prefill for the forced answer and a model swap,
+    and never below the limit without a budget."""
+    if budget is None or tokens_per_s is None:
+        return TIMEOUT_S
+    return max(TIMEOUT_S, 60 + 1.5 * budget / tokens_per_s)
 
 
 class OllamaPlayer:
@@ -20,7 +33,10 @@ class OllamaPlayer:
 
     A call that takes longer than timeout_s is cancelled: closing the connection also stops Ollama generating.
 
-    thinking is sent to Ollama exactly as given: on, off, or a Thinking level the model offers, e.g. "xhigh"."""
+    thinking is sent to Ollama exactly as given: on, off, or a Thinking level the model offers, e.g. "xhigh".
+
+    With a Thinking budget, a call generates at most budget tokens; a reply cut there is made to answer in one more
+    call (ADR 0007). Each call gets the whole time limit."""
 
     def __init__(
         self,
@@ -29,10 +45,12 @@ class OllamaPlayer:
         chat: Callable[..., ollama.ChatResponse] | None = None,
         timeout_s: float = TIMEOUT_S,
         sampling: dict[str, float] | None = None,
+        budget: int | None = None,
     ) -> None:
         self._model = model
         self._thinking = thinking
         self._sampling = sampling or None  # None plays at the model's own defaults
+        self.budget = budget
         self._chat = chat or ollama.Client(timeout=timeout_s).chat
         self.timeout_s = timeout_s
 
@@ -40,30 +58,57 @@ class OllamaPlayer:
         schema = (MoveAnswer if self._thinking else ReasonedMoveAnswer).model_json_schema()
         if allowed_moves is not None:
             schema["properties"]["move"] = schema["properties"]["move"] | {"enum": allowed_moves}
+        turn: list[dict[str, str]] = [{"role": message.role, "content": message.content} for message in messages]
         started = time.perf_counter()
+        response = self._call(turn, schema, self.budget)
+        raw, thinking = response.message.content or "", response.message.thinking
+        if self.budget is None or response.done_reason != "length":
+            thinking_tokens, answer_tokens, estimated = split_tokens(response.eval_count, thinking or "", raw)
+            return LlmReply(
+                raw=raw,
+                thinking=thinking,
+                latency_s=time.perf_counter() - started,
+                thinking_tokens=thinking_tokens,
+                answer_tokens=answer_tokens,
+                prompt_tokens=response.prompt_eval_count,
+                stop_reason=response.done_reason,
+                token_split_estimated=estimated,
+            )
+        # The budget ran out: hand the thinking back and take the answer under the same schema, in one more call.
+        # Cut while thinking, the thinking so far is closed with the budget sentence; cut while answering, the
+        # thinking was complete and goes back unchanged. The content must be a space: with none the model thinks
+        # again instead of answering (docs/research/thinking-budget.md).
+        cut_while_thinking = not raw
+        handed_back = (thinking or "") + BUDGET_SENTENCE if cut_while_thinking else thinking or ""
+        forced = self._call(
+            [*turn, {"role": "assistant", "thinking": handed_back, "content": " "}], schema, FORCED_ANSWER_TOKENS
+        )
+        # Cut while thinking, all of the first call was thinking; cut while answering, its cut answer is split off.
+        thinking_tokens, _, estimated = split_tokens(response.eval_count, thinking or "", raw)
+        return LlmReply(
+            raw=forced.message.content or "",
+            thinking=thinking,
+            latency_s=time.perf_counter() - started,
+            thinking_tokens=thinking_tokens,
+            answer_tokens=forced.eval_count,
+            prompt_tokens=response.prompt_eval_count,
+            stop_reason=forced.done_reason,
+            token_split_estimated=estimated,
+            forced=True,
+        )
+
+    def _call(self, messages: list[dict[str, str]], schema: dict[str, Any], cap: int | None) -> ollama.ChatResponse:
+        """One chat call, its generation capped at cap tokens when given."""
         try:
-            response = self._chat(
+            return self._chat(
                 model=self._model,
-                messages=[{"role": message.role, "content": message.content} for message in messages],
+                messages=messages,
                 think=self._thinking,
                 format=schema,
-                options=self._sampling,
+                options=self._sampling if cap is None else (self._sampling or {}) | {"num_predict": cap},
             )
         except httpx.TimeoutException:
             raise LlmTimeout(self.timeout_s) from None
-        latency_s = time.perf_counter() - started
-        raw, thinking = response.message.content or "", response.message.thinking
-        thinking_tokens, answer_tokens, estimated = split_tokens(response.eval_count, thinking or "", raw)
-        return LlmReply(
-            raw=raw,
-            thinking=thinking,
-            latency_s=latency_s,
-            thinking_tokens=thinking_tokens,
-            answer_tokens=answer_tokens,
-            prompt_tokens=response.prompt_eval_count,
-            stop_reason=response.done_reason,
-            token_split_estimated=estimated,
-        )
 
 
 def split_tokens(generated: int | None, thinking: str, answer: str) -> tuple[int | None, int | None, bool]:

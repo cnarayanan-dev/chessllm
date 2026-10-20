@@ -46,13 +46,18 @@ class PlayerConfiguration(BaseModel):
     # The Thinking level, None for plain thinking on or off. Set only by the benchmark's commands, so it is kept out
     # of the API's schema and output, which stay as they were (#67); it still gives the configuration its own id.
     thinking_level: SkipJsonSchema[str | None] = Field(None, exclude=True)
+    # The Thinking budget in tokens, None for none: benchmark only like the level, and kept out of the API the same way.
+    thinking_budget: SkipJsonSchema[int | None] = Field(None, exclude=True)
 
     def id(self) -> str:
         """A short fingerprint of the settings, the same for the same settings on every request. The default
-        position and no Thinking level are left out, so configurations from before those settings keep their id."""
-        settings = self.model_dump()  # without the default position or the Thinking level
+        position, no Thinking level and no Thinking budget are left out, so configurations from before those
+        settings keep their id."""
+        settings = self.model_dump()  # without the default position, the Thinking level or the Thinking budget
         if self.thinking_level is not None:
             settings["thinking_level"] = self.thinking_level
+        if self.thinking_budget is not None:
+            settings["thinking_budget"] = self.thinking_budget
         canonical = json.dumps(settings, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
@@ -307,6 +312,7 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         prompt=PurePath(prompt_file).name,
         position=side.get("position"),
         thinking_level=side.get("thinking_level"),
+        thinking_budget=side.get("thinking_budget"),
     )
 
 
@@ -324,6 +330,7 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         prompt=SYSTEM_PROMPT_FILES[side.llm_constraints].name,
         position=side.position,
         thinking_level=side.thinking_level if isinstance(side, BenchmarkLlmSide) else None,
+        thinking_budget=side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None,
     )
 
 

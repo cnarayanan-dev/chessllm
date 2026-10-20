@@ -5,18 +5,23 @@ import shutil
 import uvicorn
 
 from chessllm.app import create_app
-from chessllm.game import Color, LlmSide, Settings
+from chessllm.game import BenchmarkLlmSide, Color, LlmSide, Settings
 from chessllm.maia2_model import Maia2MoveModel
+from chessllm.models import LLM_MODELS
 from chessllm.ollama_models import sampling_defaults
-from chessllm.ollama_player import OllamaPlayer
+from chessllm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.stockfish_evaluator import StockfishEvaluator
 
 
 def player_for(settings: Settings, color: Color) -> OllamaPlayer:
-    """The LLM player of one LLM side of a game, built when the game starts."""
+    """The LLM player of one LLM side of a game, built when the game starts. A benchmark side's Thinking budget
+    sets its time limit, from its model's speed (ADR 0007)."""
     side = settings.side(color)
     assert isinstance(side, LlmSide)
-    return OllamaPlayer(side.model, side.think(), sampling=settings.sampling)
+    budget = side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None
+    speed = next((model.tokens_per_s for model in LLM_MODELS if model.name == side.model), None)
+    timeout_s = time_limit_s(budget, speed)
+    return OllamaPlayer(side.model, side.think(), timeout_s=timeout_s, sampling=settings.sampling, budget=budget)
 
 
 def main() -> None:

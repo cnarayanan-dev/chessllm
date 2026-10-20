@@ -6,8 +6,8 @@ Run:
     uv run python -m scripts.analyse_games --mode anchor_match --model llama3 --since 2026-10-19
     uv run python -m scripts.analyse_games --include-unfinished --json  # the same report as JSON
 
-A Player configuration is grouped here by model, LLM constraints, thinking and its Thinking level, rules, retry
-feedback and position (the leaderboard also splits by sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for
+A Player configuration is grouped here by model, LLM constraints, thinking and its Thinking level and Thinking budget,
+rules, retry feedback and position (the leaderboard also splits by sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for
 each side. Both log versions are read (ADR 0004) through chessllm.leaderboard.read_sides; a file that isn't a
 readable game log is skipped and counted.
 
@@ -29,7 +29,7 @@ from typing import Any
 import chess
 
 from chessllm.analysis import analysis_path
-from chessllm.game import COLORS, ILLEGAL_KINDS, Color
+from chessllm.game import COLORS, CUT_OFF, ILLEGAL_KINDS, Color
 from chessllm.game_log import GAMES_DIR
 from chessllm.leaderboard import SCORES, read_sides
 from chessllm.move_quality import VALIDATION_FILE, ConfigurationMoves, move_quality, read_analysed_moves, read_validation
@@ -93,11 +93,14 @@ class Configuration:
     retry_feedback: str
     position: str = "fen"
     thinking_level: str | None = None  # None for plain thinking on or off
+    thinking_budget: int | None = None  # in tokens; None for no budget
 
     def label(self) -> str:
         thinking = "thinking" if self.thinking else "no thinking"
         if self.thinking_level is not None:
             thinking = f"thinking {self.thinking_level}"
+        if self.thinking_budget is not None:
+            thinking += f", budget {self.thinking_budget}"
         described = " / described position" if self.position != "fen" else ""
         return (
             f"{self.model} / {self.llm_constraints} / {thinking} / {self.rules} / {self.retry_feedback} feedback"
@@ -167,6 +170,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             retry_feedback=str(side["retry_feedback"]),
             position=str(side.get("position") or "fen"),
             thinking_level=side.get("thinking_level"),
+            thinking_budget=side.get("thinking_budget"),
         )
         other = game.sides["black" if color == "white" else "white"]
         outcome = None if game.end is None else SCORES.get(str(game.end.get("result")), {}).get(color, "draw")
@@ -292,6 +296,9 @@ class Themes:
     thinking_tokens: list[int] = field(default_factory=list)  # per attempt with an answer; logs before them have none
     prompt_tokens: list[int] = field(default_factory=list)
     length_stops: int = 0  # attempts whose generation was cut at the token limit
+    budgeted_answers: int = 0  # attempts with an answer by a side with a Thinking budget
+    forced_answers: int = 0  # of those, the ones the budget forced, cut-offs included
+    cut_offs: int = 0  # forced answers cut off too, so without a move: neither illegal nor a forfeit at once
     allowed_mate_in_one: int = 0  # legal moves after which the opponent could mate at once
     missed_mate_in_one: int = 0  # turns with a mate in one that the LLM didn't play
     mate_turns_checked: int = 0
@@ -311,8 +318,13 @@ class Themes:
                 if isinstance(attempt.get("latency_s"), (int, float)):
                     self.latencies.append(float(attempt["latency_s"]))
                 self.add_tokens(attempt)
+                if result not in NO_ANSWER and side.configuration.thinking_budget is not None:
+                    self.budgeted_answers += 1
+                    self.forced_answers += attempt.get("forced") is True
                 if result in NO_ANSWER:
                     self.no_answers += 1
+                elif result == CUT_OFF:
+                    self.cut_offs += 1
                 elif result in ILLEGAL_KINDS:
                     illegal_in_turn = streak_broken = True  # even if a retry recovers the turn
                     move = str(attempt.get("move"))
@@ -326,7 +338,7 @@ class Themes:
                         self.chaos_moves += 1
                 elif result == "legal":
                     self.notation_slips += bool(attempt.get("notation_slip"))
-                    self.recovered_turns += int(attempt.get("attempt", 1)) > 1
+                    self.recovered_turns += illegal_in_turn  # recovered from an illegal move, not from a cut-off
                     if not streak_broken:
                         streak += 1
                     self.add_mates(attempt)
@@ -405,6 +417,10 @@ class Themes:
             "thinking_tokens_p90": p90(self.thinking_tokens),
             "prompt_tokens_median": median(self.prompt_tokens),
             "length_stops": self.length_stops,
+            "budgeted_answers": self.budgeted_answers,
+            "forced_answers": self.forced_answers,
+            "forced_share": ratio(self.forced_answers, self.budgeted_answers),
+            "cut_offs": self.cut_offs,
             "allowed_mate_in_one": self.allowed_mate_in_one,
             "missed_mate_in_one": self.missed_mate_in_one,
             "mate_turns_checked": self.mate_turns_checked,
@@ -584,6 +600,11 @@ def theme_lines(themes: dict[str, Any]) -> list[str]:
             f"p90 {count_text(themes['thinking_tokens_p90'])}; "
             f"prompt tokens median {count_text(themes['prompt_tokens_median'])}; "
             f"stopped for length: {themes['length_stops']}"
+        )
+    if themes["budgeted_answers"]:
+        lines.append(
+            f"forced answers: {themes['forced_answers']} of {themes['budgeted_answers']} attempts with a budget "
+            f"({percent(themes['forced_share'])}); cut off without an answer: {themes['cut_offs']}"
         )
     if themes["chaos_moves"]:
         lines.append(f"chaos moves: {themes['chaos_moves']}")

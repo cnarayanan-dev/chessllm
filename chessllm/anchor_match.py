@@ -48,6 +48,13 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         metavar="LEVEL",
         help="think at one of the Thinking levels the model offers, e.g. xhigh for qwen3.8:latest (turns thinking on)",
     )
+    parser.add_argument(
+        "--thinking-budget",
+        type=int,
+        metavar="TOKENS",
+        help="the most tokens of thinking and answer per attempt before the model is made to answer, e.g. 3072 "
+        "(needs thinking on)",
+    )
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
     parser.add_argument(
@@ -95,6 +102,7 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         model=args.model,
         thinking=args.thinking or args.thinking_level is not None,
         thinking_level=args.thinking_level,
+        thinking_budget=args.thinking_budget,
         llm_constraints=args.llm_constraints,
         retry_feedback=args.retry_feedback,
         position=args.position,

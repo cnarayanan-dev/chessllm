@@ -22,8 +22,11 @@ class LlmReply:
     thinking_tokens: int | None = None
     answer_tokens: int | None = None
     prompt_tokens: int | None = None
-    stop_reason: str | None = None  # why generation stopped, as Ollama says: "stop", "length", ...
+    # Why generation stopped, as Ollama says: "stop", "length", ... For a forced answer, why the forced call stopped.
+    stop_reason: str | None = None
     token_split_estimated: bool = False  # thinking and answer were counted together and split by characters
+    # The Thinking budget ran out, so the answer was taken in a second, forced call (ADR 0007).
+    forced: bool = False
 
 
 class MoveAnswer(BaseModel):

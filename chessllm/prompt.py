@@ -121,3 +121,12 @@ def retry_feedback(
     if level == "hinted":
         return f"{explained}\nLegal moves: {' '.join(legal_moves)}"
     return explained
+
+
+def cut_off_feedback(attempt: int, max_attempts: int) -> str:
+    """The message after an answer cut off by the Thinking budget, the same at every Retry feedback level: there was
+    no move to judge, so there is nothing to explain or hint at."""
+    return (
+        f"Your reply was cut off before it gave a move. Attempt {attempt} of {max_attempts}. "
+        "Think more briefly and reply with a legal move."
+    )

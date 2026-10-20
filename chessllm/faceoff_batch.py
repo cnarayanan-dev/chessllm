@@ -5,7 +5,7 @@
 Colours alternate game by game, the first model as White in the first game. Both sides share the LLM's settings
 (thinking, LLM constraints, Retry feedback, rules, attempts per turn), as a faceoff started in the app does by default;
 --thinking-for MODEL turns thinking on for one model only, and --thinking-for MODEL=LEVEL at one of the Thinking levels
-it offers, e.g. qwen3.8:latest=xhigh.
+it offers, e.g. qwen3.8:latest=xhigh; --thinking-budget-for MODEL=TOKENS gives one model a Thinking budget (ADR 0007).
 Each game is analysed as it ends, with Maia-2 and Stockfish (--no-analysis to skip). Ctrl-C stops it, leaving every
 finished game's log complete."""
 
@@ -45,6 +45,15 @@ def parser() -> argparse.ArgumentParser:
         help="turn thinking on for this model only (repeatable), e.g. a thinking model against one that can't think; "
         "=LEVEL thinks at one of the Thinking levels the model offers, e.g. qwen3.8:latest=xhigh",
     )
+    parser.add_argument(
+        "--thinking-budget-for",
+        action="append",
+        type=model_budget,
+        default=[],
+        metavar="MODEL=TOKENS",
+        help="give this model a Thinking budget of TOKENS per attempt (repeatable; needs its thinking on), e.g. "
+        "qwen3.8:latest=3072",
+    )
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
     parser.add_argument(
@@ -71,6 +80,14 @@ def model_thinking(value: str) -> tuple[str, str | None]:
     return model, level or None
 
 
+def model_budget(value: str) -> tuple[str, int]:
+    """A --thinking-budget-for value: the model, and the Thinking budget in tokens after "="."""
+    model, _, tokens = value.partition("=")
+    if not model or not tokens.isdigit():
+        raise argparse.ArgumentTypeError(f"not MODEL=TOKENS: {value!r}")
+    return model, int(tokens)
+
+
 def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_file: Path) -> Settings:
     """The settings of a faceoff of model white against model black. Raises ValueError when they can't be played."""
 
@@ -79,12 +96,18 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
         if levels.get(model, level) != level:
             raise ValueError(f"--thinking-for gives {model} two Thinking levels, {levels[model]} and {level}")
         levels[model] = level
+    budgets: dict[str, int] = {}
+    for model, budget in args.thinking_budget_for:
+        if budgets.get(model, budget) != budget:
+            raise ValueError(f"--thinking-budget-for gives {model} two Thinking budgets, {budgets[model]} and {budget}")
+        budgets[model] = budget
 
     def side(model: str) -> LlmSide:
         return BenchmarkLlmSide(
             model=model,
             thinking=args.thinking or model in levels,
             thinking_level=levels.get(model),
+            thinking_budget=budgets.get(model),
             llm_constraints=args.llm_constraints,
             retry_feedback=args.retry_feedback,
             position=args.position,

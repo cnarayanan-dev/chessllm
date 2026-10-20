@@ -178,3 +178,74 @@ def test_a_reply_without_counts_carries_none():
 
     assert (reply.thinking_tokens, reply.answer_tokens, reply.prompt_tokens, reply.stop_reason) == (None,) * 4
     assert reply.token_split_estimated is False
+
+
+BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
+TURN = [Message("system", "Play chess."), Message("user", "PGN: 1. e4")]
+
+
+def scripted_chat(*responses: ChatResponse):
+    """A fake chat call answering with the responses in order, recording every request."""
+    calls: list[dict] = []
+    replies = list(responses)
+
+    def chat(**request):
+        calls.append(request)
+        return replies.pop(0)
+
+    return chat, calls
+
+
+def answer(content: str, thinking: str | None = None, **counts) -> ChatResponse:
+    return ChatResponse(message=OllamaMessage(role="assistant", content=content, thinking=thinking), **counts)
+
+
+def test_a_budgeted_reply_that_stops_normally_makes_one_call_capped_at_the_budget():
+    chat, calls = scripted_chat(answer('{"move": "e5"}', "Mirror it.", eval_count=300, done_reason="stop"))
+
+    player = OllamaPlayer("qwen3.8:latest", thinking="medium", chat=chat, sampling={"temperature": 0.6}, budget=1024)
+    reply = player.reply(TURN, allowed_moves=["e5", "Nf6"])
+
+    [request] = calls
+    assert request["options"] == {"temperature": 0.6, "num_predict": 1024}
+    assert (reply.raw, reply.forced, reply.stop_reason) == ('{"move": "e5"}', False, "stop")
+
+
+def test_a_reply_cut_while_thinking_is_forced_in_one_more_call_with_the_thinking_handed_back():
+    chat, calls = scripted_chat(
+        answer("", "Nf6 develops, but", prompt_eval_count=400, eval_count=1024, done_reason="length"),
+        answer(' {"move": "Nf6"}', prompt_eval_count=1430, eval_count=8, done_reason="stop"),
+    )
+
+    player = OllamaPlayer("qwen3.8:latest", thinking="medium", chat=chat, sampling={"temperature": 0.6}, budget=1024)
+    reply = player.reply(TURN, allowed_moves=["e5", "Nf6"])
+
+    first, forced = calls
+    # The same model, thinking value and answer schema, enum included, with the turn's messages unchanged.
+    assert {key: forced[key] for key in ("model", "think", "format")} == {
+        key: first[key] for key in ("model", "think", "format")
+    }
+    assert forced["format"]["properties"]["move"]["enum"] == ["e5", "Nf6"]
+    assert forced["messages"] == first["messages"] + [
+        {"role": "assistant", "thinking": "Nf6 develops, but" + BUDGET_SENTENCE, "content": " "}
+    ]
+    assert forced["options"] == {"temperature": 0.6, "num_predict": 64}
+    assert (reply.raw, reply.thinking, reply.forced) == (' {"move": "Nf6"}', "Nf6 develops, but", True)
+    # All of the first call was thinking; the answer is the forced call's; the prompt is the turn's, the first call's.
+    assert (reply.thinking_tokens, reply.answer_tokens, reply.prompt_tokens) == (1024, 8, 400)
+    assert (reply.stop_reason, reply.token_split_estimated) == ("stop", False)
+
+
+def test_a_reply_cut_while_answering_hands_back_the_complete_thinking_unchanged():
+    # 18 characters of thinking and 6 of a cut answer share the first call's 32 tokens.
+    chat, calls = scripted_chat(
+        answer('{"move', "Nf6 develops. Nf6.", prompt_eval_count=400, eval_count=32, done_reason="length"),
+        answer(' {"move": "Nf6"}', eval_count=8, done_reason="stop"),
+    )
+
+    reply = OllamaPlayer("qwen3.5:9b", chat=chat, budget=64).reply(TURN, allowed_moves=["e5", "Nf6"])
+
+    _, forced = calls
+    assert forced["messages"][-1] == {"role": "assistant", "thinking": "Nf6 develops. Nf6.", "content": " "}
+    assert (reply.raw, reply.forced) == (' {"move": "Nf6"}', True)
+    assert (reply.thinking_tokens, reply.answer_tokens, reply.token_split_estimated) == (24, 8, True)
