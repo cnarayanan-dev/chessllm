@@ -1,0 +1,542 @@
+[
+ {
+  "fen": "8/2kqr3/5r2/n1bPpP2/p1P1PRP1/1p1N3P/PP3K2/1RB5 w - - 7 43",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1 Ra5 27. Nf4 Bb4 28. Qxf6 Kc7 29. Qxf7 Ra6 30. Qh5 Na5 31. Qe8 Ba3 32. Qh8 b4 33. Re3 Nc6 34. Nd3 Kd6 35. Qg8 Na5 36. Qf8+ Kc7 37. Qe7 Rxe7 38. c3 b3 39. c4 Ra8 40. Rg3 Ra6 41. Rf3 Rf6 42. Rf4 Bc5+",
+  "color": "white",
+  "ply": 85,
+  "phase": "late",
+  "in_check": true,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqkb1r/ppp2ppp/3p1n2/n3p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 6",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5",
+  "color": "white",
+  "ply": 11,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r3kb1r/p1pq1p2/1pn2n2/1N1Pp1Q1/4PP2/7P/PPP3P1/1RB1K2R w Kkq - 2 18",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7",
+  "color": "white",
+  "ply": 35,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "2b2b1r/r1n3p1/1k2q3/2p2p1p/pP3BP1/P2pQ3/1PBN1P1P/4R1KR b - - 1 41",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5 d4 31. Bc2 Nc7 32. g4 Na6 33. Qd1 Nc7 34. Nd2 Qxe6+ 35. Kf1 Kxb5 36. Rb1 a4 37. Kg1 f5 38. Qe2+ Kb6 39. Qe3 c5 40. Rc1 d3 41. Re1",
+  "color": "black",
+  "ply": 82,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "2b2b1r/r1n3p1/1kp1qp2/pN5p/1P1p1BP1/P7/1PBN1P1P/R2QK2R w KQ - 0 35",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5 d4 31. Bc2 Nc7 32. g4 Na6 33. Qd1 Nc7 34. Nd2 Qxe6+",
+  "color": "white",
+  "ply": 69,
+  "phase": "late",
+  "in_check": true,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqk2r/pppp1ppp/5n2/2b1p3/2BnP3/2N2N2/PPP2PPP/R1BQK2R w KQkq - 0 6",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Nc3 Bc5 5. d4 Nxd4",
+  "color": "white",
+  "ply": 11,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-54-13_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1b1qb1r/2k2pp1/p1p1Pn1p/2Pp4/1P6/P2BBN2/1P2QPPP/RN2K2R b KQ - 0 20",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6",
+  "color": "black",
+  "ply": 40,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "4Q3/2kq3r/r7/np1PpP2/pb2PNP1/7P/PPP2K2/1RB1R3 b - - 4 31",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1 Ra5 27. Nf4 Bb4 28. Qxf6 Kc7 29. Qxf7 Ra6 30. Qh5 Na5 31. Qe8",
+  "color": "black",
+  "ply": 62,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "5Q2/3q3r/r2k4/n2PpP2/pp2P1P1/b2NR2P/PPP2K2/1RB5 b - - 7 36",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1 Ra5 27. Nf4 Bb4 28. Qxf6 Kc7 29. Qxf7 Ra6 30. Qh5 Na5 31. Qe8 Ba3 32. Qh8 b4 33. Re3 Nc6 34. Nd3 Kd6 35. Qg8 Na5 36. Qf8+",
+  "color": "black",
+  "ply": 72,
+  "phase": "late",
+  "in_check": true,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "rnbqk2r/ppp2ppp/3b1n2/3p4/3P4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 4 6",
+  "pgn": "1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nf3 Nf6 5. Nc3 Bd6",
+  "color": "white",
+  "ply": 11,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T22-07-08_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r3kb1r/p1p1qp1p/1pn1Bnp1/3Pp2Q/4PP2/2N4P/PPP3P1/1RB1K2R b Kkq - 0 14",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4",
+  "color": "black",
+  "ply": 28,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r3k2r/1bp1qp2/p1P2n2/b3pP2/P2QN1pp/1p4P1/1P2B2P/R3BR1K w kq - 0 36",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. Bd3 Nd4 5. Bc4 Nd5 6. c3 d6 7. Nxe5 dxe5 8. Qe2 b6 9. Bd3 Nc6 10. Qe3 Bb7 11. Bc4 Nf6 12. d4 Na5 13. Be2 Qd7 14. O-O Qe6 15. f4 b5 16. a4 Nc6 17. c4 Nxd4 18. Qd2 Bc5 19. Nc3 Bb4 20. f5 Qe7 21. Qd3 Bc6 22. Bd2 h6 23. g3 a6 24. c5 Nxe4 25. Be1 Bb7 26. c6 Nc5 27. Kg2 g5 28. Ne4 Ba5 29. Qd1 Nd7 30. Qd2 b4 31. Qd3 Nf6 32. Qxd4 h5 33. Kh1 b3 34. Ra3 g4 35. Ra1 h4",
+  "color": "white",
+  "ply": 71,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T23-13-50_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqk2r/pppp1ppp/5n2/2b5/4P3/1PNP1n2/P1P2PPP/R1BQKB1R w KQkq - 1 7",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. d3 Bc5 5. Nxe5 Nxe5 6. b3 Nf3+",
+  "color": "white",
+  "ply": 13,
+  "phase": "opening",
+  "in_check": true,
+  "game": "2026-10-19T17-27-04_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "rnbqkb1r/pp3ppp/2p1pn2/3P4/3P4/5N2/PP2PPPP/RNBQKB1R w KQkq - 0 5",
+  "pgn": "1. d4 d5 2. c4 Nf6 3. cxd5 e6 4. Nf3 c6",
+  "color": "white",
+  "ply": 9,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-58-33_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1b1kb1r/p4ppp/2pq1n2/2Ppp3/1P2P3/P2B1N2/1P3PPP/RNBQK2R w KQkq - 1 13",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6",
+  "color": "white",
+  "ply": 25,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r2qr2k/1ppbbp2/7p/1p1pPBpP/P5P1/2n1BP2/3Q4/R3K2R b KQ - 0 39",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8 17. h3 Nf6 18. b5 axb5 19. h4 Re8 20. h5 Ne4 21. Qd3 Nf6 22. Ne4 Ng4 23. Nc5 Ne7 24. Qd2 Nf6 25. g4 h6 26. Bd3 g5 27. Bc4 Ne4 28. Bd3 Bf5 29. c3 Be6 30. Na4 Nxc3 31. Nc5 Bxc5 32. Nf5 Qd7 33. Qf2 Qd6 34. Bd2 Qd8 35. Be3 Nxf5 36. Bc2 Kh8 37. Bxf5 Bd7 38. Qd2 Be7 39. a4",
+  "color": "black",
+  "ply": 78,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1b1k2r/3N2pp/p1p5/1pbp1p1Q/3nP1q1/1BN1B3/PPP2PPP/R4RK1 b kq - 1 17",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Nc3 Bc5 5. d4 Nxd4 6. Bb3 b6 7. Nd2 d6 8. Nf3 d5 9. O-O a6 10. Nxe5 Nd7 11. Nxd7 Qe7 12. Qf3 Qe6 13. Qg3 c6 14. Bf4 Qg4 15. Qh4 f5 16. Be3 b5 17. Qh5+",
+  "color": "black",
+  "ply": 34,
+  "phase": "middlegame",
+  "in_check": true,
+  "game": "2026-10-19T21-54-13_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r2qkb1r/pbpp1ppp/1p1n4/n7/2BP4/2N1BN2/PPP2PPP/R2QK2R w KQkq - 2 9",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Bc4 Nxe4 5. Nxe5 Nd6 6. d4 Na5 7. Nf3 b6 8. Be3 Bb7",
+  "color": "white",
+  "ply": 17,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T22-13-34_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r2kN2r/3q1p2/1pn2n2/p2Pp1Q1/1b2PP2/7P/PPP2KP1/1RB4R w - - 0 21",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5",
+  "color": "white",
+  "ply": 41,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r3r1k1/1ppqnp2/4b2p/1pbpPNpP/6P1/P1nB1P2/5Q2/R1B1K2R b KQ - 3 33",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8 17. h3 Nf6 18. b5 axb5 19. h4 Re8 20. h5 Ne4 21. Qd3 Nf6 22. Ne4 Ng4 23. Nc5 Ne7 24. Qd2 Nf6 25. g4 h6 26. Bd3 g5 27. Bc4 Ne4 28. Bd3 Bf5 29. c3 Be6 30. Na4 Nxc3 31. Nc5 Bxc5 32. Nf5 Qd7 33. Qf2",
+  "color": "black",
+  "ply": 66,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1b2b1r/2n3p1/2k5/2p1qp1p/pP2QBP1/P2p4/1PB2P1P/4RNKR b - - 9 45",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5 d4 31. Bc2 Nc7 32. g4 Na6 33. Qd1 Nc7 34. Nd2 Qxe6+ 35. Kf1 Kxb5 36. Rb1 a4 37. Kg1 f5 38. Qe2+ Kb6 39. Qe3 c5 40. Rc1 d3 41. Re1 Kc6 42. Rd1 Qd6 43. Re1 Qe5 44. Nf1 Ra8 45. Qe4+",
+  "color": "black",
+  "ply": 90,
+  "phase": "late",
+  "in_check": true,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1",
+  "pgn": "1. d4",
+  "color": "black",
+  "ply": 2,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-50-58_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1b1kb1r/2q2ppp/pn6/3p4/P1pNPB2/2NQ4/1PP1BPPP/R3K2R b KQkq - 2 17",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 d6 4. Bc4 Nf6 5. d4 Na5 6. Nb1 d5 7. Nc3 b5 8. Bxb5+ Nd7 9. Be2 c6 10. a4 c5 11. Nxe5 Nc6 12. Be3 a6 13. Bf4 Nb6 14. Nf3 c4 15. Qd2 Nxd4 16. Nxd4 Qc7 17. Qd3",
+  "color": "black",
+  "ply": 34,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-01-56_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "2b2b1r/r3q1p1/nkp1Pp2/pN1p3p/1P2BB2/P4NP1/1P1Q1P1P/R3K2R b KQ - 4 30",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5",
+  "color": "black",
+  "ply": 60,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "2b2b1r/r1n3p1/2p1q3/1k3p1p/pP1p1BP1/P7/1PBNQP1P/1R4KR b - - 1 38",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5 d4 31. Bc2 Nc7 32. g4 Na6 33. Qd1 Nc7 34. Nd2 Qxe6+ 35. Kf1 Kxb5 36. Rb1 a4 37. Kg1 f5 38. Qe2+",
+  "color": "black",
+  "ply": 76,
+  "phase": "late",
+  "in_check": true,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "rnbqk2r/ppp2ppp/5n2/2b5/3P4/P3PN2/1P2QPPP/R1B1KB1R b KQkq - 2 9",
+  "pgn": "1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nf3 Nf6 5. Nc3 Bd6 6. a3 Bc5 7. Nxd5 Nxd5 8. e3 Nf6 9. Qe2",
+  "color": "black",
+  "ply": 18,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T22-07-08_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1bqr1k1/1ppn1p1p/p1nb2p1/3pP3/1P1N4/P1N2PP1/2P1Q2P/R1B1KB1R w KQ - 0 16",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6",
+  "color": "white",
+  "ply": 31,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r3r1k1/1pp1np2/3qb2p/1pbpPNpP/6P1/P1nB1P2/3B1Q2/R3K2R b KQ - 5 34",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8 17. h3 Nf6 18. b5 axb5 19. h4 Re8 20. h5 Ne4 21. Qd3 Nf6 22. Ne4 Ng4 23. Nc5 Ne7 24. Qd2 Nf6 25. g4 h6 26. Bd3 g5 27. Bc4 Ne4 28. Bd3 Bf5 29. c3 Be6 30. Na4 Nxc3 31. Nc5 Bxc5 32. Nf5 Qd7 33. Qf2 Qd6 34. Bd2",
+  "color": "black",
+  "ply": 68,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r3kb1r/2Nb1ppp/p1P1qn2/3pp1B1/1p6/P3PN1P/1P2BPP1/2RQK2R b Kkq - 1 16",
+  "pgn": "1. c4 e5 2. a3 d6 3. Nc3 Nf6 4. d3 c6 5. Bg5 Na6 6. h3 Nc5 7. e3 Bd7 8. Nf3 Qe7 9. Rc1 b6 10. Be2 d5 11. d4 b5 12. cxd5 cxd5 13. dxc5 Qe6 14. c6 b4 15. Nb5 a6 16. Nc7+",
+  "color": "black",
+  "ply": 32,
+  "phase": "middlegame",
+  "in_check": true,
+  "game": "2026-10-19T21-32-14_stockfish-skill1_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "rnbqkbnr/pppp1ppp/8/4p3/2P5/P7/1P1PPPPP/RNBQKBNR b KQkq - 0 2",
+  "pgn": "1. c4 e5 2. a3",
+  "color": "black",
+  "ply": 4,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-32-14_stockfish-skill1_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "rn1qr1k1/pp1b1ppp/2p2n2/2b5/1P1P4/P2QPN2/5PPP/R1B1KB1R w KQ - 1 13",
+  "pgn": "1. d4 d5 2. c4 e6 3. cxd5 exd5 4. Nf3 Nf6 5. Nc3 Bd6 6. a3 Bc5 7. Nxd5 Nxd5 8. e3 Nf6 9. Qe2 O-O 10. b3 c6 11. Qd3 Bd7 12. b4 Re8",
+  "color": "white",
+  "ply": 25,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-07-08_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1b2b1r/2n3p1/2k5/2p1qp1p/pP3BP1/P2pQ3/1PB2P1P/4RNKR w - - 8 45",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5 d4 31. Bc2 Nc7 32. g4 Na6 33. Qd1 Nc7 34. Nd2 Qxe6+ 35. Kf1 Kxb5 36. Rb1 a4 37. Kg1 f5 38. Qe2+ Kb6 39. Qe3 c5 40. Rc1 d3 41. Re1 Kc6 42. Rd1 Qd6 43. Re1 Qe5 44. Nf1 Ra8",
+  "color": "white",
+  "ply": 89,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bq1rk1/1p2bppp/2n1pn2/p1pP4/3P1B2/2N1P3/PP1NQPPP/R3KB1R w KQ - 2 10",
+  "pgn": "1. d4 d5 2. c4 c5 3. cxd5 Nf6 4. Bf4 e6 5. Nc3 Nc6 6. e3 Bd6 7. Nf3 Be7 8. Nd2 a5 9. Qe2 O-O",
+  "color": "white",
+  "ply": 19,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-50-58_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r3kb1r/pbppqppp/2nn4/1p1P4/8/2NBBNP1/PPPQ1P1P/R3K2R b KQkq - 2 12",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Bc4 Nxe4 5. Nxe5 Nd6 6. d4 Na5 7. Nf3 b6 8. Be3 Bb7 9. Bd3 b5 10. d5 Qe7 11. g3 Nc6 12. Qd2",
+  "color": "black",
+  "ply": 24,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-13-34_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "2b2b1r/r1n3p1/1kp1q3/5p1p/pP1p1BP1/P3Q3/1PBN1P1P/1R4KR b - - 3 39",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5 Qe8 20. e6 Qe7 21. Bd2 Ra7 22. Ng1 Nd7 23. Be4 h5 24. Be3 f6 25. Nf3 Kb7 26. Qd2 Nxc5 27. Bf4 a5 28. g3 Kb6 29. Nc3 Na6 30. Nb5 d4 31. Bc2 Nc7 32. g4 Na6 33. Qd1 Nc7 34. Nd2 Qxe6+ 35. Kf1 Kxb5 36. Rb1 a4 37. Kg1 f5 38. Qe2+ Kb6 39. Qe3",
+  "color": "black",
+  "ply": 78,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqkb1r/ppp2ppp/2np1n2/4p3/2B1P3/5N1P/PPPP1PP1/RNBQK2R w KQkq - 1 7",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6",
+  "color": "white",
+  "ply": 13,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r3k2r/2p1qpp1/p1b4p/1pP1pP2/Pb1nn3/2NQ2P1/1P1BB2P/R4RK1 w kq - 0 25",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. Bd3 Nd4 5. Bc4 Nd5 6. c3 d6 7. Nxe5 dxe5 8. Qe2 b6 9. Bd3 Nc6 10. Qe3 Bb7 11. Bc4 Nf6 12. d4 Na5 13. Be2 Qd7 14. O-O Qe6 15. f4 b5 16. a4 Nc6 17. c4 Nxd4 18. Qd2 Bc5 19. Nc3 Bb4 20. f5 Qe7 21. Qd3 Bc6 22. Bd2 h6 23. g3 a6 24. c5 Nxe4",
+  "color": "white",
+  "ply": 49,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T23-13-50_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r2qr1k1/1pp1np2/4b2p/1pbpP1pP/3N2P1/P1nB1P2/3Q4/R1B1K2R w KQ - 0 32",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8 17. h3 Nf6 18. b5 axb5 19. h4 Re8 20. h5 Ne4 21. Qd3 Nf6 22. Ne4 Ng4 23. Nc5 Ne7 24. Qd2 Nf6 25. g4 h6 26. Bd3 g5 27. Bc4 Ne4 28. Bd3 Bf5 29. c3 Be6 30. Na4 Nxc3 31. Nc5 Bxc5",
+  "color": "white",
+  "ply": 63,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1bqkb1r/p1p2ppp/1pn5/3np3/4P3/2PB4/PP1PQPPP/RNB1K2R w KQkq - 2 10",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. Bd3 Nd4 5. Bc4 Nd5 6. c3 d6 7. Nxe5 dxe5 8. Qe2 b6 9. Bd3 Nc6",
+  "color": "white",
+  "ply": 19,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T23-13-50_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bq1rk1/1ppn1p1p/p1nb2p1/3pP3/1P1N4/P1N1QPP1/2P4P/R1B1KB1R w KQ - 2 17",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8",
+  "color": "white",
+  "ply": 33,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1k5/3q1p1r/2n1Nn2/1p1PpPQ1/p3P1P1/b6P/PPP2K2/1RB1R3 b - - 1 26",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1",
+  "color": "black",
+  "ply": 52,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bq1rk1/ppp1bppp/2np4/3np3/4P3/PP1PB1P1/2PN1P1P/R2QKB1R b KQ - 0 10",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Nd5 Nxd5 5. d3 Be7 6. b3 d6 7. Be3 Bd7 8. Nd2 O-O 9. a3 Bc8 10. g3",
+  "color": "black",
+  "ply": 20,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T17-33-24_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1b2rk1/5ppp/p1pbpn2/qpnP4/NP1P2P1/P4N1P/1B2PP2/R2QKB1R b KQ - 0 13",
+  "pgn": "1. d4 d5 2. c4 Nf6 3. cxd5 e6 4. Nf3 c6 5. Nc3 Be7 6. g3 Bd6 7. b3 Nbd7 8. h3 Nc5 9. Bb2 O-O 10. a3 a6 11. b4 Qa5 12. Na4 b5 13. g4",
+  "color": "black",
+  "ply": 26,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T21-58-33_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r3k2r/1bp1qp2/p1P2n2/b3pPpp/Pp1QN3/6P1/1P2B2P/R3BR1K b kq - 1 33",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. Bd3 Nd4 5. Bc4 Nd5 6. c3 d6 7. Nxe5 dxe5 8. Qe2 b6 9. Bd3 Nc6 10. Qe3 Bb7 11. Bc4 Nf6 12. d4 Na5 13. Be2 Qd7 14. O-O Qe6 15. f4 b5 16. a4 Nc6 17. c4 Nxd4 18. Qd2 Bc5 19. Nc3 Bb4 20. f5 Qe7 21. Qd3 Bc6 22. Bd2 h6 23. g3 a6 24. c5 Nxe4 25. Be1 Bb7 26. c6 Nc5 27. Kg2 g5 28. Ne4 Ba5 29. Qd1 Nd7 30. Qd2 b4 31. Qd3 Nf6 32. Qxd4 h5 33. Kh1",
+  "color": "black",
+  "ply": 66,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T23-13-50_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqkb1r/pppp1ppp/5n2/1Bn1p3/4P3/2PP1N2/PP3PPP/RNBQK2R w KQkq - 3 7",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5",
+  "color": "white",
+  "ply": 13,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqr1k1/1p1nbppp/4p3/n1pP4/N2P1B2/1P2P3/P3QPPP/R3KB1R b KQ - 1 13",
+  "pgn": "1. d4 d5 2. c4 c5 3. cxd5 Nf6 4. Bf4 e6 5. Nc3 Nc6 6. e3 Bd6 7. Nf3 Be7 8. Nd2 a5 9. Qe2 O-O 10. Nc4 Nd7 11. b3 Re8 12. Nxa5 Nxa5 13. Na4",
+  "color": "black",
+  "ply": 26,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T21-50-58_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r3k2r/1bpnqp2/p1P4p/b3pPp1/Pp1nN3/3Q2P1/1P2B1KP/R3BR2 b kq - 1 31",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. Bd3 Nd4 5. Bc4 Nd5 6. c3 d6 7. Nxe5 dxe5 8. Qe2 b6 9. Bd3 Nc6 10. Qe3 Bb7 11. Bc4 Nf6 12. d4 Na5 13. Be2 Qd7 14. O-O Qe6 15. f4 b5 16. a4 Nc6 17. c4 Nxd4 18. Qd2 Bc5 19. Nc3 Bb4 20. f5 Qe7 21. Qd3 Bc6 22. Bd2 h6 23. g3 a6 24. c5 Nxe4 25. Be1 Bb7 26. c6 Nc5 27. Kg2 g5 28. Ne4 Ba5 29. Qd1 Nd7 30. Qd2 b4 31. Qd3",
+  "color": "black",
+  "ply": 62,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T23-13-50_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqkb1r/pp3ppp/2n1pn2/2pP4/3P1B2/2N5/PP2PPPP/R2QKBNR w KQkq - 2 6",
+  "pgn": "1. d4 d5 2. c4 c5 3. cxd5 Nf6 4. Bf4 e6 5. Nc3 Nc6",
+  "color": "white",
+  "ply": 11,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-50-58_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1bq1b1r/2k2pp1/p1p2n1p/2PpP3/1P6/P2BBN2/1P2QPPP/RN2K2R b KQ - 0 19",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4 5. d3 Na6 6. Bb5 Nc5 7. d4 c6 8. Be2 Qe7 9. dxc5 d5 10. Bd3 b5 11. a3 b4 12. cxb4 Qd6 13. Nfd2 a6 14. Nf3 Qd7 15. Nxe5 Qd8 16. Nf3 Kd7 17. Qe2 Kc7 18. Be3 h6 19. e5",
+  "color": "black",
+  "ply": 38,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "8/2kqr3/r7/n2PpP2/pp2P1P1/b2NR2P/PPP2K2/1RB5 w - - 0 38",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1 Ra5 27. Nf4 Bb4 28. Qxf6 Kc7 29. Qxf7 Ra6 30. Qh5 Na5 31. Qe8 Ba3 32. Qh8 b4 33. Re3 Nc6 34. Nd3 Kd6 35. Qg8 Na5 36. Qf8+ Kc7 37. Qe7 Rxe7",
+  "color": "white",
+  "ply": 75,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqk2r/pppp1ppp/2n2n2/2b5/1P1pP3/2N2N2/P1P2PPP/R1BQKB1R b KQkq - 0 6",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. d3 Bc5 5. d4 exd4 6. b4",
+  "color": "black",
+  "ply": 12,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T22-11-17_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1bqr1k1/1pp2p1p/2nb2p1/1p1pP2P/3Nn3/P1N1QPP1/2P5/R1B1KB1R w KQ - 1 21",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8 17. h3 Nf6 18. b5 axb5 19. h4 Re8 20. h5 Ne4",
+  "color": "white",
+  "ply": 41,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1bqr1k1/1pp1np2/3b1npp/1pNpP2P/3N2P1/P4P2/2PQ4/R1B1KB1R w KQ - 0 26",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Bb4 4. d3 Nf6 5. g3 O-O 6. d4 exd4 7. a3 Bc5 8. Nxd4 d5 9. Na2 Re8 10. e5 Ne7 11. f3 a6 12. b3 Nc6 13. b4 Nd7 14. Qe2 Bd6 15. Nc3 g6 16. Qe3 Rf8 17. h3 Nf6 18. b5 axb5 19. h4 Re8 20. h5 Ne4 21. Qd3 Nf6 22. Ne4 Ng4 23. Nc5 Ne7 24. Qd2 Nf6 25. g4 h6",
+  "color": "white",
+  "ply": 51,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-19T22-45-40_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bb5",
+  "color": "black",
+  "ply": 6,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T23-13-50_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r2qr1k1/ppp1bppp/2np4/3npb2/1P2P2P/P2PB1P1/2PN1P2/R2QKB1R b KQ - 0 12",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Nd5 Nxd5 5. d3 Be7 6. b3 d6 7. Be3 Bd7 8. Nd2 O-O 9. a3 Bc8 10. g3 Bf5 11. h4 Re8 12. b4",
+  "color": "black",
+  "ply": 24,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T17-33-24_llama3-8b_vs_gemma3-12b.jsonl"
+ },
+ {
+  "fen": "8/2kqr3/5r2/n2PpP2/p1P1P1P1/bp1N1R1P/PP3K2/1RB5 w - - 5 42",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1 Ra5 27. Nf4 Bb4 28. Qxf6 Kc7 29. Qxf7 Ra6 30. Qh5 Na5 31. Qe8 Ba3 32. Qh8 b4 33. Re3 Nc6 34. Nd3 Kd6 35. Qg8 Na5 36. Qf8+ Kc7 37. Qe7 Rxe7 38. c3 b3 39. c4 Ra8 40. Rg3 Ra6 41. Rf3 Rf6",
+  "color": "white",
+  "ply": 83,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1bqkb1r/pppp1ppp/5n2/4p3/1nB1P3/2P2N2/PP1P1PPP/RNBQK2R w KQkq - 1 5",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. c3 Nb4",
+  "color": "white",
+  "ply": 9,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T22-26-38_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "r1b1kb1r/3p3p/p2nq3/nppP1pp1/4NP2/3BBNPP/PPPQ3K/R4R2 b kq - 1 21",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Bc4 Nxe4 5. Nxe5 Nd6 6. d4 Na5 7. Nf3 b6 8. Be3 Bb7 9. Bd3 b5 10. d5 Qe7 11. g3 Nc6 12. Qd2 Na5 13. O-O a6 14. h3 c6 15. Ne5 c5 16. f4 g6 17. Ne4 Qe6 18. Nf3 Bc8 19. Qe1 g5 20. Qd2 f5 21. Kh2",
+  "color": "black",
+  "ply": 42,
+  "phase": "middlegame",
+  "in_check": false,
+  "game": "2026-10-19T22-13-34_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "8/2kq1Q1r/r1n5/1p1PpP2/pb2PNP1/7P/PPP2K2/1RB1R3 w - - 1 30",
+  "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nd4 d6 4. Bc4 Nf6 5. Nf3 Na5 6. h3 Nc6 7. Nc3 b6 8. Nxe5 dxe5 9. Rb1 Be6 10. Bxe6 Ng8 11. d4 Qe7 12. d5 Nf6 13. Qh5 g6 14. f4 h6 15. Qxh6 g5 16. Qxg5 Qxe6 17. Nb5 Qd7 18. Nxc7+ Kd8 19. Ne8 Bb4+ 20. Kf2 a5 21. Rf1 Rh7 22. Ng7 Ba3 23. Ne6+ Kc8 24. f5 a4 25. g4 b5 26. Re1 Ra5 27. Nf4 Bb4 28. Qxf6 Kc7 29. Qxf7 Ra6",
+  "color": "white",
+  "ply": 59,
+  "phase": "late",
+  "in_check": false,
+  "game": "2026-10-20T09-59-22_gemma3-12b_vs_llama3-8b.jsonl"
+ },
+ {
+  "fen": "rnbqkb1r/ppp2ppp/3p1n2/4p3/2P5/P1NP4/1P2PPPP/R1BQKBNR b KQkq - 0 4",
+  "pgn": "1. c4 e5 2. a3 d6 3. Nc3 Nf6 4. d3",
+  "color": "black",
+  "ply": 8,
+  "phase": "opening",
+  "in_check": false,
+  "game": "2026-10-19T21-32-14_stockfish-skill1_vs_llama3-8b.jsonl"
+ }
+]
