@@ -176,13 +176,25 @@ def test_the_llm_taking_the_humans_king_wins_by_king_capture(scripted):
     assert state["human_legal_moves"] == []
 
 
-def test_the_human_taking_the_llms_hanging_king_wins_by_king_capture(scripted):
-    client, _, state = chaos_game(scripted, ["Ke3"], "e2e4")  # the king walks into both white pawns' reach
+def test_a_chaos_move_that_walks_the_king_into_check_loses_at_once(scripted):
+    _, _, state = chaos_game(scripted, ["Ke3"], "e2e4")  # the king walks into both white pawns' reach
 
-    assert "d2e3" in state["human_legal_moves"]
-    state = client.post("/api/games/current/moves", json={"uci": "d2e3"}).json()
+    assert (state["status"], state["result"], state["end_reason"]) == ("over", "1-0", "king_left_in_check")
+    assert state["human_legal_moves"] == []
 
-    assert (state["status"], state["result"], state["end_reason"]) == ("over", "1-0", "king_capture")
+
+def test_a_chaos_move_that_ignores_a_check_loses_at_once(scripted):
+    _, _, state = chaos_game(scripted, ["f6", "a5"], "e2e4", "d1h5")  # Qh5+, and a5 leaves the king in check
+
+    assert attempts(state) == [("a5", "illegal", "chaos")]
+    assert (state["status"], state["result"], state["end_reason"]) == ("over", "1-0", "king_left_in_check")
+
+
+def test_a_chaos_move_that_blocks_a_check_plays_on(scripted):
+    _, _, state = chaos_game(scripted, ["f6", "Bg6"], "e2e4", "d1h5")  # Qh5+, and the f8 bishop jumps in the way
+
+    assert attempts(state) == [("Bg6", "illegal", "chaos")]
+    assert state["status"] == "playing"
 
 
 def test_checkmate_still_ends_a_game_after_a_chaos_move(scripted):

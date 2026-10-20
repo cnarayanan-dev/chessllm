@@ -17,6 +17,7 @@ const END_REASONS: Record<string, string> = {
   forfeit: 'by forfeit',
   move_cap: 'at the move cap of 150 moves each',
   king_capture: 'by King capture',
+  king_left_in_check: 'by a king left in check',
 }
 
 type LlmSide = Extract<GameSettings['white'], { player: 'llm' }>
@@ -40,6 +41,13 @@ function kingCapture(game: GameState, winner: Color): string {
   return loser === human ? 'you left your king hanging' : `${name(loser)} left its king hanging`
 }
 
+/** Whose chaos move left its own king in check, which loses at once. */
+function kingLeftInCheck(game: GameState, winner: Color): string {
+  const loser = other(winner)
+  const model = faceoff(game) ? `${llmSide(game, loser).model} (${COLOR_NAMES[loser]})` : llmSide(game, loser).model
+  return `${model} left its own king in check`
+}
+
 /** The Game card's result line, e.g. "Black wins by checkmate", and the reason's detail under it, if any. */
 export function resultText(game: GameState): { result: string; detail: string | null } {
   // In a faceoff the result names the models, e.g. "qwen3.5:9b (White) wins".
@@ -54,6 +62,7 @@ export function resultText(game: GameState): { result: string; detail: string | 
   const error = game.llm_turn?.attempts.at(-1)?.error
   let detail: string | null = null
   if (endReason === 'king_capture' && winner) detail = kingCapture(game, winner)
+  else if (endReason === 'king_left_in_check' && winner) detail = kingLeftInCheck(game, winner)
   else if (endReason === 'forfeit' && error) detail = error
   else if (endReason === 'forfeit' && faceoff(game) && winner) {
     const tries = game.llm_turn?.attempts.length ?? 0

@@ -476,8 +476,9 @@ class GameSession:
         A draw counts once the position has happened, not when the side to move could claim it with its next
         move (as outcome(claim_draw=True) would), so the LLM is never denied a move it could still play.
 
-        King capture comes first: python-chess would go on judging a position with a king missing. Repetition
-        counts every position of the game, as a chaos move clears python-chess's move stack."""
+        King capture comes first: python-chess would go on judging a position with a king missing. Then a chaos
+        move that leaves the mover's own king in check loses at once, before the opponent has to take the king.
+        Repetition counts every position of the game, as a chaos move clears python-chess's move stack."""
         board = self._board
         mover = not board.turn
         outcome = board.outcome()
@@ -485,6 +486,8 @@ class GameSession:
             # The side left with a king wins: normally the mover, unless it took its own king with a chaos move.
             winner = mover if board.king(mover) is not None else board.turn
             self._end = GameEnd("1-0" if winner == chess.WHITE else "0-1", "king_capture")
+        elif board.was_into_check():  # only a chaos move can leave the mover's king attacked
+            self._end = GameEnd("0-1" if mover == chess.WHITE else "1-0", "king_left_in_check")
         elif outcome is not None:
             # The termination names double as end reasons, e.g. STALEMATE -> "stalemate".
             self._end = GameEnd(outcome.result(), outcome.termination.name.lower())
