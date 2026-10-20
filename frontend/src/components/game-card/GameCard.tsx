@@ -48,7 +48,8 @@ function SettingText({ setting, name }: { setting: GameSetting; name: string }) 
   )
 }
 
-/** Settings as a line of muted text, " · " between them; on a player's row, without the side, which the row shows. */
+/** Settings as a line of muted text, " · " between them; on a player's row, without the side, which the row shows.
+ * A setting moves whole to the next line, and wraps itself only when longer than the card is wide. */
 function SettingsLine({
   settings,
   label,
@@ -61,7 +62,7 @@ function SettingsLine({
   return (
     <ul aria-label={label} className="flex flex-wrap text-[13px] text-muted-foreground">
       {settings.map((setting, index) => (
-        <li key={setting.name} className="whitespace-nowrap">
+        <li key={setting.name}>
           {index > 0 && <span aria-hidden="true">&nbsp;·&nbsp;</span>}
           <SettingText setting={setting} name={onSideRow ? setting.plainName : setting.name} />
         </li>
@@ -122,7 +123,7 @@ export function GameCard({ game, error, onRematch }: GameCardProps) {
                 )}
               />
               <span className="sr-only">{COLOR_NAMES[color]} </span>
-              <span className="flex flex-wrap items-baseline gap-x-2">
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {name(color)}
                 {sideOf(color).length > 0 && (
                   <SettingsLine settings={sideOf(color)} label={`${COLOR_NAMES[color]}'s settings`} onSideRow />
