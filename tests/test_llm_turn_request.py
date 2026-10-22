@@ -1,6 +1,6 @@
 """The human's move and the LLM's turn are separate requests: POST /moves never waits for the LLM."""
 
-from conftest import play_llm
+from conftest import BlockingPlayer, play_llm
 
 import threading
 
@@ -8,7 +8,6 @@ import chess
 from fastapi.testclient import TestClient
 
 from chessllm.app import create_app
-from chessllm.players import LlmReply, Message
 
 START_FEN = chess.STARTING_FEN
 
@@ -108,23 +107,8 @@ def test_there_is_no_llm_turn_without_a_game(scripted):
     assert client.post("/api/games/current/llm-turn").status_code == 404
 
 
-class BlockingPlayer:
-    """Test fake for the LLM player port: answers e5, but only once released, so a turn can be kept running."""
-
-    def __init__(self) -> None:
-        self.asked = threading.Event()
-        self.release = threading.Event()
-        self.prompts: list[list[Message]] = []
-
-    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
-        self.prompts.append(messages)
-        self.asked.set()
-        assert self.release.wait(timeout=5)
-        return LlmReply(raw='{"move": "e5"}', thinking=None, latency_s=0.0)
-
-
 def test_a_second_llm_turn_is_refused_while_one_is_running(tmp_path):
-    player = BlockingPlayer()
+    player = BlockingPlayer(["e5"])
     client = TestClient(
         create_app(lambda settings, color: player, games_dir=tmp_path / "games", sampling_file=tmp_path / "no-sampling.toml")
     )

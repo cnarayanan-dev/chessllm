@@ -372,6 +372,9 @@ class GameSession:
         # Requests run in a threadpool, so two could otherwise both find it an LLM's turn and both ask it to move.
         # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
         self._llm_turn_running = threading.Lock()
+        self._abandoned = threading.Event()  # set by abandon(), from the request that starts a new game
+        # Held while the game is abandoned and while an LLM turn ends the game, so a game is never both.
+        self._ending = threading.Lock()
         prompt_files = {color: str(SYSTEM_PROMPT_FILES[side.llm_constraints]) for color, side in self._llm_sides.items()}
         # Play LLM and an Anchor match have one LLM side, so one prompt file; a faceoff logs the file of each side,
         # even when shared.
@@ -394,6 +397,12 @@ class GameSession:
             # To the microsecond, so games started within the same second still sort in the order they started.
             started_at=now("microseconds"),
         )
+
+    def abandon(self) -> None:
+        """Leave the game for a new one. A running LLM turn makes no further attempts, and the game never ends:
+        no game_end is written and it is never analysed, so the leaderboard skips it like any abandoned game."""
+        with self._ending:
+            self._abandoned.set()
 
     def play_human_move(self, uci: str) -> None:
         """Apply the human's move. The LLM's reply is a separate turn, started with play_llm_turn.
@@ -439,22 +448,29 @@ class GameSession:
             self._write_end(self._end)
 
     def play_llm_turn(self) -> None:
-        """Play the turn of the LLM to move: it moves or forfeits.
+        """Play the turn of the LLM to move: it moves or forfeits. In an abandoned game it does neither: a turn
+        not started yet is never played, and a running one stops before its next attempt and never ends the game.
 
         Raises RefusedLlmTurn and leaves the game unchanged if it isn't an LLM's turn, the game is over, or
         another LLM turn is still running."""
         if not self._llm_turn_running.acquire(blocking=False):
             raise RefusedLlmTurn("an LLM turn is already running")
         try:
+            if self._abandoned.is_set():
+                return
             if self._end is not None:
                 raise RefusedLlmTurn("the game is over")
             if color_name(self._board.turn) not in self._llm_sides:
                 raise RefusedLlmTurn("it is not an LLM's turn")
-            self._play_llm_turn()
-            if self._end is None:
-                self._check_end()
-            if self._end is not None:
-                self._write_end(self._end)
+            forfeit = self._play_llm_turn()
+            with self._ending:
+                if self._abandoned.is_set():
+                    return
+                self._end = forfeit
+                if self._end is None:
+                    self._check_end()
+                if self._end is not None:
+                    self._write_end(self._end)
         finally:
             self._llm_turn_running.release()
 
@@ -523,9 +539,10 @@ class GameSession:
         elif self._settings.mode in UNATTENDED_MODES and len(self._moves) >= 2 * MOVE_CAP:
             self._end = GameEnd("1/2-1/2", "move_cap")
 
-    def _play_llm_turn(self) -> None:
+    def _play_llm_turn(self) -> GameEnd | None:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
-        illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on."""
+        illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on.
+        Returns the Forfeit, for play_llm_turn to end the game with unless the game was abandoned meanwhile."""
         board = self._board
         color = color_name(board.turn)
         side, player, stats = self._llm_sides[color], self._players[color], self._stats[color]
@@ -551,6 +568,8 @@ class GameSession:
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._settings.max_attempts
         for number in range(1, max_attempts + 1):
+            if self._abandoned.is_set():
+                return None
             attempt: dict[str, Any] = {
                 "move": None, "san": None, "notation_slip": False, "result": None, "feedback_sent": feedback,
                 "raw_reply": None, "thinking": None, "reasoning": None, "error": None, "latency_s": None,
@@ -603,7 +622,7 @@ class GameSession:
                     stats.notation_slips += 1
                 if not stats.streak_broken:
                     stats.legal_move_streak += 1
-                return
+                return None
             if result == CUT_OFF:
                 feedback = cut_off_feedback(number, max_attempts)
                 messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
@@ -615,10 +634,10 @@ class GameSession:
                 self._play_chaos(resolution, written)
                 stats.chaos_moves += 1
                 stats.spawns += resolution.kind == "spawn"
-                return
+                return None
             feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
-        self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
+        return GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
 
     def state(self) -> dict[str, Any]:
         board = self._board

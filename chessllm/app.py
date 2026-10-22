@@ -1,6 +1,7 @@
 """HTTP API and static page."""
 
 import logging
+import threading
 import weakref
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -213,6 +214,7 @@ def create_app(
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     game: GameSession | None = None
+    game_swap = threading.Lock()  # so each new game abandons the one it replaces, even if two start at once
     game_logs: weakref.WeakKeyDictionary[GameSession, Path] = weakref.WeakKeyDictionary()
 
     def analyse(log: Path) -> None:
@@ -291,9 +293,13 @@ def create_app(
             raise HTTPException(400, problem)
         players = {color: player_for(settings, color) for color in settings.llm_sides()}
         log = GameLog(games_dir, *settings.side_names())
-        game = GameSession(players, settings, log)
-        game_logs[game] = log.path
-        return GameState.model_validate(game.state())
+        session = GameSession(players, settings, log)
+        game_logs[session] = log.path
+        with game_swap:
+            previous, game = game, session
+        if previous is not None:
+            previous.abandon()
+        return GameState.model_validate(session.state())
 
     def current_game() -> GameSession:
         if game is None:

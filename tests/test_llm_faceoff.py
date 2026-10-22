@@ -8,10 +8,10 @@ import chess.pgn
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import Raw, ScriptedPlayer, llm_faceoff, play_llm
+from conftest import BlockingPlayer, Raw, ScriptedPlayer, llm_faceoff, play_llm
 
 from chessllm.app import create_app
-from chessllm.players import LlmReply, LlmTimeout, Message
+from chessllm.players import LlmTimeout
 
 QWEN_THINKING = {"model": "qwen3.5:9b", "thinking": True}
 
@@ -185,21 +185,8 @@ def test_an_unknown_mode_is_refused(scripted):
     assert client.post("/api/games", json={"mode": "tournament"}).status_code == 422
 
 
-class BlockingPlayer:
-    """Test fake for the LLM player port: answers e4, but only once released, so a turn can be kept running."""
-
-    def __init__(self) -> None:
-        self.asked = threading.Event()
-        self.release = threading.Event()
-
-    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
-        self.asked.set()
-        assert self.release.wait(timeout=5)
-        return LlmReply(raw='{"move": "e4"}', thinking=None, latency_s=0.0)
-
-
 def test_a_new_game_starts_while_an_abandoned_faceoffs_turn_runs_and_that_turn_is_logged_to_its_own_game(tmp_path):
-    blocking, scripted = BlockingPlayer(), ScriptedPlayer(["d4"])
+    blocking, scripted = BlockingPlayer(["e4"]), ScriptedPlayer(["d4"])
     games = iter([blocking, scripted])
     built = {}
 

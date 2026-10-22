@@ -1,4 +1,5 @@
 import json
+import threading
 
 import chess
 import pytest
@@ -68,6 +69,21 @@ class ScriptedPlayer:
         usage = self.usage.pop(0) if self.usage else {}
         return LlmReply(raw=raw, thinking=thinking, latency_s=0.0, **usage)
 
+
+
+class BlockingPlayer(ScriptedPlayer):
+    """Test fake for the LLM player port: a ScriptedPlayer that holds each reply until released, so a turn can be
+    kept running. asked is set once it has been asked to move."""
+
+    def __init__(self, replies: list[str | BaseException]) -> None:
+        super().__init__(replies)
+        self.asked = threading.Event()
+        self.release = threading.Event()
+
+    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+        self.asked.set()
+        assert self.release.wait(timeout=5)
+        return super().reply(messages, allowed_moves)
 
 @pytest.fixture
 def scripted(tmp_path):
