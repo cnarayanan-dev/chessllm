@@ -13,7 +13,7 @@ import ollama
 import pytest
 from fastapi.testclient import TestClient
 
-from chessllm.__main__ import player_for
+from chessllm.cli.common import player_for
 from chessllm.api.app import create_app
 from chessllm.llm.ollama_player import OllamaPlayer
 from chessllm.llm.players import Message, ReasonedMoveAnswer

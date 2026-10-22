@@ -10,7 +10,7 @@ from ollama import Message as OllamaMessage
 
 from tests.conftest import ScriptedPlayer, play_llm
 
-from chessllm.__main__ import player_for
+from chessllm.cli.common import player_for
 from chessllm.cli.faceoff_batch import main
 from chessllm.game.session import BenchmarkLlmSide, LlmSide, Settings
 from chessllm.analytics.leaderboard import llm_configuration

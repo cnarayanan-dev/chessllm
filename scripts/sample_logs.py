@@ -20,7 +20,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
-from chessllm.cli.anchor_match import play_anchor_match
+from chessllm.game.runner import play_anchor_match
 from chessllm.api.app import create_app
 from chessllm.game.session import AnchorSide, BenchmarkLlmSide, Color, LlmSide, Settings
 from chessllm.logs.game_log import GameLog

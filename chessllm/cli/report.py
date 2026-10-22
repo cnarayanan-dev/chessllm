@@ -31,7 +31,7 @@ import chess
 from chessllm.analytics.analysis import analysis_path
 from chessllm.game.session import COLORS, CUT_OFF, ILLEGAL_KINDS, Color
 from chessllm.logs.game_log import GAMES_DIR
-from chessllm.analytics.leaderboard import SCORES, read_sides
+from chessllm.analytics.leaderboard import read_sides, side_outcome
 from chessllm.analytics.move_quality import VALIDATION_FILE, ConfigurationMoves, move_quality, read_analysed_moves, read_validation
 from chessllm.game.prompt import ENFORCED
 
@@ -173,7 +173,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             thinking_budget=side.get("thinking_budget"),
         )
         other = game.sides["black" if color == "white" else "white"]
-        outcome = None if game.end is None else SCORES.get(str(game.end.get("result")), {}).get(color, "draw")
+        outcome = None if game.end is None else side_outcome(str(game.end.get("result")), color)
         result.append(LlmSide(game, color, configuration, opponent_label(other), outcome))
     return result
 

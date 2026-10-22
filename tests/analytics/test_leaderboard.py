@@ -3,6 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from chessllm.analytics.leaderboard import side_outcome
 from chessllm.api.app import create_app
 
 PROMPT = "/somewhere/chessllm/prompts/system.txt"
@@ -296,3 +297,11 @@ def test_no_games_make_an_empty_leaderboard(tmp_path):
     client = TestClient(create_app(lambda settings, color: None, games_dir=tmp_path / "no-games-yet"))
 
     assert client.get("/api/leaderboard").json() == {"configurations": []}
+
+
+@pytest.mark.parametrize(
+    "result, white, black",
+    [("1-0", "win", "loss"), ("0-1", "loss", "win"), ("1/2-1/2", "draw", "draw")],
+)
+def test_a_sides_outcome_is_read_from_the_result_from_its_own_side(result, white, black):
+    assert (side_outcome(result, "white"), side_outcome(result, "black")) == (white, black)

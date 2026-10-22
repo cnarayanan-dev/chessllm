@@ -103,6 +103,11 @@ class Leaderboard(BaseModel):
 SCORES = {"1-0": {"white": "win", "black": "loss"}, "0-1": {"white": "loss", "black": "win"}}
 
 
+def side_outcome(result: str, color: Color) -> str:
+    """The game's result from the side at color: a win, a loss, or, for anything else that ends a game, a draw."""
+    return SCORES.get(result, {}).get(color, "draw")
+
+
 @dataclass
 class Tally:
     games: int = 0
@@ -205,7 +210,7 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
     }
     for color, configuration in configurations.items():
         other: Color = "black" if color == "white" else "white"
-        outcome = SCORES.get(end["result"], {}).get(color, "draw")
+        outcome = side_outcome(end["result"], color)
         tally = tallies.setdefault(configuration.id(), ConfigurationTally(configuration))
         tally.results.add(outcome)
         tally.opponents[opponent_name(sides[other], configurations.get(other))].add(outcome)

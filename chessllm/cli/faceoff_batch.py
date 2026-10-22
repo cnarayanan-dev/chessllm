@@ -15,15 +15,26 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import get_args
 
-from chessllm.cli.anchor_batch import Analyser, default_evaluator, default_move_model
-from chessllm.cli.anchor_match import default_player_for, play_anchor_match
+from chessllm.cli.common import (
+    Analyser,
+    add_analysis_argument,
+    add_games_dir_argument,
+    add_prompt_arguments,
+    add_thinking_argument,
+    default_evaluator,
+    default_move_model,
+    fail,
+)
+from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
-from chessllm.game.session import COLORS, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
-from chessllm.logs.game_log import GAMES_DIR, GameLog
-from chessllm.llm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.engines.move_model import MoveModel
+from chessllm.game.runner import play_anchor_match
+from chessllm.game.session import COLORS, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
+from chessllm.llm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
 from chessllm.llm.players import LlmPlayer
-from chessllm.game.prompt import LlmConstraints, PositionFormat, RetryFeedback
+from chessllm.logs.game_log import GameLog
+
+FAILED = "Faceoff batch not played"
 
 
 def parser() -> argparse.ArgumentParser:
@@ -32,10 +43,9 @@ def parser() -> argparse.ArgumentParser:
         description="Play a batch of LLM faceoffs between two models, unattended, alternating colours, and log every "
         "game.",
     )
-    defaults = LlmSide()
     parser.add_argument("--models", nargs=2, required=True, metavar="MODEL", help="the two Ollama models")
     parser.add_argument("--games", type=int, default=2, help="how many games (default 2)")
-    parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=defaults.thinking)
+    add_thinking_argument(parser)
     parser.add_argument(
         "--thinking-for",
         action="append",
@@ -54,14 +64,7 @@ def parser() -> argparse.ArgumentParser:
         help="give this model a Thinking budget of TOKENS per attempt (repeatable; needs its thinking on), e.g. "
         "qwen3.8:latest=3072",
     )
-    parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
-    parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
-    parser.add_argument(
-        "--position",
-        choices=get_args(PositionFormat),
-        default=defaults.position,
-        help="how each turn gives the position: fen, or described (also the pieces, last move and check)",
-    )
+    add_prompt_arguments(parser)
     parser.add_argument("--rules", choices=get_args(Rules), default=Settings.rules)
     parser.add_argument(
         "--max-attempts",
@@ -69,8 +72,8 @@ def parser() -> argparse.ArgumentParser:
         default=Settings.max_attempts,
         help=f"illegal moves per turn before an LLM forfeits (default {Settings.max_attempts})",
     )
-    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help=f"where logs go (default {GAMES_DIR})")
-    parser.add_argument("--no-analysis", action="store_true", help="don't analyse each game (with Maia-2 and Stockfish)")
+    add_games_dir_argument(parser)
+    add_analysis_argument(parser)
     return parser
 
 
@@ -137,12 +140,12 @@ def main(
     """Run the command; returns its exit code."""
     args = parser().parse_args(argv)
     if args.games < 1:
-        return fail(f"the budget must be at least one game, not {args.games}")
+        return fail(FAILED, f"the budget must be at least one game, not {args.games}")
     first, second = args.models
     try:
         faceoff_settings(args, first, second, sampling_file)
     except ValueError as error:
-        return fail(str(error))
+        return fail(FAILED, str(error))
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
     scores = {first: 0.0, second: 0.0}
     log: GameLog | None = None
@@ -166,11 +169,6 @@ def main(
         analyser.close()
     print(f"Batch: {first} {scores[first]:g} - {scores[second]:g} {second}")
     return 0
-
-
-def fail(message: str) -> int:
-    print(f"Faceoff batch not played: {message}", file=sys.stderr)
-    return 1
 
 
 if __name__ == "__main__":
