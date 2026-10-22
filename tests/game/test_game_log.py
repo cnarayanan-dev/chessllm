@@ -4,9 +4,11 @@ import json
 import chess
 import chess.pgn
 
-from tests.conftest import Raw, play_llm, play_move
+from tests.conftest import Raw, ScriptedPlayer, play_llm, play_move
 
 from chessllm.exceptions import LlmTimeout
+from chessllm.game.session import GameSession, HumanSide, LlmSide, Settings
+from chessllm.logs.game_log import GameLog
 
 START_FEN = chess.STARTING_FEN
 E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
@@ -248,3 +250,11 @@ def test_with_the_human_as_black_the_llm_is_white_in_the_log_and_the_file_names(
     assert (game.headers["White"], game.headers["Black"]) == ("qwen3.5:9b (thinking)", "Human")
     assert (game.headers["Mode"], game.headers["WhiteLLMConstraints"]) == ("Play LLM", "listed")
     assert "BlackLLMConstraints" not in game.headers
+
+
+def test_a_game_knows_the_path_of_its_log(tmp_path):
+    settings = Settings(white=HumanSide(), black=LlmSide())
+    game = GameSession({"black": ScriptedPlayer([])}, settings, GameLog(tmp_path, *settings.side_names()))
+
+    [log] = logs(tmp_path, ".jsonl")
+    assert game.log_path == log

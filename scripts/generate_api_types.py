@@ -14,7 +14,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from chessllm.api.app import api_fingerprint, create_app
+from chessllm.api.app import create_app
+from chessllm.api.routes.pages import api_fingerprint
 
 OPENAPI_TYPESCRIPT = "openapi-typescript@7.13.0"
 SCHEMA_FILE = Path(__file__).parent.parent / "frontend" / "src" / "api" / "schema.ts"

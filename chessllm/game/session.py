@@ -4,6 +4,7 @@ import random
 import threading
 from dataclasses import asdict, dataclass, field
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Any, Literal, cast, get_args
 
 import chess
@@ -414,6 +415,11 @@ class GameSession:
             # To the microsecond, so games started within the same second still sort in the order they started.
             started_at=now("microseconds"),
         )
+
+    @property
+    def log_path(self) -> Path:
+        """The game's log file, which is analysed when the game ends."""
+        return self._log.path
 
     def abandon(self) -> None:
         """Leave the game for a new one. A running LLM turn makes no further attempts, and the game never ends:
