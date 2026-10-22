@@ -13,7 +13,7 @@ import { MistakesCard } from '@/components/moves/MistakesCard'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
-import { chaosResolution, played } from '@/game/chaos'
+import { chaosResolution, illegalTry } from '@/game/chaos'
 import './moves.css'
 
 // A chip per failed attempt, in order, then an amber chip if the move it played was a notation slip. A chaos move
@@ -30,7 +30,7 @@ function mistakeChips(turn: LlmTurn | undefined, chaosRules: boolean): ReactNode
         </span>,
       ]
     }
-    if (played(attempt)) return []
+    if (!attempt.error && !illegalTry(attempt)) return []
     if (attempt.error) {
       return [
         <span key={key} className="mistake error">

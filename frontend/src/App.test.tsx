@@ -382,7 +382,7 @@ test('a draw at the Move cap names the cap in the result line', async () => {
 })
 
 test('an end reason the page has no wording for is spelled out', async () => {
-  const over = afterE4({ status: 'over', result: '1-0', end_reason: 'variant_win' })
+  const over = afterE4({ status: 'over', result: '1-0', end_reason: 'variant_win' as GameState['end_reason'] })
   fakeBackend().on('GET /api/games/current', Response.json(over))
 
   renderApp()

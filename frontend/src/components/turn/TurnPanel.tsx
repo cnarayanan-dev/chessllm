@@ -77,6 +77,7 @@ const RESULT_NAMES: Record<NonNullable<Attempt['result']>, string> = {
   ambiguous: 'Ambiguous',
   timeout: 'Timeout',
   error: 'Error',
+  cut_off: 'Cut off',
 }
 
 /** The raw reply, its JSON laid out when it parses; else the error of an attempt that got none. */

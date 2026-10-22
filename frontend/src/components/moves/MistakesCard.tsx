@@ -9,6 +9,7 @@ import type { Color, GameState } from '@/api/types'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { illegalMove } from '@/game/chaos'
 import { COLOR_NAMES, llmColors } from '@/game/wording'
 import { cn } from '@/lib/utils'
 
@@ -28,7 +29,7 @@ type Counts = Record<Metric, number | null>
 function counts(game: GameState, color: Color): Counts {
   // Counted from the attempts, since under Enforced decoding the illegal-move counts are null (ADR 0003).
   const attempts = game.llm_turns.filter((turn) => turn.color === color).flatMap((turn) => turn.attempts)
-  const illegal = attempts.filter((attempt) => attempt.result !== 'legal' && !attempt.error).length
+  const illegal = attempts.filter(illegalMove).length
   const stats = game.stats[color]
   const chaos = stats?.chaos_moves ?? null
   return {
