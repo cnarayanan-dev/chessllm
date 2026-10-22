@@ -1,5 +1,5 @@
 // The journeys through a game under Chaos rules: the built app at / against FastAPI with scripted LLM players
-// (tests/e2e_server.py). The LLMs' illegal moves are played on the board, as the backend resolves them (ADR 0006).
+// (tests/e2e/server.py). The LLMs' illegal moves are played on the board, as the backend resolves them (ADR 0006).
 import { expect, test, type Page } from '@playwright/test'
 
 /** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */

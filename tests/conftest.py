@@ -4,9 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
-from chessllm.app import create_app
-from chessllm.game import Color, Settings
-from chessllm.players import LlmReply, Message
+from chessllm.api.app import create_app
+from chessllm.game.session import Color, Settings
+from chessllm.llm.players import LlmReply, Message
 from tests.fakes import Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
 
 

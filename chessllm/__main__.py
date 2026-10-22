@@ -4,13 +4,13 @@ import shutil
 
 import uvicorn
 
-from chessllm.app import create_app
-from chessllm.game import BenchmarkLlmSide, Color, LlmSide, Settings
-from chessllm.maia2_model import Maia2MoveModel
-from chessllm.models import LLM_MODELS
-from chessllm.ollama_models import sampling_defaults
-from chessllm.ollama_player import OllamaPlayer, time_limit_s
-from chessllm.stockfish_evaluator import StockfishEvaluator
+from chessllm.api.app import create_app
+from chessllm.game.session import BenchmarkLlmSide, Color, LlmSide, Settings
+from chessllm.engines.maia2_model import Maia2MoveModel
+from chessllm.llm.models import LLM_MODELS
+from chessllm.llm.ollama_models import sampling_defaults
+from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
+from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 
 
 def player_for(settings: Settings, color: Color) -> OllamaPlayer:
@@ -25,7 +25,7 @@ def player_for(settings: Settings, color: Color) -> OllamaPlayer:
 
 
 def main() -> None:
-    # Each game is analysed with Maia-2 when it ends; the worker starts at the first game's end (chessllm.maia2_model).
+    # Each game is analysed with Maia-2 when it ends; the worker starts at the first game's end (chessllm.engines.maia2_model).
     # Stockfish adds centipawn loss and accuracy when it's installed; without it, they are left out.
     evaluator = StockfishEvaluator() if shutil.which("stockfish") else None
     if evaluator is None:

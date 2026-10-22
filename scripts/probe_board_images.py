@@ -2,13 +2,13 @@
 
 Positions are sampled from the first attempts of LLM Turns in the game logs (Free, Standard rules sides), spread over
 the opening, middlegame and endgame, with some where the side to move is in check. Each position is put to each model,
-once per condition, with thinking off and the sampling from chessllm/sampling.toml, as one first attempt (no Retry):
+once per condition, with thinking off and the sampling from chessllm/llm/sampling.toml, as one first attempt (no Retry):
 
-    text        the Turn's prompt exactly as the game builds it (chessllm.prompt.turn_messages: PGN + FEN)
+    text        the Turn's prompt exactly as the game builds it (chessllm.game.prompt.turn_messages: PGN + FEN)
     text+image  the same prompt, plus one line saying what the image is, with the board image on the user message
     image       the board image and a short instruction only: no PGN, no FEN
 
-The answer is judged with the game's own chessllm.game.judge; a legal move not in exact SAN is a Notation slip, and an
+The answer is judged with the game's own chessllm.game.session.judge; a legal move not in exact SAN is a Notation slip, and an
 illegal one is given an error kind (own piece on the target square, no such piece, king left in check, unreachable).
 
 A perception check on the first --perception positions asks each model to list where the side to move's pieces are,
@@ -40,20 +40,20 @@ import chess.svg
 import ollama
 import resvg_py
 
-from chessllm.chaos import CASTLE_RE
-from chessllm.game import judge
-from chessllm.game_log import GAMES_DIR
-from chessllm.models import load_sampling
-from chessllm.ollama_player import OllamaPlayer
-from chessllm.players import LlmTimeout, Message
-from chessllm.prompt import turn_messages
-from scripts.analyse_games import OPENING_PLIES, load_games
+from chessllm.game.chaos import CASTLE_RE
+from chessllm.game.session import judge
+from chessllm.logs.game_log import GAMES_DIR
+from chessllm.llm.models import load_sampling
+from chessllm.llm.ollama_player import OllamaPlayer
+from chessllm.llm.players import LlmTimeout, Message
+from chessllm.game.prompt import turn_messages
+from chessllm.cli.report import OPENING_PLIES, load_games
 
 Condition = Literal["text", "text+image", "image"]
 CONDITIONS: tuple[Condition, ...] = ("text", "text+image", "image")
 PerceptionSource = Literal["image", "fen"]
 # Stages of the game by ply, for spreading the sample. The logged games hardly ever trade down: no logged position is
-# an endgame by scripts/analyse_games.py's material rule, so "late" (past ply 50) stands in for it.
+# an endgame by chessllm/cli/report.py's material rule, so "late" (past ply 50) stands in for it.
 PHASES = ("opening", "middlegame", "late")
 RESULTS_FILE = Path(__file__).parent.parent / "docs" / "research" / "board-images-results.jsonl"
 POSITIONS_FILE = RESULTS_FILE.with_name("board-images-positions.json")

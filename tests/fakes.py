@@ -6,8 +6,8 @@ from typing import Any
 
 import chess
 
-from chessllm.game import Color, Settings
-from chessllm.players import LlmReply, Message
+from chessllm.game.session import Color, Settings
+from chessllm.llm.players import LlmReply, Message
 
 
 class Raw(str):

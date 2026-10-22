@@ -1,4 +1,4 @@
-// The analytics page against the app with synthetic game logs (tests/e2e_server.py, POST /e2e/leaderboard-games):
+// The analytics page against the app with synthetic game logs (tests/e2e/server.py, POST /e2e/leaderboard-games):
 // qwen3.5:9b Listed enforced rated from Anchor matches, llama3:8b Free losing every anchored game, and
 // mistral:7b in Play LLM games only.
 import { expect, test, type Page } from '@playwright/test'

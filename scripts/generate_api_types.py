@@ -1,7 +1,7 @@
 """Generate the frontend's API types, frontend/src/api/schema.ts, from FastAPI's API description.
 
 openapi-typescript (pinned below, run with pnpm dlx, so it needs Node and the network) turns the description into
-TypeScript. The file's first line is the description's fingerprint, which tests/test_api_types.py checks without
+TypeScript. The file's first line is the description's fingerprint, which tests/api/test_api_types.py checks without
 Node, so a test fails when the API changes and the types weren't regenerated. The build carries the fingerprint too
 (frontend/vite.config.ts), and the app refuses to serve a build made for a different API.
 
@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from chessllm.app import api_fingerprint, create_app
+from chessllm.api.app import api_fingerprint, create_app
 
 OPENAPI_TYPESCRIPT = "openapi-typescript@7.13.0"
 SCHEMA_FILE = Path(__file__).parent.parent / "frontend" / "src" / "api" / "schema.ts"

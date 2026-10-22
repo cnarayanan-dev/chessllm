@@ -2,7 +2,7 @@
 
 The positions are the board-image study's frozen sample (docs/research/board-images-positions.json). Each is put to
 each model once per condition and pass, as one first attempt (no Retry), by the game's own OllamaPlayer with the
-sampling from chessllm/sampling.toml, the Thinking budget's forced answer included (ADR 0007):
+sampling from chessllm/llm/sampling.toml, the Thinking budget's forced answer included (ADR 0007):
 
     conditions  thinking off, unbounded (thinking on, no budget), and budgets of 512, 1,024, 2,048 and 4,096 tokens;
                 qwen3.8 at its medium level for "on", and also at xhigh with 2,048 and 4,096 (see grid)
@@ -10,7 +10,7 @@ sampling from chessllm/sampling.toml, the Thinking budget's forced answer includ
     listed_enforced  the Listed prompt and the legal moves as an enum: every answer is legal, scored by its
                      Stockfish centipawn loss as the game's analysis scores a played move
 
-The answer is judged with the game's chessllm.game.judge. Each call's time limit is the game's for its budget.
+The answer is judged with the game's chessllm.game.session.judge. Each call's time limit is the game's for its budget.
 
 Results go to a JSONL file, one line per call; a rerun skips calls already in it (a timeout included, an error not),
 so the probe can be stopped and resumed, and run in chunks by model, condition and number of positions.
@@ -37,14 +37,14 @@ import chess
 import chess.engine
 import ollama
 
-from chessllm.analysis import mover_evaluations
-from chessllm.evaluator import Evaluator
-from chessllm.game import CUT_OFF, BenchmarkLlmSide, HumanSide, Settings, judge
-from chessllm.models import LLM_MODELS, load_sampling
-from chessllm.ollama_player import OllamaPlayer, time_limit_s
-from chessllm.players import LlmTimeout
-from chessllm.prompt import SYSTEM_PROMPT_FILES, LlmConstraints, turn_messages
-from chessllm.stockfish_evaluator import StockfishEvaluator
+from chessllm.analytics.analysis import mover_evaluations
+from chessllm.engines.evaluator import Evaluator
+from chessllm.game.session import CUT_OFF, BenchmarkLlmSide, HumanSide, Settings, judge
+from chessllm.llm.models import LLM_MODELS, load_sampling
+from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
+from chessllm.llm.players import LlmTimeout
+from chessllm.game.prompt import SYSTEM_PROMPT_FILES, LlmConstraints, turn_messages
+from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 from scripts.probe_board_images import POSITIONS_FILE, Position
 
 # Free for first-attempt legality; Listed enforced for move quality, since every answer is then a legal move.

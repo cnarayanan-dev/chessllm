@@ -11,7 +11,7 @@ Running in parallel (stay out of their files, keep shared-file changes focused):
 {PARALLEL_WORK}
 
 Traps:
-- The API's response models in chessllm/app.py are built from GameSession.state(); a field not in the models is silently dropped. After API changes regenerate `frontend/src/api/schema.ts` with `uv run python -m scripts.generate_api_types` (a test checks it).
+- The API's response models in chessllm/api/app.py are built from GameSession.state(); a field not in the models is silently dropped. After API changes regenerate `frontend/src/api/schema.ts` with `uv run python -m scripts.generate_api_types` (a test checks it).
 - Tests must not need Ollama, Maia-2, Dragon or Stockfish; a live test gets a pytest marker excluded by default in pyproject.toml.
 - Don't use port 8000 for servers you start; stop them afterwards.
 {TICKET_TRAPS}

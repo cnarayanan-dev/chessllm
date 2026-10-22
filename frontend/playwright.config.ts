@@ -1,5 +1,5 @@
 // The Playwright journeys (`pnpm e2e`): the built app at / against FastAPI with scripted LLM players
-// (tests/e2e_server.py), so they run without Ollama. Build first: `pnpm build`.
+// (tests/e2e/server.py), so they run without Ollama. Build first: `pnpm build`.
 import { createServer } from 'node:net'
 import { defineConfig, devices } from '@playwright/test'
 
@@ -28,7 +28,7 @@ export default defineConfig({
   use: { baseURL, trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: `uv run python -m tests.e2e_server --port ${process.env.E2E_PORT}`,
+    command: `uv run python -m tests.e2e.server --port ${process.env.E2E_PORT}`,
     cwd: '..',
     url: `${baseURL}/api/models`,
     reuseExistingServer: false,

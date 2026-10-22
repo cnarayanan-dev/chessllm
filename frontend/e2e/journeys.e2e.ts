@@ -1,5 +1,5 @@
 // The journeys through the page: the built app at / against FastAPI with scripted LLM players
-// (tests/e2e_server.py). Each sets the LLMs' replies, as SAN, before its game starts.
+// (tests/e2e/server.py). Each sets the LLMs' replies, as SAN, before its game starts.
 import { expect, test, type Page } from '@playwright/test'
 
 /** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */

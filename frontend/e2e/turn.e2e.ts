@@ -1,4 +1,4 @@
-// The Turn panel under the Game card, against FastAPI with scripted LLM players (tests/e2e_server.py): with thinking
+// The Turn panel under the Game card, against FastAPI with scripted LLM players (tests/e2e/server.py): with thinking
 // off each scripted reply carries the Reasoning "Reasoning for <move>.".
 import { expect, test, type Page } from '@playwright/test'
 

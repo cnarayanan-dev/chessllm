@@ -20,12 +20,12 @@ from typing import Any
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
-from chessllm.anchor_match import play_anchor_match
-from chessllm.app import create_app
-from chessllm.game import AnchorSide, BenchmarkLlmSide, Color, LlmSide, Settings
-from chessllm.game_log import GameLog
-from chessllm.models import LLM_MODELS, load_sampling
-from chessllm.players import LlmPlayer, LlmTimeout
+from chessllm.cli.anchor_match import play_anchor_match
+from chessllm.api.app import create_app
+from chessllm.game.session import AnchorSide, BenchmarkLlmSide, Color, LlmSide, Settings
+from chessllm.logs.game_log import GameLog
+from chessllm.llm.models import LLM_MODELS, load_sampling
+from chessllm.llm.players import LlmPlayer, LlmTimeout
 from tests.fakes import Raw, ScriptedAnchor, ScriptedPlayer
 
 ROOT = Path(__file__).parent.parent

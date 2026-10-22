@@ -6,9 +6,9 @@ file is read, streamed and decompressed on the fly, until every rating band has 
 written without their clock comments to SAMPLE_FILE, which is committed, with where they came from in SAMPLE_SOURCE.
 So a run needs no network, and the same sample gives the same report.
 
-For each player of each sampled game, the estimator (chessllm.analysis.estimate over the move model's grid, as for an
+For each player of each sampled game, the estimator (chessllm.analytics.analysis.estimate over the move model's grid, as for an
 LLM side) is run on every move they played, and its most likely rating compared with the rating they had at the
-start of the game. Both are converted from Lichess Rapid to chess.com Rapid (chessllm.rating_scales), the scale of
+start of the game. Both are converted from Lichess Rapid to chess.com Rapid (chessllm.analytics.rating_scales), the scale of
 the pass mark, so an error is in chess.com points. The pass mark (ADR 0005), in every band:
 
 - per game: the root-mean-square error of one player's estimate is at most PER_GAME_TOLERANCE (±250);
@@ -16,7 +16,7 @@ the pass mark, so an error is in chess.com points. The pass mark (ADR 0005), in 
   mean rating, is at most POOLED_TOLERANCE (±100);
 - bias: in a band at or below chess.com 600 (its centre converted), the mean error is at most BIAS_TOLERANCE (100).
 
-The outcome goes to chessllm/move_quality_validation.json (chessllm.move_quality.VALIDATION_FILE), which marks the
+The outcome goes to chessllm/analytics/move_quality_validation.json (chessllm.analytics.move_quality.VALIDATION_FILE), which marks the
 leaderboard's estimates validated only when it passed for the same move model and grid; the report goes to REPORT_FILE.
 
 Run:
@@ -39,10 +39,10 @@ from typing import IO, Any, cast
 import chess
 import chess.pgn
 
-from chessllm.analysis import estimate
-from chessllm.move_model import MoveModel
-from chessllm.move_quality import VALIDATION_FILE
-from chessllm.rating_scales import chess_com_rapid, lichess_floor
+from chessllm.analytics.analysis import estimate
+from chessllm.engines.move_model import MoveModel
+from chessllm.analytics.move_quality import VALIDATION_FILE
+from chessllm.analytics.rating_scales import chess_com_rapid, lichess_floor
 
 ROOT = Path(__file__).resolve().parent.parent
 MONTH = "2025-01"
@@ -352,7 +352,7 @@ def render_report(validation: Validation, sample: Path, source: dict[str, Any]) 
         "## Bands",
         "",
         "Bands are on the Lichess Rapid scale, the database's. Errors are on the chess.com Rapid scale, the pass "
-        "mark's: estimate and rating each converted with `chessllm.rating_scales` (ChessGoals' table, extended along "
+        "mark's: estimate and rating each converted with `chessllm.analytics.rating_scales` (ChessGoals' table, extended along "
         f"its lowest segment below Lichess {lichess_floor()}, chess.com 815, where the conversion is an "
         "extrapolation).",
         "",
@@ -461,7 +461,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         sample = fetch(args.games_per_band)
         print(f"read {sample.games_read} games; sample written to {shown(SAMPLE_FILE)}")
         return
-    from chessllm.maia2_model import Maia2MoveModel
+    from chessllm.engines.maia2_model import Maia2MoveModel
 
     with Maia2MoveModel() as move_model:
         validation = run(SAMPLE_FILE, move_model)
