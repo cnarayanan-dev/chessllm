@@ -1,0 +1,12 @@
+[Event "ChessLLM"]
+[Site "?"]
+[Date "2026.01.01"]
+[Round "?"]
+[White "Human"]
+[Black "llama3:8b (no thinking)"]
+[Result "0-1"]
+[Termination "checkmate"]
+[Mode "Play LLM"]
+[BlackLLMConstraints "free"]
+
+1. f3 e5 2. g4 Qh4# 0-1

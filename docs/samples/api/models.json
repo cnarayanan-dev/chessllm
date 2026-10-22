@@ -1,0 +1,43 @@
+[
+  {
+    "name": "qwen3.5:9b",
+    "thinking": true,
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.95
+    }
+  },
+  {
+    "name": "qwen3.8:latest",
+    "thinking": true,
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.95
+    }
+  },
+  {
+    "name": "llama3:8b",
+    "thinking": false,
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.95
+    }
+  },
+  {
+    "name": "gemma3:12b",
+    "thinking": false,
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.95
+    }
+  },
+  {
+    "name": "gemma4:26b",
+    "thinking": true,
+    "sampling": null
+  }
+]

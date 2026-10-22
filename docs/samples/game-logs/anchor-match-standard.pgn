@@ -1,0 +1,12 @@
+[Event "ChessLLM"]
+[Site "?"]
+[Date "2026.01.01"]
+[Round "?"]
+[White "llama3:8b (no thinking)"]
+[Black "Dragon (Skill 1)"]
+[Result "0-1"]
+[Termination "forfeit"]
+[Mode "Anchor match"]
+[WhiteLLMConstraints "free"]
+
+1. e4 e5 2. Nc3 Nc6 0-1

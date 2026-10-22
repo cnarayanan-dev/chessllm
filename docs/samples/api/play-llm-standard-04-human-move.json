@@ -1,0 +1,134 @@
+{
+  "game_id": "00000000000000000000000000000001",
+  "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+  "pgn": "1. f3 e5 2. g4",
+  "turn": "black",
+  "human_legal_moves": [],
+  "last_move": "g2g4",
+  "plies": [
+    {
+      "ply": 1,
+      "color": "white",
+      "move": "f2f3",
+      "written": "f3",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "fen_after": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+      "check": false
+    },
+    {
+      "ply": 2,
+      "color": "black",
+      "move": "e7e5",
+      "written": "e5",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+      "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2",
+      "check": false
+    },
+    {
+      "ply": 3,
+      "color": "white",
+      "move": "g2g4",
+      "written": "g4",
+      "fen_before": "rnbqkbnr/pppp1ppp/8/4p3/8/5P2/PPPPP1PP/RNBQKBNR w KQkq - 0 2",
+      "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+      "check": false
+    }
+  ],
+  "check": false,
+  "llm_turn": {
+    "ply": 2,
+    "color": "black",
+    "attempts": [
+      {
+        "move": "e7e5",
+        "san": "e5",
+        "notation_slip": true,
+        "result": "legal",
+        "feedback_sent": null,
+        "raw_reply": "{\"reasoning\": \"e7e5 takes the centre.\", \"move\": \"e7e5\"}",
+        "thinking": null,
+        "reasoning": "e7e5 takes the centre.",
+        "error": null,
+        "latency_s": 0.0,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+          },
+          {
+            "role": "user",
+            "content": "PGN: 1. f3\nFEN: rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1"
+          }
+        ]
+      }
+    ],
+    "thinking": null,
+    "reasoning": "e7e5 takes the centre."
+  },
+  "llm_turns": [
+    {
+      "ply": 2,
+      "color": "black",
+      "attempts": [
+        {
+          "move": "e7e5",
+          "san": "e5",
+          "notation_slip": true,
+          "result": "legal",
+          "feedback_sent": null,
+          "raw_reply": "{\"reasoning\": \"e7e5 takes the centre.\", \"move\": \"e7e5\"}",
+          "thinking": null,
+          "reasoning": "e7e5 takes the centre.",
+          "error": null,
+          "latency_s": 0.0,
+          "prompt": [
+            {
+              "role": "system",
+              "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+            },
+            {
+              "role": "user",
+              "content": "PGN: 1. f3\nFEN: rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1"
+            }
+          ]
+        }
+      ],
+      "thinking": null,
+      "reasoning": "e7e5 takes the centre."
+    }
+  ],
+  "settings": {
+    "mode": "play_llm",
+    "white": {
+      "player": "human"
+    },
+    "black": {
+      "player": "llm",
+      "model": "llama3:8b",
+      "thinking": false,
+      "llm_constraints": "free",
+      "retry_feedback": "explained"
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40
+    },
+    "max_attempts": 5
+  },
+  "status": "playing",
+  "result": null,
+  "end_reason": null,
+  "stats": {
+    "white": null,
+    "black": {
+      "legal_move_streak": 1,
+      "illegal_moves": {
+        "invalid": 0,
+        "illegal": 0,
+        "ambiguous": 0
+      },
+      "recovered_turns": 0,
+      "notation_slips": 1
+    }
+  }
+}

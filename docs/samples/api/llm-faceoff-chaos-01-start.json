@@ -1,0 +1,65 @@
+{
+  "game_id": "00000000000000000000000000000002",
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "pgn": "",
+  "turn": "white",
+  "human_legal_moves": [],
+  "last_move": null,
+  "plies": [],
+  "check": false,
+  "llm_turn": null,
+  "llm_turns": [],
+  "settings": {
+    "mode": "llm_faceoff",
+    "white": {
+      "player": "llm",
+      "model": "gemma3:12b",
+      "thinking": false,
+      "llm_constraints": "listed",
+      "retry_feedback": "explained",
+      "position": "described"
+    },
+    "black": {
+      "player": "llm",
+      "model": "llama3:8b",
+      "thinking": false,
+      "llm_constraints": "free",
+      "retry_feedback": "explained"
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40
+    },
+    "rules": "chaos",
+    "max_attempts": 3
+  },
+  "status": "playing",
+  "result": null,
+  "end_reason": null,
+  "stats": {
+    "white": {
+      "legal_move_streak": 0,
+      "illegal_moves": {
+        "invalid": 0,
+        "illegal": 0,
+        "ambiguous": 0
+      },
+      "recovered_turns": 0,
+      "notation_slips": 0,
+      "chaos_moves": 0,
+      "spawns": 0
+    },
+    "black": {
+      "legal_move_streak": 0,
+      "illegal_moves": {
+        "invalid": 0,
+        "illegal": 0,
+        "ambiguous": 0
+      },
+      "recovered_turns": 0,
+      "notation_slips": 0,
+      "chaos_moves": 0,
+      "spawns": 0
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "game_id": "00000000000000000000000000000001",
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "pgn": "",
+  "turn": "white",
+  "human_legal_moves": [
+    "g1h3",
+    "g1f3",
+    "b1c3",
+    "b1a3",
+    "h2h3",
+    "g2g3",
+    "f2f3",
+    "e2e3",
+    "d2d3",
+    "c2c3",
+    "b2b3",
+    "a2a3",
+    "h2h4",
+    "g2g4",
+    "f2f4",
+    "e2e4",
+    "d2d4",
+    "c2c4",
+    "b2b4",
+    "a2a4"
+  ],
+  "last_move": null,
+  "plies": [],
+  "check": false,
+  "llm_turn": null,
+  "llm_turns": [],
+  "settings": {
+    "mode": "play_llm",
+    "white": {
+      "player": "human"
+    },
+    "black": {
+      "player": "llm",
+      "model": "llama3:8b",
+      "thinking": false,
+      "llm_constraints": "free",
+      "retry_feedback": "explained"
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40
+    },
+    "max_attempts": 5
+  },
+  "status": "playing",
+  "result": null,
+  "end_reason": null,
+  "stats": {
+    "white": null,
+    "black": {
+      "legal_move_streak": 0,
+      "illegal_moves": {
+        "invalid": 0,
+        "illegal": 0,
+        "ambiguous": 0
+      },
+      "recovered_turns": 0,
+      "notation_slips": 0
+    }
+  }
+}

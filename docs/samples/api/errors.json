@@ -1,0 +1,93 @@
+[
+  {
+    "request": "POST /api/games/current/moves",
+    "body": {
+      "uci": "e2e4"
+    },
+    "status": 400,
+    "response": {
+      "detail": "the game is over"
+    }
+  },
+  {
+    "request": "POST /api/games/current/llm-turn",
+    "body": null,
+    "status": 409,
+    "response": {
+      "detail": "the game is over"
+    }
+  },
+  {
+    "request": "GET /api/games/current",
+    "body": null,
+    "status": 404,
+    "response": {
+      "detail": "no game started"
+    }
+  },
+  {
+    "request": "POST /api/games",
+    "body": {
+      "rules": "chaos",
+      "black": {
+        "player": "llm",
+        "llm_constraints": "listed_enforced"
+      }
+    },
+    "status": 400,
+    "response": {
+      "detail": "Chaos rules need every LLM under Free or Listed, not llama3:8b (black) under listed_enforced"
+    }
+  },
+  {
+    "request": "POST /api/games",
+    "body": {
+      "max_attempts": 0
+    },
+    "status": 422,
+    "response": {
+      "detail": [
+        {
+          "type": "greater_than_equal",
+          "loc": [
+            "body",
+            "max_attempts"
+          ],
+          "msg": "Input should be greater than or equal to 1",
+          "input": 0,
+          "ctx": {
+            "ge": 1
+          }
+        }
+      ]
+    }
+  },
+  {
+    "request": "POST /api/games/current/moves",
+    "body": {
+      "uci": "e2e5"
+    },
+    "status": 400,
+    "response": {
+      "detail": "illegal move: e2e5"
+    }
+  },
+  {
+    "request": "POST /api/games/current/moves",
+    "body": {
+      "uci": "e2"
+    },
+    "status": 400,
+    "response": {
+      "detail": "not a UCI move: 'e2'"
+    }
+  },
+  {
+    "request": "POST /api/games/current/llm-turn",
+    "body": null,
+    "status": 409,
+    "response": {
+      "detail": "it is not an LLM's turn"
+    }
+  }
+]

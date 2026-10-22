@@ -15,6 +15,7 @@ Play chess against a small local LLM in the browser. See `CONTEXT.md` for the do
 - Analyse the game logs: `uv run python -m scripts.analyse_games` prints each Player configuration's record (by Dragon Skill against Anchors), how games ended, recurring themes (illegal moves and their phase, streaks, forfeits, mates in one, openings, Stockfish and Move-quality numbers when analysed) and the games. Filter with `--mode`, `--model`, `--constraints`, `--rules`, `--since YYYY-MM-DD[THH:MM]` and `--include-unfinished`; `--json` for JSON
 - Run the tests: `uv run pytest`. The live tests are left out: `uv run pytest -m ollama` (Ollama with llama3:8b, and qwen3.8:latest for the Thinking budget) and `uv run pytest -m dragon` (needs `CHESSLLM_DRAGON`)
 - Typecheck: `uv run mypy`
+- Regenerate the sample games (`docs/samples/`: scripted games' logs and API responses, to check a refactor with `git diff`): `uv run python -m scripts.sample_logs`
 - Rebuild the merida piece sprite: `uv run python scripts/build_merida_sprite.py`
 
 Pieces: Merida by Armando Hernandez Marroquin, GPLv2+.

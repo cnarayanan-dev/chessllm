@@ -1,0 +1,300 @@
+{
+  "game_id": "00000000000000000000000000000002",
+  "fen": "rnb1kbnr/1ppppppp/p7/8/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
+  "pgn": "1. e4 Qh4 2. Nf3 a6",
+  "turn": "white",
+  "human_legal_moves": [],
+  "last_move": "a7a6",
+  "plies": [
+    {
+      "ply": 1,
+      "color": "white",
+      "move": "e2e4",
+      "written": "e4",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "check": false
+    },
+    {
+      "ply": 2,
+      "color": "black",
+      "move": "d8h4",
+      "written": "Qh4",
+      "fen_before": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+      "fen_after": "rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
+      "check": false,
+      "resolution": {
+        "kind": "chaos",
+        "from": "d8",
+        "to": "h4",
+        "piece": "q",
+        "rook": null,
+        "reason": "the queen on d8 moves"
+      }
+    },
+    {
+      "ply": 3,
+      "color": "white",
+      "move": "g1f3",
+      "written": "Nf3",
+      "fen_before": "rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
+      "fen_after": "rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2",
+      "check": false
+    },
+    {
+      "ply": 4,
+      "color": "black",
+      "move": "a7a6",
+      "written": "a6",
+      "fen_before": "rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2",
+      "fen_after": "rnb1kbnr/1ppppppp/p7/8/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
+      "check": false
+    }
+  ],
+  "check": false,
+  "llm_turn": {
+    "ply": 4,
+    "color": "black",
+    "attempts": [
+      {
+        "move": "a6",
+        "san": "a6",
+        "notation_slip": false,
+        "result": "legal",
+        "feedback_sent": null,
+        "raw_reply": "{\"move\": \"a6\"}",
+        "thinking": null,
+        "reasoning": null,
+        "error": null,
+        "latency_s": 0.0,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+          },
+          {
+            "role": "user",
+            "content": "PGN: 1. e4 Qh4 2. Nf3\nFEN: rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2"
+          }
+        ],
+        "resolution": {
+          "kind": "legal",
+          "from": "a7",
+          "to": "a6",
+          "piece": "p",
+          "rook": null,
+          "reason": "a legal move"
+        }
+      }
+    ],
+    "thinking": null,
+    "reasoning": null
+  },
+  "llm_turns": [
+    {
+      "ply": 1,
+      "color": "white",
+      "attempts": [
+        {
+          "move": "e4",
+          "san": "e4",
+          "notation_slip": false,
+          "result": "legal",
+          "feedback_sent": null,
+          "raw_reply": "{\"move\": \"e4\"}",
+          "thinking": null,
+          "reasoning": null,
+          "error": null,
+          "latency_s": 0.0,
+          "prompt": [
+            {
+              "role": "system",
+              "content": "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+            },
+            {
+              "role": "user",
+              "content": "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: b4 d4 f3 c4 a4 f4 a3 h3 Nc3 g3 d3 h4 e3 Na3 g4 b3 Nh3 e4 Nf3 c3"
+            }
+          ],
+          "resolution": {
+            "kind": "legal",
+            "from": "e2",
+            "to": "e4",
+            "piece": "P",
+            "rook": null,
+            "reason": "a legal move"
+          }
+        }
+      ],
+      "thinking": null,
+      "reasoning": null
+    },
+    {
+      "ply": 2,
+      "color": "black",
+      "attempts": [
+        {
+          "move": "Qh4",
+          "san": null,
+          "notation_slip": false,
+          "result": "illegal",
+          "feedback_sent": null,
+          "raw_reply": "{\"move\": \"Qh4\"}",
+          "thinking": null,
+          "reasoning": null,
+          "error": null,
+          "latency_s": 0.0,
+          "prompt": [
+            {
+              "role": "system",
+              "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+            },
+            {
+              "role": "user",
+              "content": "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+            }
+          ],
+          "resolution": {
+            "kind": "chaos",
+            "from": "d8",
+            "to": "h4",
+            "piece": "q",
+            "rook": null,
+            "reason": "the queen on d8 moves"
+          }
+        }
+      ],
+      "thinking": null,
+      "reasoning": null
+    },
+    {
+      "ply": 3,
+      "color": "white",
+      "attempts": [
+        {
+          "move": "Nf3",
+          "san": "Nf3",
+          "notation_slip": false,
+          "result": "legal",
+          "feedback_sent": null,
+          "raw_reply": "{\"move\": \"Nf3\"}",
+          "thinking": null,
+          "reasoning": null,
+          "error": null,
+          "latency_s": 0.0,
+          "prompt": [
+            {
+              "role": "system",
+              "content": "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+            },
+            {
+              "role": "user",
+              "content": "PGN: 1. e4 Qh4\nFEN: rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2\nLast move: Qh4\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen h4; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: Qg4 Qe2 Ke2 Be2 Qf3 Bc4 Na3 g3 c3 b3 Ne2 Bd3 Nc3 d3 Nh3 Ba6 Qh5 g4 c4 b4 a4 d4 h3 Nf3 e5 a3 Bb5"
+            }
+          ],
+          "resolution": {
+            "kind": "legal",
+            "from": "g1",
+            "to": "f3",
+            "piece": "N",
+            "rook": null,
+            "reason": "a legal move"
+          }
+        }
+      ],
+      "thinking": null,
+      "reasoning": null
+    },
+    {
+      "ply": 4,
+      "color": "black",
+      "attempts": [
+        {
+          "move": "a6",
+          "san": "a6",
+          "notation_slip": false,
+          "result": "legal",
+          "feedback_sent": null,
+          "raw_reply": "{\"move\": \"a6\"}",
+          "thinking": null,
+          "reasoning": null,
+          "error": null,
+          "latency_s": 0.0,
+          "prompt": [
+            {
+              "role": "system",
+              "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+            },
+            {
+              "role": "user",
+              "content": "PGN: 1. e4 Qh4 2. Nf3\nFEN: rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2"
+            }
+          ],
+          "resolution": {
+            "kind": "legal",
+            "from": "a7",
+            "to": "a6",
+            "piece": "p",
+            "rook": null,
+            "reason": "a legal move"
+          }
+        }
+      ],
+      "thinking": null,
+      "reasoning": null
+    }
+  ],
+  "settings": {
+    "mode": "llm_faceoff",
+    "white": {
+      "player": "llm",
+      "model": "gemma3:12b",
+      "thinking": false,
+      "llm_constraints": "listed",
+      "retry_feedback": "explained",
+      "position": "described"
+    },
+    "black": {
+      "player": "llm",
+      "model": "llama3:8b",
+      "thinking": false,
+      "llm_constraints": "free",
+      "retry_feedback": "explained"
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40
+    },
+    "rules": "chaos",
+    "max_attempts": 3
+  },
+  "status": "playing",
+  "result": null,
+  "end_reason": null,
+  "stats": {
+    "white": {
+      "legal_move_streak": 2,
+      "illegal_moves": {
+        "invalid": 0,
+        "illegal": 0,
+        "ambiguous": 0
+      },
+      "recovered_turns": 0,
+      "notation_slips": 0,
+      "chaos_moves": 0,
+      "spawns": 0
+    },
+    "black": {
+      "legal_move_streak": 0,
+      "illegal_moves": {
+        "invalid": 0,
+        "illegal": 1,
+        "ambiguous": 0
+      },
+      "recovered_turns": 0,
+      "notation_slips": 0,
+      "chaos_moves": 1,
+      "spawns": 0
+    }
+  }
+}

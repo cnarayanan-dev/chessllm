@@ -1,0 +1,14 @@
+[Event "ChessLLM"]
+[Site "?"]
+[Date "2026.01.01"]
+[Round "?"]
+[White "gemma3:12b (no thinking)"]
+[Black "llama3:8b (no thinking)"]
+[Result "0-1"]
+[Termination "king_capture"]
+[Mode "LLM faceoff"]
+[WhiteLLMConstraints "listed"]
+[BlackLLMConstraints "free"]
+[Rules "Chaos"]
+
+1. e4 0-1

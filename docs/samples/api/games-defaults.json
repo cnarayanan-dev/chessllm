@@ -1,0 +1,15 @@
+{
+  "mode": "play_llm",
+  "white": {
+    "player": "human"
+  },
+  "black": {
+    "player": "llm",
+    "model": "llama3:8b",
+    "thinking": false,
+    "llm_constraints": "free",
+    "retry_feedback": "explained"
+  },
+  "rules": "standard",
+  "max_attempts": 5
+}

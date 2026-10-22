@@ -1,0 +1,13 @@
+[Event "ChessLLM"]
+[Site "?"]
+[Date "2026.01.01"]
+[Round "?"]
+[White "qwen3.8:latest (thinking xhigh, budget 1024)"]
+[Black "qwen3.5:9b (thinking, budget 512)"]
+[Result "1-0"]
+[Termination "forfeit"]
+[Mode "LLM faceoff"]
+[WhiteLLMConstraints "free"]
+[BlackLLMConstraints "free"]
+
+1. e4 e5 2. Nf3 1-0
