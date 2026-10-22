@@ -43,14 +43,6 @@ class ReasonedMoveAnswer(BaseModel):
     move: str
 
 
-class LlmTimeout(Exception):
-    """The model gave no answer within the time limit, so the call was cancelled."""
-
-    def __init__(self, timeout_s: float) -> None:
-        super().__init__(f"no answer within {timeout_s:g}s")
-        self.timeout_s = timeout_s
-
-
 class LlmPlayer(Protocol):
     def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
         """Ask the model for its answer. Raises LlmTimeout if it takes longer than the time limit.

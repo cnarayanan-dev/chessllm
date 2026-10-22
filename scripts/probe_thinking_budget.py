@@ -42,7 +42,7 @@ from chessllm.engines.evaluator import Evaluator
 from chessllm.game.session import CUT_OFF, BenchmarkLlmSide, HumanSide, Settings, judge
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
-from chessllm.llm.players import LlmTimeout
+from chessllm.exceptions import InvalidSettings, LlmTimeout
 from chessllm.game.prompt import SYSTEM_PROMPT_FILES, LlmConstraints, turn_messages
 from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 from scripts.probe_board_images import POSITIONS_FILE, Position
@@ -108,8 +108,11 @@ def grid(model: str) -> list[Condition]:
 
 def condition_problem(model: str, condition: Condition) -> str | None:
     """Why the model can't be played under the condition, as the game's settings check says it, or None."""
-    problem = Settings(white=HumanSide(), black=condition.side(model)).problem(LLM_MODELS)
-    return problem.replace(f"{model} (black)", model) if problem is not None else None  # no colour in a probe
+    try:
+        Settings(white=HumanSide(), black=condition.side(model)).check(LLM_MODELS)
+    except InvalidSettings as problem:
+        return str(problem).replace(f"{model} (black)", model)  # no colour in a probe
+    return None
 
 
 def listed_moves(fen: str) -> list[str]:

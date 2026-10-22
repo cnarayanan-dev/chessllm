@@ -10,8 +10,16 @@ import chess
 from pydantic import Field, ValidationError
 
 from chessllm.game import chaos
-from chessllm.engines.anchors import DRAGON_SKILLS, Anchor, AnchorUnavailable
-from chessllm.llm.players import LlmPlayer, LlmReply, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
+from chessllm.engines.anchors import DRAGON_SKILLS, Anchor
+from chessllm.exceptions import (
+    AnchorUnavailable,
+    InvalidSettings,
+    LlmTimeout,
+    RefusedAnchorTurn,
+    RefusedLlmTurn,
+    RejectedHumanMove,
+)
+from chessllm.llm.players import LlmPlayer, LlmReply, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.logs.game_log import GameLog, now
 from chessllm.llm.models import CONTEXT_TOKENS, THINKING_BUDGET_RANGE, LlmModel
 from chessllm.game.prompt import (
@@ -174,71 +182,62 @@ class Settings:
 
         return name(self.white), name(self.black)
 
-    def problem(self, models: list[LlmModel]) -> str | None:
-        """Why a game can't be played with these settings, or None if it can."""
+    def check(self, models: list[LlmModel]) -> None:
+        """Raises InvalidSettings, saying why, if a game can't be played with these settings."""
         for kind, needed in MODE_SIDES[self.mode].items():
             count = sum(side.player == kind for side in (self.white, self.black))
             if count != needed:
                 number = {0: "no", 1: "one", 2: "two"}[needed]
-                return f"{MODE_NAMES[self.mode]} needs {number} {SIDE_KINDS[kind]}{'s' * (needed == 2)}, not {count}"
+                sides = f"{SIDE_KINDS[kind]}{'s' * (needed == 2)}"
+                raise InvalidSettings(f"{MODE_NAMES[self.mode]} needs {number} {sides}, not {count}")
         for color, anchor in self.anchor_sides().items():
             if anchor.skill not in DRAGON_SKILLS:
                 low, high = DRAGON_SKILLS[0], DRAGON_SKILLS[-1]
-                return f"{anchor.engine.capitalize()} ({color}) plays at Skill {low}-{high}, not {anchor.skill}"
+                skills = f"Skill {low}-{high}"
+                raise InvalidSettings(f"{anchor.engine.capitalize()} ({color}) plays at {skills}, not {anchor.skill}")
         if self.max_attempts not in MAX_ATTEMPTS_RANGE:
             low, high = MAX_ATTEMPTS_RANGE[0], MAX_ATTEMPTS_RANGE[-1]
-            return f"An LLM gets {low}-{high} attempts per turn, not {self.max_attempts}"
+            raise InvalidSettings(f"An LLM gets {low}-{high} attempts per turn, not {self.max_attempts}")
         for anchor in self.anchor_sides().values():
             if self.rules == "chaos" and anchor.engine != "stockfish":
-                return "Only Stockfish can be the Anchor under Chaos rules: it alone copes with chaos positions"
+                why = "it alone copes with chaos positions"
+                raise InvalidSettings(f"Only Stockfish can be the Anchor under Chaos rules: {why}")
         for color, side in self.llm_sides().items():
             model = next((model for model in models if model.name == side.model), None)
             if model is None:
-                return f"{side.model} ({color}) is not in the model list"
+                raise InvalidSettings(f"{side.model} ({color}) is not in the model list")
             if isinstance(side, BenchmarkLlmSide) and (level := side.thinking_level) is not None:
                 if not model.thinking:
-                    return f"{side.model} ({color}) cannot think, so it has no Thinking levels"
+                    raise InvalidSettings(f"{side.model} ({color}) cannot think, so it has no Thinking levels")
                 if not model.thinking_levels:
-                    return f"{side.model} ({color}) has no Thinking levels, only thinking on or off"
+                    raise InvalidSettings(f"{side.model} ({color}) has no Thinking levels, only thinking on or off")
                 if level not in model.thinking_levels:
                     offered = ", ".join(model.thinking_levels)
-                    return f"{side.model} ({color}) has no Thinking level {level}: it offers {offered}"
+                    raise InvalidSettings(f"{side.model} ({color}) has no Thinking level {level}: it offers {offered}")
                 if not side.thinking:
-                    return f"{side.model} ({color}) has Thinking level {level}, so thinking must be on"
+                    raise InvalidSettings(f"{side.model} ({color}) has Thinking level {level}, so thinking must be on")
             if side.thinking and not model.thinking:
-                return f"{side.model} ({color}) cannot think, so thinking must be off"
+                raise InvalidSettings(f"{side.model} ({color}) cannot think, so thinking must be off")
             if isinstance(side, BenchmarkLlmSide) and (budget := side.thinking_budget) is not None:
                 low, high = THINKING_BUDGET_RANGE[0], THINKING_BUDGET_RANGE[-1]
                 has_budget = f"{side.model} ({color}) has a Thinking budget"
                 if not side.thinking:
-                    return f"{has_budget}, so thinking must be on"
+                    raise InvalidSettings(f"{has_budget}, so thinking must be on")
+                of_tokens = f"{has_budget} of {budget} tokens"
                 if budget < low:
-                    return f"{has_budget} of {budget} tokens, too few to hold an answer: at least {low}"
+                    raise InvalidSettings(f"{of_tokens}, too few to hold an answer: at least {low}")
                 if budget > high:
                     context = f"{CONTEXT_TOKENS:,}-token context"
-                    return f"{has_budget} of {budget} tokens, too many for its {context}: at most {high}"
+                    raise InvalidSettings(f"{of_tokens}, too many for its {context}: at most {high}")
                 if model.tokens_per_s is None:
-                    return f"{has_budget}, but no measured speed to set its time limit from"
+                    raise InvalidSettings(f"{has_budget}, but no measured speed to set its time limit from")
             if self.rules == "chaos" and side.llm_constraints in ENFORCED:
                 wanted = "Chaos rules need every LLM under Free or Listed"
-                return f"{wanted}, not {side.model} ({color}) under {side.llm_constraints}"
-        return None
+                raise InvalidSettings(f"{wanted}, not {side.model} ({color}) under {side.llm_constraints}")
 
 
 def color_name(color: chess.Color) -> Color:
     return "white" if color == chess.WHITE else "black"
-
-
-class RejectedHumanMove(Exception):
-    pass
-
-
-class RefusedLlmTurn(Exception):
-    """An LLM turn can't start: it isn't an LLM's turn, the game is over, or a turn is already running."""
-
-
-class RefusedAnchorTurn(Exception):
-    """An Anchor turn can't start: it isn't an Anchor's turn, or the game is over."""
 
 
 @dataclass(frozen=True)
@@ -412,16 +411,16 @@ class GameSession:
         Raises RejectedHumanMove and leaves the game unchanged."""
         board = self._board
         if self._end is not None:
-            raise RejectedHumanMove("the game is over")
+            raise RejectedHumanMove("the game is over", code="game_over")
         if self._settings.mode != "play_llm":
-            raise RejectedHumanMove(f"an {MODE_NAMES[self._settings.mode]} takes no human moves")
+            raise RejectedHumanMove(f"an {MODE_NAMES[self._settings.mode]} takes no human moves", code="not_human_turn")
         try:
             move = chess.Move.from_uci(uci)
         except ValueError:
-            raise RejectedHumanMove(f"not a UCI move: {uci!r}") from None
+            raise RejectedHumanMove(f"not a UCI move: {uci!r}", code="invalid_move") from None
         color = color_name(board.turn)
         if color in self._llm_sides or not board.is_legal(move):
-            raise RejectedHumanMove(f"illegal move: {uci}")
+            raise RejectedHumanMove(f"illegal move: {uci}", code="illegal_move")
         san = self._play_legal(move)
         self._log.write("human_move", color=color, ply=len(self._moves), move=san, fen_after=self._board.fen())
         self._check_end()
@@ -435,11 +434,11 @@ class GameSession:
         and AnchorUnavailable if the Anchor fails or answers with an illegal move."""
         board = self._board
         if self._end is not None:
-            raise RefusedAnchorTurn("the game is over")
+            raise RefusedAnchorTurn("the game is over", code="game_over")
         color = color_name(board.turn)
         anchor = self._anchors.get(color)
         if anchor is None:
-            raise RefusedAnchorTurn("it is not an Anchor's turn")
+            raise RefusedAnchorTurn("it is not an Anchor's turn", code="not_anchor_turn")
         move = anchor.move(board.copy())
         if not board.is_legal(move):
             raise AnchorUnavailable(f"{self._pgn_name(color)} played an illegal move: {move.uci()}")
@@ -456,14 +455,14 @@ class GameSession:
         Raises RefusedLlmTurn and leaves the game unchanged if it isn't an LLM's turn, the game is over, or
         another LLM turn is still running."""
         if not self._llm_turn_running.acquire(blocking=False):
-            raise RefusedLlmTurn("an LLM turn is already running")
+            raise RefusedLlmTurn("an LLM turn is already running", code="llm_turn_running")
         try:
             if self._abandoned.is_set():
                 return
             if self._end is not None:
-                raise RefusedLlmTurn("the game is over")
+                raise RefusedLlmTurn("the game is over", code="game_over")
             if color_name(self._board.turn) not in self._llm_sides:
-                raise RefusedLlmTurn("it is not an LLM's turn")
+                raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
             forfeit = self._play_llm_turn()
             with self._ending:
                 if self._abandoned.is_set():

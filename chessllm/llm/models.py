@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from chessllm.exceptions import InvalidSamplingConfig
+
 SAMPLING_FILE = Path(__file__).parent / "sampling.toml"
 
 # The Ollama options that change how a model samples its reply. Others (num_ctx, stop, ...) aren't sampling.
@@ -73,14 +75,18 @@ THINKING_BUDGET_RANGE = range(FORCED_ANSWER_TOKENS, 6144 + 1)
 def load_sampling(path: Path = SAMPLING_FILE) -> dict[str, float]:
     """The sampling options set in the config file. Empty (or no file) means the model's own defaults.
 
-    The file is read at the start of every game, so edits apply to the next game without restarting the app."""
+    The file is read at the start of every game, so edits apply to the next game without restarting the app.
+    Raises InvalidSamplingConfig if it isn't TOML, or sets anything but numbers for the sampling options."""
     if not path.exists():
         return {}
-    sampling = tomllib.loads(path.read_text(encoding="utf-8"))
+    try:
+        sampling = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as error:
+        raise InvalidSamplingConfig(str(error)) from error
     unknown = sorted(set(sampling) - SAMPLING_OPTIONS)
     if unknown:
-        raise ValueError(f"{path.name}: unknown sampling options {', '.join(unknown)}")
+        raise InvalidSamplingConfig(f"{path.name}: unknown sampling options {', '.join(unknown)}")
     not_numbers = sorted(name for name, value in sampling.items() if type(value) not in (int, float))
     if not_numbers:
-        raise ValueError(f"{path.name}: sampling options must be numbers: {', '.join(not_numbers)}")
+        raise InvalidSamplingConfig(f"{path.name}: sampling options must be numbers: {', '.join(not_numbers)}")
     return sampling

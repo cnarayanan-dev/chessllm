@@ -9,7 +9,8 @@ import pytest
 
 from tests.conftest import play_llm, play_move
 
-from chessllm.engines.stockfish_evaluator import StockfishEvaluator, StockfishUnavailable
+from chessllm.engines.stockfish_evaluator import StockfishEvaluator
+from chessllm.exceptions import StockfishUnavailable
 
 pytestmark = pytest.mark.stockfish
 

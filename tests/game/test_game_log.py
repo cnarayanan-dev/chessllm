@@ -6,7 +6,7 @@ import chess.pgn
 
 from tests.conftest import Raw, play_llm, play_move
 
-from chessllm.llm.players import LlmTimeout
+from chessllm.exceptions import LlmTimeout
 
 START_FEN = chess.STARTING_FEN
 E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"

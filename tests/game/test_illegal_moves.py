@@ -1,7 +1,8 @@
 import pytest
 from tests.conftest import Raw, play_llm, play_move
 
-from chessllm.llm.players import LlmTimeout, Message
+from chessllm.llm.players import Message
+from chessllm.exceptions import LlmTimeout
 
 E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
 

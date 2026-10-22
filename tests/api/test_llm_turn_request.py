@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from chessllm.api.app import create_app
 from chessllm.game.session import GameSession, Settings
 from chessllm.logs.game_log import GameLog
-from chessllm.llm.players import LlmTimeout
+from chessllm.exceptions import LlmTimeout
 
 START_FEN = chess.STARTING_FEN
 

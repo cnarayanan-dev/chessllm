@@ -8,7 +8,8 @@ import httpx
 import ollama
 
 from chessllm.llm.models import FORCED_ANSWER_TOKENS
-from chessllm.llm.players import LlmReply, LlmTimeout, Message, MoveAnswer, ReasonedMoveAnswer
+from chessllm.llm.players import LlmReply, Message, MoveAnswer, ReasonedMoveAnswer
+from chessllm.exceptions import LlmTimeout
 
 # Long thinking can run for many minutes and still end without an answer, so a turn is cut off here.
 TIMEOUT_S = 300.0

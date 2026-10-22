@@ -28,6 +28,7 @@ from chessllm.cli.common import (
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
+from chessllm.exceptions import InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.session import COLORS, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
 from chessllm.llm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
@@ -92,17 +93,19 @@ def model_budget(value: str) -> tuple[str, int]:
 
 
 def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_file: Path) -> Settings:
-    """The settings of a faceoff of model white against model black. Raises ValueError when they can't be played."""
+    """The settings of a faceoff of model white against model black. Raises InvalidSettings when they can't be
+    played, and InvalidSamplingConfig for a broken config."""
 
     levels: dict[str, str | None] = {}
     for model, level in args.thinking_for:
         if levels.get(model, level) != level:
-            raise ValueError(f"--thinking-for gives {model} two Thinking levels, {levels[model]} and {level}")
+            raise InvalidSettings(f"--thinking-for gives {model} two Thinking levels, {levels[model]} and {level}")
         levels[model] = level
     budgets: dict[str, int] = {}
     for model, budget in args.thinking_budget_for:
         if budgets.get(model, budget) != budget:
-            raise ValueError(f"--thinking-budget-for gives {model} two Thinking budgets, {budgets[model]} and {budget}")
+            two = f"two Thinking budgets, {budgets[model]} and {budget}"
+            raise InvalidSettings(f"--thinking-budget-for gives {model} {two}")
         budgets[model] = budget
 
     def side(model: str) -> LlmSide:
@@ -124,9 +127,7 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
         rules=args.rules,
         max_attempts=args.max_attempts,
     )
-    problem = settings.problem(LLM_MODELS)
-    if problem is not None:
-        raise ValueError(problem)
+    settings.check(LLM_MODELS)
     return settings
 
 
@@ -144,7 +145,7 @@ def main(
     first, second = args.models
     try:
         faceoff_settings(args, first, second, sampling_file)
-    except ValueError as error:
+    except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
     scores = {first: 0.0, second: 0.0}

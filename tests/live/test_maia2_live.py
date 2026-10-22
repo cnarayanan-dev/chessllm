@@ -10,7 +10,8 @@ import pytest
 from tests.conftest import play_llm, play_move
 
 from chessllm.analytics.analysis import analyse_game
-from chessllm.engines.maia2_model import Maia2MoveModel, Maia2Unavailable
+from chessllm.engines.maia2_model import Maia2MoveModel
+from chessllm.exceptions import Maia2Unavailable
 
 pytestmark = pytest.mark.maia2
 

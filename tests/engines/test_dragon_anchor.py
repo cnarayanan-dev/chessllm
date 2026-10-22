@@ -6,7 +6,8 @@ import sys
 import chess
 import pytest
 
-from chessllm.engines.anchors import AnchorUnavailable, DragonAnchor
+from chessllm.engines.anchors import DragonAnchor
+from chessllm.exceptions import AnchorUnavailable
 
 FAKE_ENGINE = '''
 import sys

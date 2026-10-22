@@ -25,7 +25,8 @@ from chessllm.api.app import create_app
 from chessllm.game.session import AnchorSide, BenchmarkLlmSide, Color, LlmSide, Settings
 from chessllm.logs.game_log import GameLog
 from chessllm.llm.models import LLM_MODELS, load_sampling
-from chessllm.llm.players import LlmPlayer, LlmTimeout
+from chessllm.llm.players import LlmPlayer
+from chessllm.exceptions import LlmTimeout
 from tests.fakes import Raw, ScriptedAnchor, ScriptedPlayer
 
 ROOT = Path(__file__).parent.parent
@@ -212,8 +213,7 @@ def play(
     anchors: dict[Color, ScriptedAnchor],
 ) -> None:
     """Play an unattended game as the benchmark's commands do. No route serves its state, so only its log is kept."""
-    problem = settings.problem(LLM_MODELS)
-    assert problem is None, problem
+    settings.check(LLM_MODELS)
     log = GameLog(samples.games_dir(game), *settings.side_names())
     samples.started(game, log.game_id)
     llm_players: dict[Color, LlmPlayer] = {color: player for color, player in players.items()}

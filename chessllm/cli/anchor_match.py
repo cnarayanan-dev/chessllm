@@ -12,7 +12,8 @@ from pathlib import Path
 
 from chessllm.cli.common import add_configuration_arguments, anchor_match_settings, default_anchor, fail
 from chessllm.cli.common import player_for as default_player_for
-from chessllm.engines.anchors import Anchor, AnchorUnavailable
+from chessllm.engines.anchors import Anchor
+from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.session import COLORS, AnchorSide, Color, Settings
 from chessllm.llm.models import SAMPLING_FILE
@@ -44,7 +45,7 @@ def main(
     llm_color: Color = args.color
     try:
         settings = anchor_match_settings(args, llm_color, args.skill, sampling_file)
-    except ValueError as error:
+    except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     if anchor_for is None:

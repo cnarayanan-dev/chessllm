@@ -16,8 +16,7 @@ from tests.conftest import ScriptedAnchor, ScriptedPlayer, play_llm, play_move
 
 from chessllm.analytics.analysis import analyse_game, analyse_games
 from chessllm.cli.anchor_match import main as anchor_match
-from chessllm.engines.maia2_model import Maia2Unavailable
-from chessllm.engines.stockfish_evaluator import StockfishUnavailable
+from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
 
 
 def fen_after(*sans: str) -> str:

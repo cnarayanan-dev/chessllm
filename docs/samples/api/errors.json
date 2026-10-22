@@ -6,7 +6,8 @@
     },
     "status": 400,
     "response": {
-      "detail": "the game is over"
+      "detail": "the game is over",
+      "code": "game_over"
     }
   },
   {
@@ -14,7 +15,8 @@
     "body": null,
     "status": 409,
     "response": {
-      "detail": "the game is over"
+      "detail": "the game is over",
+      "code": "game_over"
     }
   },
   {
@@ -22,7 +24,8 @@
     "body": null,
     "status": 404,
     "response": {
-      "detail": "no game started"
+      "detail": "no game started",
+      "code": "no_current_game"
     }
   },
   {
@@ -36,7 +39,8 @@
     },
     "status": 400,
     "response": {
-      "detail": "Chaos rules need every LLM under Free or Listed, not llama3:8b (black) under listed_enforced"
+      "detail": "Chaos rules need every LLM under Free or Listed, not llama3:8b (black) under listed_enforced",
+      "code": "invalid_settings"
     }
   },
   {
@@ -69,7 +73,8 @@
     },
     "status": 400,
     "response": {
-      "detail": "illegal move: e2e5"
+      "detail": "illegal move: e2e5",
+      "code": "illegal_move"
     }
   },
   {
@@ -79,7 +84,8 @@
     },
     "status": 400,
     "response": {
-      "detail": "not a UCI move: 'e2'"
+      "detail": "not a UCI move: 'e2'",
+      "code": "invalid_move"
     }
   },
   {
@@ -87,7 +93,8 @@
     "body": null,
     "status": 409,
     "response": {
-      "detail": "it is not an LLM's turn"
+      "detail": "it is not an LLM's turn",
+      "code": "not_llm_turn"
     }
   }
 ]

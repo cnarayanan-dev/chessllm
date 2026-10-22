@@ -45,7 +45,8 @@ from chessllm.game.session import judge
 from chessllm.logs.game_log import GAMES_DIR
 from chessllm.llm.models import load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer
-from chessllm.llm.players import LlmTimeout, Message
+from chessllm.llm.players import Message
+from chessllm.exceptions import LlmTimeout
 from chessllm.game.prompt import turn_messages
 from chessllm.cli.report import OPENING_PLIES, load_games
 

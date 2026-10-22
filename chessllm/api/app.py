@@ -11,12 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from chessllm.analytics.analysis import analyse_game
+from chessllm.api.errors import error_responses, register_error_handlers
 from chessllm.engines.evaluator import Evaluator
 from chessllm.game.session import (
     AnchorSide,
@@ -27,9 +28,14 @@ from chessllm.game.session import (
     MAX_ATTEMPTS_RANGE,
     Mode,
     Rules,
+    Settings,
+)
+from chessllm.exceptions import (
+    InvalidSamplingConfig,
+    InvalidSettings,
+    NoGameStarted,
     RefusedLlmTurn,
     RejectedHumanMove,
-    Settings,
 )
 from chessllm.logs.game_log import GAMES_DIR, GameLog
 from chessllm.analytics.leaderboard import Leaderboard, leaderboard
@@ -224,6 +230,7 @@ def create_app(
     is sent: its Move-quality estimate with the move_model, and its centipawn loss and accuracy with the evaluator."""
     app = FastAPI(title="ChessLLM")
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    register_error_handlers(app)
     game: GameSession | None = None
     game_swap = threading.Lock()  # so each new game abandons the one it replaces, even if two start at once
     game_logs: weakref.WeakKeyDictionary[GameSession, Path] = weakref.WeakKeyDictionary()
@@ -277,12 +284,12 @@ def create_app(
         except FileNotFoundError:
             return None
 
-    @app.get("/api/models")
+    @app.get("/api/models", responses=error_responses(InvalidSamplingConfig))
     def list_models() -> list[ModelInfo]:
         """Each model with the sampling it would play at: its own defaults, overridden by the config file.
 
         The sampling is None when Ollama can't show the model, e.g. when it isn't installed."""
-        config = sampling_config()
+        config = load_sampling(sampling_file)
 
         def sampling(model: LlmModel) -> Sampling | None:
             try:
@@ -298,19 +305,13 @@ def create_app(
             for model, model_sampling in zip(models, samplings)
         ]
 
-    def sampling_config() -> dict[str, float]:
-        try:
-            return load_sampling(sampling_file)
-        except ValueError as error:
-            raise HTTPException(500, str(error)) from None
-
     @app.get("/api/games/defaults")
     def new_game_defaults() -> NewGame:
         """The settings a new game is started with when none are given. The New game sheet starts from them when
         there is no game to copy."""
         return NewGame()
 
-    @app.post("/api/games")
+    @app.post("/api/games", responses=error_responses(InvalidSettings, InvalidSamplingConfig))
     def start_game(new_game: NewGame | None = None) -> GameState:
         nonlocal game
         new_game = new_game or NewGame()
@@ -318,13 +319,11 @@ def create_app(
             new_game.mode,
             new_game.white,
             new_game.black,
-            sampling=sampling_config(),
+            sampling=load_sampling(sampling_file),
             rules=new_game.rules,
             max_attempts=new_game.max_attempts,
         )
-        problem = settings.problem(models)
-        if problem is not None:
-            raise HTTPException(400, problem)
+        settings.check(models)
         players = {color: player_for(settings, color) for color in settings.llm_sides()}
         log = GameLog(games_dir, *settings.side_names())
         session = GameSession(players, settings, log)
@@ -337,33 +336,27 @@ def create_app(
 
     def current_game() -> GameSession:
         if game is None:
-            raise HTTPException(404, "no game started")
+            raise NoGameStarted()
         return game
 
-    @app.get("/api/games/current")
+    @app.get("/api/games/current", responses=error_responses(NoGameStarted))
     def get_game() -> GameState:
         return GameState.model_validate(current_game().state())
 
-    @app.post("/api/games/current/moves")
+    @app.post("/api/games/current/moves", responses=error_responses(RejectedHumanMove, NoGameStarted))
     def play_move(move: HumanMove, background: BackgroundTasks) -> GameState:
         session = current_game()
-        try:
-            session.play_human_move(move.uci)
-        except RejectedHumanMove as error:
-            raise HTTPException(400, str(error)) from None
+        session.play_human_move(move.uci)
         return respond(session, background)
 
-    @app.post("/api/games/current/llm-turn")
+    @app.post("/api/games/current/llm-turn", responses=error_responses(NoGameStarted, RefusedLlmTurn))
     def play_llm_turn(background: BackgroundTasks) -> GameState:
         """The only way an LLM turn starts. The page asks for one whenever a state says it is an LLM's turn, which
         in an LLM faceoff is every turn until the game ends.
 
         The state returned is that of the game the turn was played in, even if a new game has started since."""
         session = current_game()
-        try:
-            session.play_llm_turn()
-        except RefusedLlmTurn as error:
-            raise HTTPException(409, str(error)) from None
+        session.play_llm_turn()
         return respond(session, background)
 
     @app.get("/api/leaderboard")

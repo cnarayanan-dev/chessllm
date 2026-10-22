@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from tests.conftest import BlockingPlayer, Raw, ScriptedPlayer, llm_faceoff, play_llm
 
 from chessllm.api.app import create_app
-from chessllm.llm.players import LlmTimeout
+from chessllm.exceptions import LlmTimeout
 
 QWEN_THINKING = {"model": "qwen3.5:9b", "thinking": True}
 

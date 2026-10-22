@@ -13,7 +13,7 @@ from tests.analytics.test_analysis import PeakedMoveModel
 from tests.analytics.test_centipawn_loss_and_accuracy import FixedEvaluator, UnavailableEvaluator, UnavailableMoveModel
 
 from chessllm.cli.anchor_batch import main
-from chessllm.engines.anchors import AnchorUnavailable
+from chessllm.exceptions import AnchorUnavailable
 
 # The moves of each side for each planted result, by the LLM's colour. A win is a quick mate by the LLM, a loss a
 # Forfeit at the LLM's first turn (its call fails), and a draw a threefold repetition of the start position.
@@ -338,3 +338,20 @@ def test_a_batch_that_cant_be_played_is_refused_before_it_starts(batch, tmp_path
     assert code == 1
     assert error in capsys.readouterr().err
     assert planted.anchors == [] and not (tmp_path / "games").exists()
+
+
+def test_a_broken_sampling_config_stops_the_batch_before_the_first_game(tmp_path, capsys):
+    config = tmp_path / "sampling.toml"
+    config.write_text("temperature = \n")
+    planted = PlantedResults(["win"])
+
+    code = main(
+        ["--games-dir", str(tmp_path / "games"), "--no-analysis"],
+        player_for=planted.player_for,
+        anchor_for=planted.anchor_for,
+        sampling_file=config,
+    )
+
+    assert code == 1
+    assert "Invalid value" in capsys.readouterr().err
+    assert not (tmp_path / "games").exists()

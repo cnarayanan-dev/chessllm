@@ -18,9 +18,8 @@ from chessllm.engines.anchors import (
     configured_stockfish_path,
 )
 from chessllm.engines.evaluator import Evaluator
-from chessllm.engines.maia2_model import Maia2Unavailable
 from chessllm.engines.move_model import MoveModel
-from chessllm.engines.stockfish_evaluator import StockfishUnavailable
+from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
 from chessllm.game.prompt import LlmConstraints, PositionFormat, RetryFeedback
 from chessllm.game.session import AnchorEngine, AnchorSide, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
 from chessllm.llm.models import LLM_MODELS, load_sampling
@@ -96,8 +95,8 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int, sampling_file: Path) -> Settings:
-    """The settings of an Anchor match of the LLM in args at llm_color against Dragon at skill. Raises ValueError
-    with the reason when they can't be played."""
+    """The settings of an Anchor match of the LLM in args at llm_color against Dragon at skill. Raises
+    InvalidSettings with the reason when they can't be played, and InvalidSamplingConfig for a broken config."""
     llm = BenchmarkLlmSide(
         model=args.model,
         thinking=args.thinking or args.thinking_level is not None,
@@ -117,9 +116,7 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         rules=args.rules,
         max_attempts=args.max_attempts,
     )
-    problem = settings.problem(LLM_MODELS)
-    if problem is not None:
-        raise ValueError(problem)
+    settings.check(LLM_MODELS)
     return settings
 
 

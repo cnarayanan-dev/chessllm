@@ -4,7 +4,8 @@ from ollama import ChatResponse
 from ollama import Message as OllamaMessage
 
 from chessllm.llm.ollama_player import OllamaPlayer
-from chessllm.llm.players import LlmReply, LlmTimeout, Message
+from chessllm.llm.players import LlmReply, Message
+from chessllm.exceptions import LlmTimeout
 
 
 def test_the_adapter_asks_ollama_with_thinking_on_and_the_free_move_schema():

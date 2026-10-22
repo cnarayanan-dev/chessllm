@@ -40,9 +40,10 @@ from chessllm.cli.common import (
     fail,
 )
 from chessllm.cli.common import player_for as default_player_for
-from chessllm.engines.anchors import Anchor, AnchorUnavailable
+from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
+from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
 from chessllm.game.ladder import FIRST_SKILL, AnchoredGame, earlier_games, llm_score, next_color, next_skill
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.session import AnchorSide, Color, Settings
@@ -88,7 +89,7 @@ def main(
         return fail(FAILED, f"the budget must be at least one game, not {args.games}")
     try:
         settings = anchor_match_settings(args, "white", args.skill or FIRST_SKILL, sampling_file)
-    except ValueError as error:
+    except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     if anchor_for is None:
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731

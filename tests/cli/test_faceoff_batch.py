@@ -75,3 +75,31 @@ def test_gemma4_plays_with_thinking_on_against_a_model_that_cannot_think(tmp_pat
     assert (start["white"]["model"], start["white"]["thinking"]) == ("gemma4:26b", True)
     assert (start["black"]["model"], start["black"]["thinking"]) == ("llama3:8b", False)
     assert json.loads(log.read_text().splitlines()[-1])["result"] == "0-1"
+
+
+def test_a_broken_sampling_config_is_refused_before_any_game(tmp_path, capsys):
+    config = tmp_path / "sampling.toml"
+    config.write_text("warmth = 1\n")
+
+    code = main(
+        ["--models", "gemma3:12b", "llama3:8b", "--games-dir", str(tmp_path), "--no-analysis"],
+        player_for=ScriptedPlayer([]).for_settings,
+        sampling_file=config,
+    )
+
+    assert code == 1
+    assert "sampling.toml: unknown sampling options warmth" in capsys.readouterr().err
+    assert not list(tmp_path.glob("*.jsonl"))
+
+
+def test_two_thinking_levels_for_one_model_are_refused_before_any_game(tmp_path, capsys):
+    code = main(
+        ["--models", "qwen3.8:latest", "gemma3:12b", "--thinking-for", "qwen3.8:latest=low",
+         "--thinking-for", "qwen3.8:latest=xhigh", "--games-dir", str(tmp_path), "--no-analysis"],
+        player_for=ScriptedPlayer([]).for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    assert code == 1
+    assert "--thinking-for gives qwen3.8:latest two Thinking levels, low and xhigh" in capsys.readouterr().err
+    assert not list(tmp_path.glob("*.jsonl"))

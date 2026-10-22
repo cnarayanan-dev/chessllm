@@ -15,13 +15,11 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
+from chessllm.exceptions import Maia2Unavailable
+
 MAIA2_REQUIREMENT = "maia2==0.11.0"
 WORKER = Path(__file__).with_name("maia2_worker.py")
 SAVE_ROOT = Path.home() / ".cache" / "chessllm" / "maia2"
-
-
-class Maia2Unavailable(Exception):
-    """Maia-2 can't be started: uv is missing, or its environment or model can't be set up."""
 
 
 class Maia2MoveModel:

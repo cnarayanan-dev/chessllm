@@ -272,3 +272,16 @@ def test_under_chaos_rules_the_llms_illegal_move_is_played_against_the_stockfish
     assert start["rules"] == "chaos"
     assert (end["result"], end["reason"]) == ("1-0", "king_capture")
     assert end["stats"]["white"]["chaos_moves"] == 1
+
+
+def test_a_broken_sampling_config_is_refused_before_the_game_starts(tmp_path, capsys):
+    config = tmp_path / "sampling.toml"
+    config.write_text('temperature = "hot"\n')
+    player = ScriptedPlayer([])
+
+    code = main(["--games-dir", str(tmp_path / "games")], player_for=player.for_settings, sampling_file=config)
+
+    assert code == 1
+    assert "sampling.toml: sampling options must be numbers: temperature" in capsys.readouterr().err
+    assert player.built_for == []
+    assert not (tmp_path / "games").exists()

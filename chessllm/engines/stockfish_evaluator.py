@@ -13,13 +13,11 @@ from typing import Self
 import chess
 import chess.engine
 
+from chessllm.exceptions import StockfishUnavailable
+
 DEPTH = 16
 THREADS = 1
 HASH_MB = 64
-
-
-class StockfishUnavailable(Exception):
-    """Stockfish can't be started: it isn't installed, or it won't run."""
 
 
 class StockfishEvaluator:

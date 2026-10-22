@@ -65,9 +65,8 @@ import chess.engine
 
 from chessllm.engines.evaluator import Evaluator
 from chessllm.logs.game_log import now
-from chessllm.engines.maia2_model import Maia2Unavailable
+from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
 from chessllm.engines.move_model import MoveModel
-from chessllm.engines.stockfish_evaluator import StockfishUnavailable
 
 ANALYSIS_VERSION = 1
 ANALYSIS_SUFFIX = ".analysis.json"

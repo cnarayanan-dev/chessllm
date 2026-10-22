@@ -16,6 +16,8 @@ from typing import Any, Protocol
 import chess
 import chess.engine
 
+from chessllm.exceptions import AnchorUnavailable
+
 # The Dragon Skill levels that are Anchors: Skill s is rated 125 × (s + 1) on the chess.com scale.
 DRAGON_SKILLS = range(1, 8)
 DRAGON_PATH_VARIABLE = "CHESSLLM_DRAGON"
@@ -50,10 +52,6 @@ ANCHOR_RATINGS |= {
 def anchor_name(side: dict[str, Any]) -> str:
     """An Anchor side's name, from its description in game_start, e.g. "anchor:dragon:3" for Dragon at Skill 3."""
     return ":".join(["anchor", *(str(side[key]) for key in ("engine", "skill") if key in side)])
-
-
-class AnchorUnavailable(Exception):
-    """The Anchor can't play: its engine isn't configured, isn't there, won't start or stopped answering."""
 
 
 class Anchor(Protocol):

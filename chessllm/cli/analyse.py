@@ -12,9 +12,8 @@ from pathlib import Path
 
 from chessllm.analytics.analysis import analyse_games
 from chessllm.engines.evaluator import Evaluator
-from chessllm.engines.maia2_model import Maia2Unavailable
+from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
 from chessllm.engines.move_model import MoveModel
-from chessllm.engines.stockfish_evaluator import StockfishUnavailable
 from chessllm.logs.game_log import GAMES_DIR
 
 
