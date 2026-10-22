@@ -1,12 +1,15 @@
 """HTTP API and static page."""
 
+import functools
+import hashlib
+import json
 import logging
 import threading
 import weakref
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -38,6 +41,14 @@ from chessllm.players import LlmPlayer
 STATIC_DIR = Path(__file__).parent / "static"
 # The React app's build (frontend/, `pnpm build`), git-ignored. Its files are served under /static/dist/.
 DIST_DIR = STATIC_DIR / "dist"
+# The fingerprint of the API description the build's types (frontend/src/api/schema.ts) were made from.
+BUILD_FINGERPRINT_FILE = "api-fingerprint.txt"
+
+
+def api_fingerprint(description: dict[str, Any]) -> str:
+    """The sha256 of an OpenAPI description, written canonically, so that the same API always gives the same one."""
+    canonical = json.dumps(description, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 class HumanMove(BaseModel):
@@ -233,7 +244,9 @@ def create_app(
     @app.get("/", include_in_schema=False, response_model=None)
     @app.get("/analytics", include_in_schema=False, response_model=None)
     def page() -> FileResponse | PlainTextResponse:
-        """The React app, from its build: the game at /, the analytics page at /analytics."""
+        """The React app, from its build: the game at /, the analytics page at /analytics.
+
+        A build made for a different API is refused rather than left to break in the browser."""
         index = dist_dir / "index.html"
         if not index.is_file():
             return PlainTextResponse(
@@ -241,7 +254,28 @@ def create_app(
                 "then reload this page.",
                 status_code=503,
             )
+        built_for = build_fingerprint()
+        running = running_fingerprint()
+        if built_for != running:
+            return PlainTextResponse(
+                f"The frontend build in {dist_dir} was made for a different API (fingerprint {built_for or 'missing'}) "
+                f"than the one running (fingerprint {running}). Run `pnpm install && pnpm build` in frontend/, "
+                "then reload this page. If the API itself changed, run `uv run python -m scripts.generate_api_types` "
+                "first.",
+                status_code=503,
+            )
         return FileResponse(index)
+
+    @functools.cache
+    def running_fingerprint() -> str:
+        """Taken on the first page load rather than here, once every route is in the description."""
+        return api_fingerprint(app.openapi())
+
+    def build_fingerprint() -> str | None:
+        try:
+            return (dist_dir / BUILD_FINGERPRINT_FILE).read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return None
 
     @app.get("/api/models")
     def list_models() -> list[ModelInfo]:
