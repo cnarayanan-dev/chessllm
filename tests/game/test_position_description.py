@@ -9,7 +9,7 @@ from tests.conftest import ScriptedPlayer
 
 from chessllm.cli.faceoff_batch import main
 from chessllm.analytics.leaderboard import llm_configuration
-from chessllm.game.prompt import describe_position, turn_messages
+from chessllm.game.llm_turn.prompt import describe_position, turn_messages
 
 
 def test_the_description_lists_the_last_move_both_sides_pieces_and_check():

@@ -6,10 +6,10 @@ import chess.pgn
 
 from tests.conftest import play_llm, play_move
 
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.llm.players import Message
-from chessllm.game.prompt import SYSTEM_PROMPT_FILE, system_prompt
+from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILE, system_prompt
 
 START_FEN = chess.STARTING_FEN
 E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"

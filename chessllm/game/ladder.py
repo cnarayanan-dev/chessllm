@@ -8,6 +8,7 @@ from pathlib import Path
 from chessllm.analytics.leaderboard import PlayerConfiguration, finished_game, llm_configuration
 from chessllm.engines.anchors import DRAGON_SKILLS
 from chessllm.core.types import COLORS, Color, opponent, score_for
+from chessllm.game.modes import mode_named
 
 FIRST_SKILL = DRAGON_SKILLS[0]
 
@@ -55,7 +56,7 @@ def earlier_games(
     logs = []
     for path in sorted(games_dir.glob("*.jsonl")) if games_dir.is_dir() else []:
         events = finished_game(path)
-        if events is not None and events[0].get("mode") == "anchor_match":
+        if events is not None and (mode := mode_named(events[0].get("mode"))) is not None and mode.against_an_anchor:
             logs.append((datetime.fromisoformat(events[0]["started_at"]), path.name, events))
     history = []
     for *_, events in sorted(logs, key=lambda log: log[:2]):

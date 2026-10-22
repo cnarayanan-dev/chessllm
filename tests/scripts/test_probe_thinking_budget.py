@@ -9,7 +9,7 @@ from chess.engine import Cp
 from ollama import ChatResponse
 from ollama import Message as OllamaMessage
 
-from chessllm.game.prompt import LISTED_SYSTEM_PROMPT_FILE, system_prompt
+from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, system_prompt
 from scripts.probe_board_images import Position
 from scripts.probe_thinking_budget import (
     PASSES,

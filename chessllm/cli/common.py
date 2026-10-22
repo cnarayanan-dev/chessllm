@@ -19,10 +19,17 @@ from chessllm.engines.anchors import (
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
-from chessllm.game.prompt import LlmConstraints, PositionFormat, RetryFeedback
-from chessllm.core.types import Color, Rules
-from chessllm.game.session import Settings
-from chessllm.game.sides import AnchorEngine, AnchorSide, BenchmarkLlmSide, LlmSide
+from chessllm.core.types import Color, RulesKey
+from chessllm.game.settings import Settings
+from chessllm.game.sides import (
+    AnchorEngine,
+    AnchorSide,
+    BenchmarkLlmSide,
+    LlmConstraints,
+    LlmSide,
+    PositionFormat,
+    RetryFeedback,
+)
 from chessllm.llm.models import LLM_MODELS, load_sampling
 
 if TYPE_CHECKING:
@@ -74,7 +81,7 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     )
     add_prompt_arguments(parser)
     # Part of the Player configuration. Chaos rules only with the Stockfish Anchor, which copes with chaos positions.
-    parser.add_argument("--rules", choices=get_args(Rules), default=Settings.rules)
+    parser.add_argument("--rules", choices=get_args(RulesKey), default=Settings.rules)
     parser.add_argument(
         "--max-attempts",
         type=int,

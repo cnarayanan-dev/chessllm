@@ -10,7 +10,7 @@ sampling from chessllm/llm/sampling.toml, the Thinking budget's forced answer in
     listed_enforced  the Listed prompt and the legal moves as an enum: every answer is legal, scored by its
                      Stockfish centipawn loss as the game's analysis scores a played move
 
-The answer is judged with the game's chessllm.game.session.judge. Each call's time limit is the game's for its budget.
+The answer is judged with the game's chessllm.game.llm_turn.judging.judge. Each call's time limit is the game's for its budget.
 
 Results go to a JSONL file, one line per call; a rerun skips calls already in it (a timeout included, an error not),
 so the probe can be stopped and resumed, and run in chunks by model, condition and number of positions.
@@ -41,12 +41,13 @@ from chessllm.analytics.analysis import mover_evaluations
 from chessllm.engines.evaluator import Evaluator
 from chessllm.core.types import Sampling
 from chessllm.game.records import AttemptResult
-from chessllm.game.session import Settings, judge
-from chessllm.game.sides import BenchmarkLlmSide, HumanSide
+from chessllm.game.llm_turn.judging import judge
+from chessllm.game.settings import Settings
+from chessllm.game.sides import BenchmarkLlmSide, HumanSide, LlmConstraints
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.exceptions import InvalidSettings, LlmTimeout
-from chessllm.game.prompt import SYSTEM_PROMPT_FILES, LlmConstraints, turn_messages
+from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES, turn_messages
 from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 from scripts.probe_board_images import POSITIONS_FILE, Position
 

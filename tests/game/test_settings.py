@@ -1,6 +1,6 @@
 from tests.conftest import play_llm, play_move
 
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.llm.models import LlmModel
 
 

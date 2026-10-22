@@ -4,9 +4,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chessllm.game.session import MAX_ATTEMPTS_RANGE, Settings
+from chessllm.game.settings import MAX_ATTEMPTS_RANGE, Settings
 from chessllm.game.sides import HumanSide, LlmSide
-from chessllm.core.types import Rules
+from chessllm.core.types import RulesKey
 
 
 class HumanMove(BaseModel):
@@ -28,6 +28,6 @@ class NewGame(BaseModel):
     mode: AppMode = "play_llm"
     white: SideIn = HumanSide()
     black: SideIn = LlmSide()
-    rules: Rules = Settings.rules  # refused unless every LLM side is under Free or Listed
+    rules: RulesKey = Settings.rules  # refused unless every LLM side is under Free or Listed
     # Illegal moves per turn before an LLM forfeits, the same for every LLM in the game.
     max_attempts: int = Field(default=Settings.max_attempts, ge=MAX_ATTEMPTS_RANGE[0], le=MAX_ATTEMPTS_RANGE[-1])

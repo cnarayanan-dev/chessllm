@@ -7,7 +7,8 @@ import chess.pgn
 from tests.conftest import Raw, ScriptedPlayer, play_llm, play_move
 
 from chessllm.exceptions import LlmTimeout
-from chessllm.game.session import GameSession, Settings
+from chessllm.game.session import GameSession
+from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.logs.game_log import GameLog
 

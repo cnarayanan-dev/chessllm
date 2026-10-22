@@ -48,7 +48,7 @@ from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, Invali
 from chessllm.game.ladder import FIRST_SKILL, AnchoredGame, earlier_games, next_color, next_skill
 from chessllm.game.records import GameState
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.game.sides import AnchorSide
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog

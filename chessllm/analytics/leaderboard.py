@@ -17,9 +17,11 @@ from pydantic.json_schema import SkipJsonSchema
 from chessllm.analytics.analysis import analysis_path
 from chessllm.engines.anchors import ANCHOR_RATINGS, AnchorRating, anchor_name
 from chessllm.core.config import VALIDATION_FILE
-from chessllm.core.types import COLORS, Color, Rules, Sampling, opponent, score_for
-from chessllm.game.session import Settings
-from chessllm.game.sides import BenchmarkLlmSide
+from chessllm.core.types import COLORS, Color, RulesKey, Sampling, opponent, score_for
+from chessllm.game.modes import mode_named
+from chessllm.game.rules import rules_named
+from chessllm.game.settings import Settings
+from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, PositionFormat, RetryFeedback
 from chessllm.analytics.move_quality import (
     ConfigurationMoves,
     MoveQuality,
@@ -27,7 +29,7 @@ from chessllm.analytics.move_quality import (
     read_analysed_moves,
     read_validation,
 )
-from chessllm.game.prompt import ENFORCED, SYSTEM_PROMPT_FILES, LlmConstraints, PositionFormat, RetryFeedback
+from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
 from chessllm.analytics.rating import RatedGame, Rating, ratings
 
 
@@ -37,7 +39,7 @@ class PlayerConfiguration(BaseModel):
     model: str
     thinking: bool
     llm_constraints: LlmConstraints
-    rules: Rules
+    rules: RulesKey
     retry_feedback: RetryFeedback
     max_retries: int  # per turn, before the LLM forfeits
     sampling: Sampling  # from the config file; empty means the model's defaults
@@ -232,15 +234,12 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
             tally.streaks.append(streak)
 
 
-RATED_MODES = ("anchor_match", "llm_faceoff")  # Play LLM games don't count: the human's strength is unknown
-
-
 def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
-    """The game as the Rating counts it, if it does: an Anchor match or LLM faceoff under Standard rules (version 1
-    logs are all Play LLM). A Forfeit is a loss like any other."""
+    """The game as the Rating counts it, if it does: a game whose Mode and Rules are rated, an Anchor match or LLM
+    faceoff under Standard rules (version 1 logs are all Play LLM). A Forfeit is a loss like any other."""
     start, end = events[0], events[-1]
-    standard = start.get("rules", "standard") == "standard"
-    if "log_version" not in start or start.get("mode") not in RATED_MODES or not standard:
+    mode, rules = mode_named(start.get("mode")), rules_named(start.get("rules", "standard"))
+    if "log_version" not in start or mode is None or not mode.rated or rules is None or not rules.rated:
         return []
     sides, _ = read_sides(start, end)
     players = []

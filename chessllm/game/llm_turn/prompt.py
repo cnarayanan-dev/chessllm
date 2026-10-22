@@ -3,24 +3,13 @@
 import random
 from pathlib import Path
 from string import Template
-from typing import Literal
 
 import chess
 
 from chessllm.core.config import PROMPTS_DIR
 from chessllm.core.types import Color, opponent
+from chessllm.game.sides import LlmConstraints, RetryFeedback
 from chessllm.llm.players import Message
-
-# What the LLM is told after an illegal move: explained (the default), bare or hinted.
-RetryFeedback = Literal["explained", "bare", "hinted"]
-# Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
-# free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
-LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
-# How the position is given in each turn's message: fen (the PGN and FEN, the default) or described (also the last
-# move, where every piece stands and whether the LLM is in check, so it needn't decode the FEN).
-PositionFormat = Literal["fen", "described"]
-LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
-ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
 SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system.txt"
 LISTED_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_listed.txt"

@@ -12,7 +12,7 @@ import pytest
 from chessllm.llm.models import LLM_MODELS
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.llm.players import MoveAnswer
-from chessllm.game.prompt import LISTED_SYSTEM_PROMPT_FILE, turn_messages
+from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, turn_messages
 
 pytestmark = pytest.mark.ollama
 

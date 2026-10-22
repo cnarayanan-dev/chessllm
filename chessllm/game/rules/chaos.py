@@ -1,16 +1,20 @@
-"""Chaos rules: turn an LLM's move text into a chaos move and apply it to the board (ADR 0006).
+"""Chaos rules: an LLM's rule-breaking or ambiguous move is played on the board anyway (ADR 0006). The resolver turns
+the LLM's move text into a chaos move and applies it to the board; ChaosRules is what the rules change in a game.
 
 python-chess only ever resolves legal moves, and `Board.push` mangles illegal ones, so a chaos move is
 resolved here and applied by editing the board by hand."""
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any
 
 import chess
 
-# How the resolver read a move: legal as it stands, a chaos move, a spawn, or not a move it can play (ADR 0006).
-ResolutionKind = Literal["legal", "chaos", "spawn", "invalid"]
+from chessllm.core.types import Color, RulesKey
+from chessllm.exceptions import InvalidSettings
+from chessllm.game.ending import GameEnd
+from chessllm.game.records import AttemptResult, Resolution, ResolutionKind
+from chessllm.game.sides import ENFORCED, AnchorSide, LlmSide
 
 CASTLE_RE = re.compile(r"^[O0]-[O0](-[O0])?[+#]?$")
 
@@ -36,6 +40,19 @@ class ResolvedMove:
             return chess.Move(self.to_square, self.to_square, drop=self.piece.piece_type).uci()
         promotion = self.piece.piece_type if board.piece_type_at(self.from_square) != self.piece.piece_type else None
         return chess.Move(self.from_square, self.to_square, promotion).uci()
+
+    def record(self) -> Resolution:
+        def name(square: chess.Square | None) -> str | None:
+            return chess.square_name(square) if square is not None else None
+
+        return Resolution.model_validate({
+            "kind": self.kind,
+            "from": name(self.from_square),
+            "to": name(self.to_square),
+            "piece": self.piece.symbol() if self.piece else None,
+            "rook": [chess.square_name(square) for square in self.rook] if self.rook else None,
+            "reason": self.reason,
+        })
 
 
 def invalid(reason: str) -> ResolvedMove:
@@ -236,3 +253,60 @@ def apply(board: chess.Board, resolution: ResolvedMove) -> chess.Board:
     if mover == chess.BLACK:
         after.fullmove_number += 1
     return after
+
+
+class ChaosRules:
+    """Chaos rules, for every LLM in the game: a rule-breaking or ambiguous move is resolved and played at its first
+    attempt, the game can end in a King capture or a King left in check, and its games are counted apart, unrated."""
+
+    key: RulesKey = "chaos"
+    rated = False
+    plays_illegal_moves = True
+
+    def check_anchor(self, anchor: AnchorSide) -> None:
+        if anchor.engine != "stockfish":
+            why = "it alone copes with chaos positions"
+            raise InvalidSettings(f"Only Stockfish can be the Anchor under Chaos rules: {why}")
+
+    def check_llm(self, color: Color, side: LlmSide) -> None:
+        if side.llm_constraints in ENFORCED:
+            wanted = "Chaos rules need every LLM under Free or Listed"
+            raise InvalidSettings(f"{wanted}, not {side.model} ({color}) under {side.llm_constraints}")
+
+    def resolve(self, board: chess.Board, written: str, result: AttemptResult) -> ResolvedMove | None:
+        """A rule-breaking or ambiguous move is resolved, and a legal one too; badly formed notation never is, nor
+        an answer cut off before it gave a move."""
+        return resolve(board, written) if result not in ("invalid", "cut_off") else None
+
+    def end(self, board: chess.Board) -> GameEnd | None:
+        """King capture comes first: python-chess would go on judging a position with a king missing. Then a chaos
+        move that leaves the mover's own king in check loses at once, before the opponent has to take the king."""
+        mover = not board.turn
+        if board.king(board.turn) is None or board.king(mover) is None:
+            # The side left with a king wins: normally the mover, unless it took its own king with a chaos move.
+            winner = mover if board.king(mover) is not None else board.turn
+            return GameEnd("1-0" if winner == chess.WHITE else "0-1", "king_capture")
+        if board.was_into_check():  # only a chaos move can leave the mover's king attacked
+            return GameEnd("0-1" if mover == chess.WHITE else "1-0", "king_left_in_check")
+        return None
+
+    def chaos_counts(self, chaos_moves: int, spawns: int) -> tuple[int | None, int | None]:
+        return chaos_moves, spawns
+
+    def attempt_log_shape(self, shape: dict[str, Any]) -> dict[str, Any]:
+        """The resolution is always there, null when there was no move to resolve."""
+        shape.setdefault("resolution", None)
+        return shape
+
+    def game_start_fields(self) -> dict[str, Any]:
+        return {"rules": self.key}
+
+    def game_end_fields(self, plies: int, first_chaos_ply: int | None) -> dict[str, Any]:
+        """The plies played from the first chaos move on, by any side."""
+        return {"chaos_plies": plies - first_chaos_ply + 1 if first_chaos_ply else 0}
+
+    def pgn_headers(self) -> dict[str, str]:
+        return {"Rules": "Chaos"}
+
+
+CHAOS = ChaosRules()

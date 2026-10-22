@@ -8,7 +8,7 @@ from ollama import ChatResponse
 from ollama import Message as OllamaMessage
 
 from chessllm.llm.players import Message
-from chessllm.game.prompt import turn_messages
+from chessllm.game.llm_turn.prompt import turn_messages
 from scripts.probe_board_images import (
     Position,
     ask_move,

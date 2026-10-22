@@ -4,11 +4,11 @@ Positions are sampled from the first attempts of LLM Turns in the game logs (Fre
 the opening, middlegame and endgame, with some where the side to move is in check. Each position is put to each model,
 once per condition, with thinking off and the sampling from chessllm/llm/sampling.toml, as one first attempt (no Retry):
 
-    text        the Turn's prompt exactly as the game builds it (chessllm.game.prompt.turn_messages: PGN + FEN)
+    text        the Turn's prompt exactly as the game builds it (chessllm.game.llm_turn.prompt.turn_messages: PGN + FEN)
     text+image  the same prompt, plus one line saying what the image is, with the board image on the user message
     image       the board image and a short instruction only: no PGN, no FEN
 
-The answer is judged with the game's own chessllm.game.session.judge; a legal move not in exact SAN is a Notation slip, and an
+The answer is judged with the game's own chessllm.game.llm_turn.judging.judge; a legal move not in exact SAN is a Notation slip, and an
 illegal one is given an error kind (own piece on the target square, no such piece, king left in check, unreachable).
 
 A perception check on the first --perception positions asks each model to list where the side to move's pieces are,
@@ -40,15 +40,16 @@ import chess.svg
 import ollama
 import resvg_py
 
-from chessllm.game.chaos import CASTLE_RE
-from chessllm.game.session import judge
+from chessllm.game.rules import rules_named
+from chessllm.game.rules.chaos import CASTLE_RE
+from chessllm.game.llm_turn.judging import judge
 from chessllm.core.config import GAMES_DIR
 from chessllm.core.types import Color, Sampling, opponent
 from chessllm.llm.models import load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer
 from chessllm.llm.players import Message
 from chessllm.exceptions import LlmTimeout
-from chessllm.game.prompt import turn_messages
+from chessllm.game.llm_turn.prompt import turn_messages
 from chessllm.cli.report import OPENING_PLIES, load_games
 
 Condition = Literal["text", "text+image", "image"]
@@ -97,7 +98,7 @@ def read_positions(games_dir: Path) -> list[Position]:
     games, _ = load_games(games_dir)
     positions: dict[str, Position] = {}
     for game in games:
-        if game.rules != "standard":
+        if (rules := rules_named(game.rules)) is None or rules.plays_illegal_moves:
             continue
         for event in game.events:
             if event.get("type") != "llm_attempt" or int(event.get("attempt", 1)) != 1:

@@ -9,7 +9,8 @@ from chessllm.core.types import Color, Sampling
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.exceptions import NoGameStarted
-from chessllm.game.session import GameSession, Settings
+from chessllm.game.session import GameSession
+from chessllm.game.settings import Settings
 from chessllm.llm.models import LlmModel
 from chessllm.llm.players import LlmPlayer
 

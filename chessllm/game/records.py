@@ -6,14 +6,15 @@ Changing a record changes the API, and so the frontend's generated types (fronte
 from collections.abc import Sequence
 from typing import Annotated, Any, Literal, get_args
 
-import chess
 from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
 
-from chessllm.core.types import Color, GameResult, Mode, Rules, Sampling
-from chessllm.game.chaos import ResolutionKind, ResolvedMove
+from chessllm.core.types import Color, GameResult, ModeKey, RulesKey, Sampling
 from chessllm.game.sides import AnchorSide, HumanSide, LlmSide
 from chessllm.llm.players import MessageRole
 
+# How the resolver read a move under Chaos rules: legal as it stands, a chaos move, a spawn, or not a move it can play
+# (ADR 0006).
+ResolutionKind = Literal["legal", "chaos", "spawn", "invalid"]
 # The illegal moves: the kinds of answer that aren't a legal move (ADR 0002).
 IllegalResult = Literal["invalid", "illegal", "ambiguous"]
 ILLEGAL_RESULTS: tuple[IllegalResult, ...] = get_args(IllegalResult)
@@ -56,20 +57,6 @@ class Resolution(BaseModel):
     piece: str | None  # the symbol of the piece that ends up on to, e.g. "q" for a black queen
     rook: list[str] | None  # a castling rook's from and to
     reason: str
-
-    @classmethod
-    def of(cls, resolved: ResolvedMove) -> "Resolution":
-        def name(square: chess.Square | None) -> str | None:
-            return chess.square_name(square) if square is not None else None
-
-        return cls.model_validate({
-            "kind": resolved.kind,
-            "from": name(resolved.from_square),
-            "to": name(resolved.to_square),
-            "piece": resolved.piece.symbol() if resolved.piece else None,
-            "rook": [chess.square_name(square) for square in resolved.rook] if resolved.rook else None,
-            "reason": resolved.reason,
-        })
 
 
 class PromptMessage(BaseModel):
@@ -117,16 +104,14 @@ class Attempt(AttemptSummary):
         ordered = {key: fields[key] for key in ATTEMPT_FIELD_ORDER if key in fields}
         return ordered | fields
 
-    def log_shape(self, rules: Rules) -> dict[str, Any]:
+    def log_shape(self) -> dict[str, Any]:
         """The attempt as llm_attempt logs it (ADR 0004), unchanged since before the API gave the Reasoning a field
-        of its own: with thinking off, the Reasoning is the attempt's thinking. Under Chaos rules the resolution is
-        always there, null when there was no move to resolve."""
+        of its own: with thinking off, the Reasoning is the attempt's thinking. The game's Rules may add to it
+        (Rules.attempt_log_shape)."""
         shape: dict[str, Any] = self.model_dump(mode="json", by_alias=True)
         reasoning = shape.pop("reasoning")
         if reasoning is not None:
             shape["thinking"] = reasoning
-        if rules == "chaos":
-            shape.setdefault("resolution", None)
         return shape
 
 
@@ -189,12 +174,12 @@ class Stats(BaseModel):
 
 
 class GameSettings(BaseModel):
-    mode: Mode
+    mode: ModeKey
     white: SideOut
     black: SideOut
     sampling: Sampling  # from the config file; empty means the models' defaults
     # Left out under Standard rules, so a Standard rules game reads as it did before Chaos rules existed.
-    rules: Rules | None = Field(default=None, exclude_if=lambda rules: rules in (None, "standard"))
+    rules: RulesKey | None = Field(default=None, exclude_if=lambda rules: rules in (None, "standard"))
     max_attempts: int
 
 

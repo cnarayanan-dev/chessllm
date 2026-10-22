@@ -31,10 +31,11 @@ import chess
 from chessllm.analytics.analysis import analysis_path
 from chessllm.core.config import GAMES_DIR, VALIDATION_FILE
 from chessllm.core.types import COLORS, Color, opponent
+from chessllm.game.modes import mode_named
 from chessllm.game.records import ILLEGAL_RESULTS
 from chessllm.analytics.leaderboard import read_sides, side_outcome
 from chessllm.analytics.move_quality import ConfigurationMoves, move_quality, read_analysed_moves, read_validation
-from chessllm.game.prompt import ENFORCED
+from chessllm.game.sides import ENFORCED
 
 OPENING_PLIES = 20
 ENDGAME_MATERIAL = 26
@@ -449,7 +450,7 @@ def analyse(games: list[Game], filters: Filters, validation_file: Path = VALIDAT
     configurations = []
     for configuration in sorted(by_configuration, key=Configuration.label):
         its_sides = by_configuration[configuration]
-        anchors = sorted({side.opponent for side in its_sides if side.game.mode == "anchor_match"})
+        anchors = sorted({side.opponent for side in its_sides if (mode := mode_named(side.game.mode)) is not None and mode.against_an_anchor})
         themes = Themes()
         for side in its_sides:
             themes.add(side)

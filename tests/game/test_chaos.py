@@ -1,7 +1,7 @@
 import chess
 import pytest
 
-from chessllm.game.chaos import ResolvedMove, apply, resolve
+from chessllm.game.rules.chaos import ResolvedMove, apply, resolve
 
 START = chess.STARTING_FEN
 ONLY_THE_C1_BISHOP = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK1NR w KQkq - 0 1"

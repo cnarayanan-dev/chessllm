@@ -5,7 +5,16 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from chessllm.game.prompt import LlmConstraints, PositionFormat, RetryFeedback
+# What the LLM is told after an illegal move: explained (the default), bare or hinted.
+RetryFeedback = Literal["explained", "bare", "hinted"]
+# Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
+# free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
+LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
+# How the position is given in each turn's message: fen (the PGN and FEN, the default) or described (also the last
+# move, where every piece stands and whether the LLM is in check, so it needn't decode the FEN).
+PositionFormat = Literal["fen", "described"]
+LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
+ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
 
 @dataclass(frozen=True)
@@ -95,6 +104,8 @@ class AnchorSide:
 
 
 Side = HumanSide | LlmSide | AnchorSide
+# Who plays a side: each Side's player.
+SideKind = Literal["human", "llm", "anchor"]
 
 
 def side_log_shape(side: Side) -> dict[str, Any]:

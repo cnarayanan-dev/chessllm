@@ -6,9 +6,9 @@ import chess.pgn
 
 from tests.conftest import play_llm, play_move
 
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.llm.players import Message
-from chessllm.game.prompt import LISTED_SYSTEM_PROMPT_FILE, SYSTEM_PROMPT_FILE, system_prompt
+from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, SYSTEM_PROMPT_FILE, system_prompt
 
 E4_FEN = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
 BLACK_MOVES_AFTER_E4 = {chess.Board(E4_FEN).san(move) for move in chess.Board(E4_FEN).legal_moves}

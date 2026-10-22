@@ -13,7 +13,7 @@ from chessllm.core.config import DIST_DIR, GAMES_DIR, SAMPLING_FILE, VALIDATION_
 from chessllm.core.types import Color, Sampling
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.llm.models import LLM_MODELS, LlmModel
 from chessllm.llm.players import LlmPlayer
 

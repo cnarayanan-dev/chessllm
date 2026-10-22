@@ -17,7 +17,7 @@ from chessllm.cli.common import player_for
 from chessllm.api.app import create_app
 from chessllm.llm.ollama_player import OllamaPlayer
 from chessllm.llm.players import Message, ReasonedMoveAnswer
-from chessllm.game.prompt import LISTED_SYSTEM_PROMPT_FILE, SYSTEM_PROMPT_FILE, turn_messages
+from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, SYSTEM_PROMPT_FILE, turn_messages
 
 pytestmark = pytest.mark.ollama
 

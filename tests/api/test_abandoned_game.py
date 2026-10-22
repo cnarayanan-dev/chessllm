@@ -7,7 +7,8 @@ from tests.conftest import BlockingPlayer, Raw, ScriptedPlayer, play_llm
 from fastapi.testclient import TestClient
 
 from chessllm.api.app import create_app
-from chessllm.game.session import GameSession, Settings
+from chessllm.game.session import GameSession
+from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.logs.game_log import GameLog
 

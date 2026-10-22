@@ -29,10 +29,10 @@ from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.core.config import SAMPLING_FILE
-from chessllm.core.types import COLORS, Color, Rules
+from chessllm.core.types import COLORS, Color, RulesKey
 from chessllm.exceptions import InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.game.sides import BenchmarkLlmSide, LlmSide
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
@@ -69,7 +69,7 @@ def parser() -> argparse.ArgumentParser:
         "qwen3.8:latest=3072",
     )
     add_prompt_arguments(parser)
-    parser.add_argument("--rules", choices=get_args(Rules), default=Settings.rules)
+    parser.add_argument("--rules", choices=get_args(RulesKey), default=Settings.rules)
     parser.add_argument(
         "--max-attempts",
         type=int,

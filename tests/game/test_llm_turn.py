@@ -1,6 +1,6 @@
 from tests.conftest import Raw, play_llm, play_move
 
-from chessllm.game.session import Settings
+from chessllm.game.settings import Settings
 from chessllm.game.sides import LlmSide
 from chessllm.llm.players import Message
 

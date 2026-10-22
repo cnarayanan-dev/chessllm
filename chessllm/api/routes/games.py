@@ -17,7 +17,8 @@ from chessllm.exceptions import (
     RejectedHumanMove,
 )
 from chessllm.game.records import GameState
-from chessllm.game.session import GameSession, Settings
+from chessllm.game.session import GameSession
+from chessllm.game.settings import Settings
 from chessllm.llm.models import load_sampling
 from chessllm.logs.game_log import GameLog
 
