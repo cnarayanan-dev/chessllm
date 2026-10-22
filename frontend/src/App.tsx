@@ -114,7 +114,7 @@ export default function App() {
   }, [sheetOpen, step])
 
   return (
-    <div className="min-h-svh text-sm">
+    <div className="page min-h-svh text-sm">
       <TopBar onNewGame={openSheet} />
       {initial && (
         // It opens with the last game's settings each time, or with no game, the defaults.

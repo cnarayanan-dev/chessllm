@@ -1,9 +1,10 @@
 /*
   The LLM mistakes card, under the Moves card: the LLM sides' totals head to head, White's number | the metric |
-  Black's number. A row per metric: illegal tries and notation slips, and under Chaos rules chaos moves and spawns.
+  Black's number. A row per metric: illegal tries and notation slips; under Chaos rules, where an illegal move is
+  played anyway and a slip is no mistake, illegal moves and spawns.
   In a faceoff the side with more of a mistake is in red. The metric's meaning is in its tooltip (the hover rule).
 */
-import { PenLine, Sparkles, X, Zap, type LucideIcon } from 'lucide-react'
+import { PenLine, Sparkles, X, type LucideIcon } from 'lucide-react'
 import type { Color, GameState } from '@/api/types'
 import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -11,14 +12,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { COLOR_NAMES, llmColors } from '@/game/wording'
 import { cn } from '@/lib/utils'
 
-type Metric = 'illegal' | 'slips' | 'chaos' | 'spawns'
+type Metric = 'illegal' | 'slips' | 'spawns'
 
 const METRICS: Record<Metric, { icon: LucideIcon; name: string; description: string }> = {
   illegal: { icon: X, name: 'Illegal tries', description: 'Moves tried that were not legal, or could not be read.' },
   slips: { icon: PenLine, name: 'Notation slips', description: 'Legal moves written in the wrong notation.' },
-  chaos: { icon: Zap, name: 'Chaos moves', description: 'Illegal moves played anyway, under Chaos rules.' },
   spawns: { icon: Sparkles, name: 'Spawns', description: 'Chaos moves that put a new piece on the board.' },
 }
+// Under Chaos rules an illegal move is played anyway (or retried, if it could not be read): one count for both.
+const CHAOS_ILLEGAL = { icon: X, name: 'Illegal moves', description: 'Illegal moves, played anyway, or retried if they could not be read.' }
 
 /** A side's counts; null where a metric does not apply to it. */
 type Counts = Record<Metric, number | null>
@@ -33,7 +35,6 @@ function counts(game: GameState, color: Color): Counts {
     // Under Enforced decoding illegal tries are not applicable, unless one gets through anyway.
     illegal: stats?.illegal_moves === null && illegal === 0 ? null : illegal,
     slips: stats?.notation_slips ?? 0,
-    chaos,
     spawns: chaos === null ? null : (stats?.spawns ?? 0),
   }
 }
@@ -68,8 +69,8 @@ function SideHead({ color, model }: { color: Color; model: string }) {
   )
 }
 
-function MetricName({ metric }: { metric: Metric }) {
-  const { icon: Icon, name, description } = METRICS[metric]
+function MetricName({ metric, chaosRules }: { metric: Metric; chaosRules: boolean }) {
+  const { icon: Icon, name, description } = chaosRules && metric === 'illegal' ? CHAOS_ILLEGAL : METRICS[metric]
   return (
     <Tooltip>
       <TooltipTrigger
@@ -90,9 +91,8 @@ function MetricName({ metric }: { metric: Metric }) {
 
 export function MistakesCard({ game }: { game: GameState }) {
   const sides = new Map(llmColors(game).map((color) => [color, counts(game, color)]))
-  const metrics: Metric[] = [...sides.values()].some((side) => side.chaos !== null)
-    ? ['illegal', 'slips', 'chaos', 'spawns']
-    : ['illegal', 'slips']
+  const chaosRules = game.settings.rules === 'chaos'
+  const metrics: Metric[] = chaosRules ? ['illegal', 'spawns'] : ['illegal', 'slips']
   const model = (color: Color) => {
     const side = game.settings[color]
     return side.player === 'llm' ? side.model : ''
@@ -117,7 +117,7 @@ export function MistakesCard({ game }: { game: GameState }) {
   return (
     <Card size="sm" data-testid="mistakes-card">
       <CardContent>
-        <CardTitle className="mb-2 font-semibold text-card-foreground">LLM mistakes</CardTitle>
+        <CardTitle className="mb-2 font-semibold text-card-foreground">{chaosRules ? 'Rule-breaking' : 'LLM mistakes'}</CardTitle>
         <Table className="text-xs [&_td]:px-1.5 [&_th]:px-1.5">
           <TableHeader>
             <TableRow>
@@ -131,7 +131,7 @@ export function MistakesCard({ game }: { game: GameState }) {
               <TableRow key={metric}>
                 {sides.has('white') && countCell('white', metric)}
                 <TableCell className="text-center text-muted-foreground">
-                  <MetricName metric={metric} />
+                  <MetricName metric={metric} chaosRules={chaosRules} />
                 </TableCell>
                 {sides.has('black') && countCell('black', metric)}
               </TableRow>

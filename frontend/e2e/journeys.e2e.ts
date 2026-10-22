@@ -140,6 +140,27 @@ test('the LLM forfeits after its retries', async ({ page }) => {
   await expect(boardTakesMoves(page)).toHaveCount(0)
 })
 
+test("a faceoff forfeit's reason is in the result's tooltip, on hover and on keyboard focus", async ({ page }) => {
+  await page.request.post('/e2e/script', { data: { white: ['e4'], black: ['Qh4', 'Qh4', 'Ke7', 'Ke7', 'Bb4'] } })
+  const started = await page.request.post('/api/games', {
+    data: { mode: 'llm_faceoff', white: { player: 'llm' }, black: { player: 'llm' } },
+  })
+  expect(started.ok()).toBe(true)
+  await page.goto('/')
+
+  const result = page.getByTestId('result')
+  await expect(result).toHaveText(/\(White\) wins by forfeit$/)
+  const reason = /^.+ gave no legal move in 5 tries$/
+  await expect(result).toHaveAttribute('aria-description', reason)
+  const tooltip = page.locator('[data-slot=tooltip-content]')
+  await result.hover()
+  await expect(tooltip).toHaveText(reason)
+  await page.mouse.move(0, 0)
+  await expect(tooltip).toBeHidden()
+  await result.focus()
+  await expect(tooltip).toHaveText(reason)
+})
+
 test('the human promotes a pawn through the promotion dialog', async ({ page }) => {
   await playLlm(page, { black: ['h5', 'h4', 'h3', 'hxg2', 'gxh1=Q'] })
   await move(page, 'a2a4', 'h5')
@@ -206,17 +227,18 @@ test('Rematch after an LLM faceoff: the two LLMs change sides, each with its own
   expect(started.ok()).toBe(true)
   await page.goto('/')
   const card = page.getByRole('region', { name: 'Game' })
-  const players = card.getByRole('list', { name: 'Players' }).getByRole('listitem')
+  // Each player's row: its colour and model, then the settings it differs in.
+  const players = card.getByRole('list', { name: 'Players' }).locator(':scope > li')
   await expect(page.getByTestId('result')).toContainText('by checkmate')
-  await expect(players).toHaveText(['White qwen3.5:9b', 'Black llama3:8b'])
+  await expect(players).toHaveText([/^White qwen3\.5:9b/, /^Black llama3:8b/])
 
   const rematch = card.getByRole('button', { name: 'Rematch' })
   await expect(rematch).toHaveAttribute('aria-description', 'Same settings, the LLMs swap colours')
   await rematch.click()
 
-  await expect(players).toHaveText(['White llama3:8b', 'Black qwen3.5:9b'])
-  await expect(card.getByRole('img', { name: 'White: Thinking off' })).toBeVisible()
-  await expect(card.getByRole('img', { name: 'Black: Thinking on' })).toBeVisible()
+  await expect(players).toHaveText([/^White llama3:8b/, /^Black qwen3\.5:9b/])
+  await expect(card.getByRole('list', { name: "White's settings" })).toHaveText('Thinking off')
+  await expect(card.getByRole('list', { name: "Black's settings" })).toHaveText('Thinking on')
   await expect(page.getByTestId('result')).toContainText('by checkmate')
   await expectOver(page)
 })
@@ -323,7 +345,7 @@ const OPERA = {
   black: ['e5', 'd6', 'Bg4', 'Bxf3', 'dxe5', 'Nf6', 'Qe7', 'c6', 'b5', 'cxb5', 'Nbd7', 'Rd8', 'Rxd7', 'Qe6', 'Nxd7', 'Nxb8'],
 }
 
-test('on a laptop the moves list keeps its height in a long game, about 8 rows, and follows the latest move or the one viewed', async ({ page }) => {
+test('on a laptop the moves list keeps its height in a long game, the Moves card the Game card\'s, and follows the latest move or the one viewed', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await playLlm(page, {})
   const list = page.locator('.moves-card [data-slot=scroll-area-viewport]')
@@ -346,9 +368,15 @@ test('on a laptop the moves list keeps its height in a long game, about 8 rows, 
         })
         .map((number) => number.textContent),
     [box.y, box.y + box.height])
-  // Scrolled to the latest move.
-  await expect.poll(rowsInView).toEqual(['10', '11', '12', '13', '14', '15', '16', '17'].map((n) => `${n}.`))
+  // The Moves card is the Game card's height, so the Turn panel and the mistakes card start level.
+  const moves = (await page.locator('.moves-card').boundingBox())!
+  const game = (await page.getByRole('region', { name: 'Game' }).boundingBox())!
+  expect(moves.y).toBe(game.y)
+  expect(moves.height).toBe(game.height)
+  // Scrolled to the latest move, its scrollbar hidden.
+  await expect.poll(rowsInView).toEqual(['12', '13', '14', '15', '16', '17'].map((n) => `${n}.`))
   await expect(page.getByTestId('moves').getByRole('button', { name: 'Rd8#' })).toBeInViewport()
+  await expect(page.locator('.moves-card [data-slot=scroll-area-scrollbar]')).toBeHidden()
 
   // Stepping back keeps the move viewed in view.
   for (let i = 0; i < 27; i++) await page.keyboard.press('ArrowLeft')

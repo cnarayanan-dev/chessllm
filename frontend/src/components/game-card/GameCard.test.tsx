@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { expect, test, vi } from 'vitest'
 import type { GameState } from '@/api/types'
 import { GameCard } from '@/components/game-card/GameCard'
-import { aGame, chaosGame } from '@/test/games'
+import { aGame, aTurn, chaosGame } from '@/test/games'
 
 const llm = aGame().settings.black as Extract<GameState['settings']['black'], { player: 'llm' }>
 const faceoffOf = (white: Partial<typeof llm>, black: Partial<typeof llm>) =>
@@ -30,7 +30,7 @@ const rules = () => {
   const chip = within(gameCard()).getByRole('img', { name: /rules$/ })
   return `${icons(chip).join(' ')}: ${chip.textContent}`
 }
-/** A line of settings as text: the shared one ("Settings") or a player's ("White's settings"). */
+/** A player's line of settings as text ("White's settings"). */
 const line = (name: string) =>
   within(within(gameCard()).getByRole('list', { name })).getAllByRole('listitem').map((item) => item.textContent!.replace(/^\u00a0·\u00a0/, ''))
 
@@ -47,12 +47,12 @@ test("the Mode icon shows the players beside the Mode's name: you against an LLM
   expect(within(gameCard()).getByText('LLM faceoff')).toBeInTheDocument()
 })
 
-test('the Rules are the one setting shown as an icon, named beside it; the others are a line of text', () => {
+test('the Rules are the one setting shown, as an icon named beside it; the settings the LLMs share are not shown', () => {
   renderCard(aGame())
 
   expect(rules()).toBe('chess-knight: Standard rules')
-  expect(line('Settings')).toEqual(['Board only (Free)', 'Explained feedback', 'Thinking off', 'Forfeit after 5 illegal moves'])
-  expect(icons(within(gameCard()).getByRole('list', { name: 'Settings' }))).toEqual([])
+  expect(within(gameCard()).queryByRole('list', { name: 'Settings' })).not.toBeInTheDocument()
+  expect(within(gameCard()).queryByText('Board only (Free)')).not.toBeInTheDocument()
 })
 
 test('the other values: Chaos rules as a zap', () => {
@@ -63,46 +63,37 @@ test('the other values: Chaos rules as a zap', () => {
   )
 
   expect(rules()).toBe('zap: Chaos rules')
-  expect(line('Settings')).toEqual([
-    'Board + legal moves (Listed)',
-    'Hinted feedback',
-    'Thinking on',
-    'Forfeit after 5 illegal moves',
-  ])
 })
 
 test('under an enforced constraint there is no Retry feedback and no forfeit limit', () => {
   renderCard(faceoffOf({ llm_constraints: 'blind_enforced' }, { llm_constraints: 'listed_enforced', retry_feedback: 'bare' }))
 
-  expect(line('Settings')).toEqual(['Thinking off'])
   expect(line("White's settings")).toEqual(['Kept legal, not told (Blind enforced)'])
   expect(line("Black's settings")).toEqual(['Shown and kept legal (Listed enforced)'])
 })
 
 test("a setting's meaning shows in its tooltip on hover and keyboard focus, and in aria-description", async () => {
-  renderCard(aGame())
+  renderCard(faceoffOf({ thinking: true }, {}))
   const standard = within(gameCard()).getByRole('img', { name: 'Standard rules' })
   expect(standard).toHaveAttribute('aria-description', 'Normal chess. Rated.')
-  const free = within(gameCard()).getByText('Board only (Free)')
+  const on = within(gameCard()).getByText('Thinking on')
 
-  expect(free).toHaveAttribute('aria-description', 'The LLM finds its own moves and can play an illegal one.')
-  await userEvent.hover(free)
-  const tooltip = (await screen.findByText('The LLM finds its own moves and can play an illegal one.')).closest(
-    '[data-slot=tooltip-content]',
-  )
-  expect(tooltip).toHaveTextContent('Board only (Free)')
-  await userEvent.unhover(free)
+  expect(on).toHaveAttribute('aria-description', 'The LLM reasons before each move.')
+  await userEvent.hover(on)
+  const tooltip = (await screen.findByText('The LLM reasons before each move.')).closest('[data-slot=tooltip-content]')
+  expect(tooltip).toHaveTextContent('Thinking on')
+  await userEvent.unhover(on)
 
   await userEvent.tab()
   await userEvent.tab()
-  expect(free).toHaveFocus()
-  expect(await screen.findByText('The LLM finds its own moves and can play an illegal one.')).toBeInTheDocument()
+  expect(on).toHaveFocus()
+  expect(await screen.findByText('The LLM reasons before each move.')).toBeInTheDocument()
 })
 
-test("in a faceoff a setting the LLMs share is in the line; one that differs is on each player's row", () => {
+test("in a faceoff a setting the LLMs share is not shown; one that differs is on each player's row", () => {
   renderCard(faceoffOf({ thinking: true }, { retry_feedback: 'bare' }))
 
-  expect(line('Settings')).toEqual(['Board only (Free)', 'Forfeit after 5 illegal moves'])
+  expect(within(gameCard()).queryByText('Board only (Free)')).not.toBeInTheDocument()
   expect(line("White's settings")).toEqual(['Explained feedback', 'Thinking on'])
   expect(line("Black's settings")).toEqual(['Bare feedback', 'Thinking off'])
   expect(within(gameCard()).getByText('Thinking on')).toHaveAttribute('aria-description', 'The LLM reasons before each move.')
@@ -134,10 +125,39 @@ test("once the game is over, Rematch sits under the result line in the setting c
   expect(onRematch).toHaveBeenCalledOnce()
 })
 
-test('no Rematch while the game is playing', () => {
+test("the result's detail shows in its tooltip on hover and keyboard focus, and in aria-description", async () => {
+  const turn = aTurn('e5', {
+    attempts: [{ ...aTurn('e5').attempts[0], move: null, san: null, result: 'timeout', error: 'no answer in 300 s' }],
+  })
+  renderCard({ ...aGame({ llm_turn: turn }), status: 'over', result: '1-0', end_reason: 'forfeit' })
+  const result = within(gameCard()).getByTestId('result')
+
+  expect(result).toHaveTextContent('White wins by forfeit')
+  expect(result).not.toHaveTextContent('no answer in 300 s')
+  expect(result).toHaveAttribute('aria-description', 'no answer in 300 s')
+  await userEvent.hover(result)
+  expect((await screen.findByText('no answer in 300 s')).closest('[data-slot=tooltip-content]')).not.toBeNull()
+  await userEvent.unhover(result)
+
+  await userEvent.tab()
+  await userEvent.tab()
+  expect(result).toHaveFocus()
+  expect(await screen.findByText('no answer in 300 s')).toBeInTheDocument()
+})
+
+test('a result with no detail has no tooltip and takes no focus', () => {
+  renderCard(over(aGame()))
+
+  expect(within(gameCard()).getByTestId('result')).not.toHaveAttribute('tabindex')
+  expect(within(gameCard()).getByTestId('result')).not.toHaveAttribute('aria-description')
+})
+
+test('no Rematch while the game is playing; the result\'s room is held under "Playing"', () => {
   renderCard(aGame())
 
   expect(within(gameCard()).queryByRole('button')).not.toBeInTheDocument()
+  expect(within(gameCard()).getByText('Playing')).toBeInTheDocument()
+  expect(within(gameCard()).queryByTestId('result')).not.toBeInTheDocument()
 })
 
 test("Rematch's tooltip and aria-description say which colour you will play, or that the LLMs swap", async () => {

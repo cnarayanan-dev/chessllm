@@ -38,3 +38,23 @@
   }
   .board-stack { width: 100%; }
 }
+
+/* No page scrolling on a wide window: the page is exactly the window's height, the board fits it, the move list takes
+   what height is left in its column, and the Turn panel scrolls inside itself if it outgrows its column. */
+@media (min-width: 1101px) and (min-height: 600px) {
+  .page { height: 100svh; display: flex; flex-direction: column; overflow: hidden; }
+  .page > .game-layout { flex: 1 1 0; min-height: 0; width: 100%; padding-bottom: 8px; grid-template-rows: minmax(0, 1fr); }
+  .page > footer { padding-bottom: 8px; }
+  .board-stack { width: min(100%, calc(100svh - 216px)); }
+  .game-column, .moves-column { max-height: 100%; min-height: 0; }
+  .moves-column { align-self: stretch; }
+  .game-column > :last-child { min-height: 0; overflow-y: auto; }
+  /* The top row lines up: the moves card is the Game card's height, so the Turn panel and the mistakes card start
+     level. The Game card is at least that tall (taller only with a player's own settings on its row), and keeps its
+     size, so it never shrinks or grows with the Turn panel or the game's end. */
+  .game-layout { --top-card: 290px; }
+  .game-column > :first-child { flex: none; min-height: var(--top-card); }
+  .moves-column > .moves-card { flex: none; height: var(--top-card); }
+  .moves-column > .moves-card > [data-slot="card-content"] { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
+  .moves-column .move-scroll { flex: 1 1 0; min-height: 0; height: auto; }
+}

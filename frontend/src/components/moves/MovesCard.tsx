@@ -1,8 +1,10 @@
 /*
   The moves card: the move history, one row per move number. It runs no chess logic (ADR 0001): the moves are the
-  game's plies as the backend wrote them, a chaos move in the LLM's own spelling, in red, and a spawn in purple.
-  The list has a set height, about 8 rows, and scrolls: to the latest move, or while a past position is viewed, just
-  enough to keep the move viewed in view. With "Show LLM mistakes" on, the LLM mistakes card follows it.
+  game's plies as the backend wrote them, a chaos move in the LLM's own spelling, in a muted red, and a spawn in a
+  muted purple. The list has a set height, about 8 rows (on a wide window, what the card leaves it), and scrolls, with
+  no scrollbar shown: to the latest move, or while a past position is viewed, just enough to keep the move viewed in
+  view. With "Show LLM mistakes" on, the LLM mistakes card follows it; under Chaos rules the switch and the card are
+  "Rule-breaking".
 */
 import { PenLine, TriangleAlert, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
@@ -15,11 +17,12 @@ import { chaosResolution, played } from '@/game/chaos'
 import './moves.css'
 
 // A chip per failed attempt, in order, then an amber chip if the move it played was a notation slip. A chaos move
-// is the move itself, so it has no chip.
-function mistakeChips(turn: LlmTurn | undefined): ReactNode[] {
+// is the move itself, so it has no chip. Under Chaos rules notation slips are not shown.
+function mistakeChips(turn: LlmTurn | undefined, chaosRules: boolean): ReactNode[] {
   return (turn?.attempts ?? []).flatMap((attempt, index) => {
     const key = `${turn!.ply}-${index}`
     if (attempt.notation_slip) {
+      if (chaosRules) return []
       return [
         <span key={key} className="mistake slip">
           <PenLine aria-hidden="true" />
@@ -59,12 +62,13 @@ function MoveList({
 }: { game: GameState; mistakes: boolean; arrived: number | null } & Viewing) {
   const turns = new Map(game.llm_turns.map((turn) => [turn.ply, turn]))
   const plies = Math.max(game.plies.length, ...game.llm_turns.map((turn) => turn.ply))
+  const chaosRules = game.settings.rules === 'chaos'
   const rows = []
   for (let white = 1; white <= plies; white += 2) {
     const mistakes: ReactNode[] = []
     rows.push(<span key={`no${white}`} className="no">{`${(white + 1) / 2}.`}</span>)
     for (const ply of [white, white + 1]) {
-      const slip = shown && turns.get(ply)?.attempts.at(-1)?.notation_slip
+      const slip = shown && !chaosRules && turns.get(ply)?.attempts.at(-1)?.notation_slip
       const move = game.plies[ply - 1]
       const chaos = chaosResolution(move)?.kind
       const className =
@@ -90,7 +94,7 @@ function MoveList({
           <span key={ply} className={className} />
         ),
       )
-      if (shown) mistakes.push(...mistakeChips(turns.get(ply)))
+      if (shown) mistakes.push(...mistakeChips(turns.get(ply), chaosRules))
     }
     if (mistakes.length) {
       rows.push(
@@ -173,7 +177,7 @@ export function MovesCard({ game, viewed = null, onView }: { game: GameState } &
             <span className="flex-1" />
             <label className="flex cursor-pointer items-center gap-[7px] text-xs text-muted-foreground select-none">
               <Switch size="sm" checked={show} onCheckedChange={toggle} />
-              Show LLM mistakes
+              {game.settings.rules === 'chaos' ? 'Show rule-breaking' : 'Show LLM mistakes'}
             </label>
           </div>
           <ScrollArea ref={list} className="move-scroll">

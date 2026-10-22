@@ -48,6 +48,38 @@ function SettingText({ setting, name }: { setting: GameSetting; name: string }) 
   )
 }
 
+const RESULT = 'line-clamp-2 w-full text-[15px]/5 font-semibold tracking-tight'
+
+/** The result, up to two lines; its detail, such as a forfeit's reason, in a tooltip on hover and keyboard focus and
+ * in its `aria-description` (the hover rule). */
+function ResultLine({ result, detail }: { result: string; detail: string | null }) {
+  if (detail === null) {
+    return (
+      <div data-testid="result" className={RESULT}>
+        {result}
+      </div>
+    )
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={150}
+        render={
+          <div
+            data-testid="result"
+            tabIndex={0}
+            aria-description={detail}
+            className={cn(RESULT, 'cursor-help outline-none focus-visible:underline')}
+          />
+        }
+      >
+        {result}
+      </TooltipTrigger>
+      <TooltipContent className="block max-w-64">{detail}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 /** Settings as a line of muted text, " · " between them; on a player's row, without the side, which the row shows. */
 function SettingsLine({
   settings,
@@ -61,7 +93,7 @@ function SettingsLine({
   return (
     <ul aria-label={label} className="flex flex-wrap text-[13px] text-muted-foreground">
       {settings.map((setting, index) => (
-        <li key={setting.name} className="whitespace-nowrap">
+        <li key={setting.name} className="min-w-0">
           {index > 0 && <span aria-hidden="true">&nbsp;·&nbsp;</span>}
           <SettingText setting={setting} name={onSideRow ? setting.plainName : setting.name} />
         </li>
@@ -73,11 +105,10 @@ function SettingsLine({
 export function GameCard({ game, error, onRematch }: GameCardProps) {
   const mode = MODES[game.settings.mode]
   const over = game.status === 'over' ? resultText(game) : null
-  // The Rules, whether the game is wild, is the one setting shown as an icon; the rest are text: the ones the LLMs
-  // share under it, and in a faceoff the ones they differ in on each player's row.
+  // The Rules, whether the game is wild, is the one setting shown, as an icon; the settings the LLMs share are not
+  // shown, to keep the card simple, and in a faceoff the ones they differ in are on each player's row.
   const settings = gameSettings(game)
   const rules = settings.find((setting) => setting.setting === 'rules')!
-  const shared = settings.filter((setting) => setting.setting !== 'rules' && setting.color === null)
   const sideOf = (color: Color) => settings.filter((setting) => setting.color === color)
   const name = (color: 'white' | 'black') => {
     const side = game.settings[color]
@@ -102,11 +133,6 @@ export function GameCard({ game, error, onRematch }: GameCardProps) {
           <div className="mt-1.5 flex">
             <SettingChip icon={settingIcon(rules)} name={rules.name} description={rules.description} labelled />
           </div>
-          {shared.length > 0 && (
-            <div className="mt-1.5">
-              <SettingsLine settings={shared} label="Settings" />
-            </div>
-          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -122,7 +148,7 @@ export function GameCard({ game, error, onRematch }: GameCardProps) {
                 )}
               />
               <span className="sr-only">{COLOR_NAMES[color]} </span>
-              <span className="flex flex-wrap items-baseline gap-x-2">
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {name(color)}
                 {sideOf(color).length > 0 && (
                   <SettingsLine settings={sideOf(color)} label={`${COLOR_NAMES[color]}'s settings`} onSideRow />
@@ -132,21 +158,25 @@ export function GameCard({ game, error, onRematch }: GameCardProps) {
           ))}
         </ul>
       </CardContent>
-      {over && (
-        <CardContent className="flex flex-col items-start gap-3.5">
-          <Separator />
-          <div data-testid="result">
-            <div className="text-xl/snug font-semibold tracking-tight">{over.result}</div>
-            {over.detail && <div className="mt-1 text-sm text-muted-foreground">{over.detail}</div>}
-          </div>
-          <SettingChip
-            icon={RotateCcw}
-            name="Rematch"
-            description={rematchDescription(game.settings)}
-            onClick={onRematch}
-          />
-        </CardContent>
-      )}
+      {/* The same height playing or over, so the card never grows when the game ends, and kept small to leave the
+          Turn panel room: a result of up to two lines, the detail in its tooltip, and Rematch. While playing, the
+          room is held under "Playing". */}
+      <CardContent className="flex min-h-[89px] flex-col items-start gap-2.5">
+        <Separator />
+        {over ? (
+          <>
+            <ResultLine result={over.result} detail={over.detail} />
+            <SettingChip
+              icon={RotateCcw}
+              name="Rematch"
+              description={rematchDescription(game.settings)}
+              onClick={onRematch}
+            />
+          </>
+        ) : (
+          <div className="text-[15px]/5 font-semibold tracking-tight text-muted-foreground">Playing</div>
+        )}
+      </CardContent>
       {error !== null && (
         <CardContent>
           <p role="alert" className="text-sm text-destructive">

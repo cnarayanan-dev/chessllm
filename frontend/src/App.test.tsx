@@ -69,13 +69,8 @@ const players = () =>
     row.querySelector('ul')?.remove()
     return row.textContent
   })
-/** The Game card's settings: the Rules chip by its accessible name, then the line of the others, item by item. */
-const settingsItems = () => [
-  within(gameCard()).getByRole('img', { name: /rules$/ }).getAttribute('aria-label'),
-  ...within(within(gameCard()).getByRole('list', { name: 'Settings' }))
-    .getAllByRole('listitem')
-    .map((item) => item.textContent!.replace(/^\u00a0·\u00a0/, '')),
-]
+/** The Game card's Rules chip by its accessible name: the one setting shown. */
+const rulesShown = () => within(gameCard()).getByRole('img', { name: /rules$/ }).getAttribute('aria-label')
 
 /** Plays a move on the board, once the board takes moves. */
 async function drop(from: string, to: string) {
@@ -104,13 +99,7 @@ test('shows the current game: the Game card, the player strips and the board', a
   expect(strip('white')).toHaveTextContent('You')
   expect(screen.queryByTestId('status')).not.toBeInTheDocument()
   expect(within(gameCard()).getByText('Play LLM')).toBeInTheDocument()
-  expect(settingsItems()).toEqual([
-    'Standard rules',
-    'Board only (Free)',
-    'Explained feedback',
-    'Thinking off',
-    'Forfeit after 5 illegal moves',
-  ])
+  expect(rulesShown()).toBe('Standard rules')
   expect(players()).toEqual(['White You', 'Black qwen3.5:9b'])
   expect(within(gameCard()).queryByText(/Elo/)).not.toBeInTheDocument()
   // The settings live in the Game card, not in the top bar.
@@ -370,7 +359,7 @@ test('at the end of the game the Game card shows the result line and a Rematch b
   expect(theBoard().input).toBeNull()
 })
 
-test('a forfeit with no answer says why under the result line', async () => {
+test('a forfeit with no answer says why in the result line\'s description', async () => {
   const forfeit = aTurn('e5', {
     attempts: [{ ...aTurn('e5').attempts[0], move: null, san: null, result: 'timeout', error: 'no answer in 300 s' }],
   })
@@ -380,7 +369,7 @@ test('a forfeit with no answer says why under the result line', async () => {
   renderApp()
 
   expect(await screen.findByText('White wins by forfeit')).toBeInTheDocument()
-  expect(within(screen.getByTestId('result')).getByText('no answer in 300 s')).toBeInTheDocument()
+  expect(screen.getByTestId('result')).toHaveAttribute('aria-description', 'no answer in 300 s')
 })
 
 test('a draw at the Move cap names the cap in the result line', async () => {
@@ -633,7 +622,7 @@ describe('the New game sheet', () => {
 
     const result = await within(gameCard()).findByTestId('result')
     expect(within(result).getByText('qwen3.5:9b (Black) wins by forfeit')).toBeInTheDocument()
-    expect(within(result).getByText('qwen3.5:9b gave no legal move in 4 tries')).toBeInTheDocument()
+    expect(result).toHaveAttribute('aria-description', 'qwen3.5:9b gave no legal move in 4 tries')
     expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(3)
     expect(theBoard().input).toBeNull()
   })
@@ -803,8 +792,7 @@ describe('Chaos rules', () => {
     const board = await waitFor(theBoard)
     await waitFor(() => expect(board.input?.color).toBe('w'))
 
-    expect(settingsItems()).toContain('Standard rules')
-    expect(settingsItems()).not.toContain('Chaos rules')
+    expect(rulesShown()).toBe('Standard rules')
     expect(caption()).not.toBeInTheDocument()
     expect(board.arrows).toEqual([])
   })
@@ -909,12 +897,12 @@ describe('Chaos rules', () => {
     expect(ahead('white')).toBe('+9')
   })
 
-  test('the LLM mistakes card adds the chaos moves and spawns', async () => {
+  test('the mistakes card is Rule-breaking: illegal moves and spawns, no notation slips', async () => {
     fakeBackend().on('GET /api/games/current', Response.json(chaosGame(8)))
     renderApp()
 
     expect(await screen.findByTestId('mistakes-card')).toHaveTextContent(
-      'Illegal tries3Notation slips0Chaos moves3Spawns1',
+      'Rule-breakingBlackIllegal moves3Spawns1',
     )
   })
 
@@ -927,6 +915,6 @@ describe('Chaos rules', () => {
 
     const result = await screen.findByTestId('result')
     expect(within(result).getByText('White wins by King capture')).toBeInTheDocument()
-    expect(within(result).getByText('qwen3.5:9b left its king hanging')).toBeInTheDocument()
+    expect(result).toHaveAttribute('aria-description', 'qwen3.5:9b left its king hanging')
   })
 })

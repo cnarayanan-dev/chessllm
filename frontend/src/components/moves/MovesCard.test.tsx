@@ -216,6 +216,22 @@ test('an invalid try before a chaos move stays struck through under it', () => {
   expect(within(moveList()).getByText('Bb4')).toHaveClass('chaos')
 })
 
+/** chaosGame(6) with Black's 3...e5 written in UCI: a notation slip. */
+const chaosWithSlip = (): GameState => {
+  const game = chaosGame(6)
+  const slip = anAttempt('e7e5', 'legal', { san: 'e5', notation_slip: true })
+  return { ...game, llm_turns: game.llm_turns.map((turn) => (turn.ply === 6 ? { ...turn, attempts: [slip] } : turn)) }
+}
+
+test('under Chaos rules notation slips are not shown in the move list, and the switch is "Show rule-breaking"', () => {
+  render(<MovesCard game={chaosWithSlip()} />)
+
+  expect(chips()).toEqual([])
+  expect(within(moveList()).getByText('e5')).not.toHaveClass('slip')
+  expect(screen.getByRole('switch', { name: 'Show rule-breaking' })).toBeChecked()
+  expect(screen.queryByRole('switch', { name: 'Show LLM mistakes' })).not.toBeInTheDocument()
+})
+
 /** The LLM mistakes card's rows, cell by cell: White's number, the metric, Black's number, for the LLM sides. */
 const mistakes = () =>
   [...screen.getByTestId('mistakes-card').querySelectorAll('tbody tr')].map((row) =>
@@ -227,11 +243,28 @@ test("the LLM mistakes card counts the LLM's illegal tries and notation slips", 
   const stats = { ...game.stats.black!, illegal_moves: { invalid: 1, illegal: 1, ambiguous: 0 }, notation_slips: 1 }
   render(<MovesCard game={{ ...game, stats: { white: null, black: stats } }} />)
 
+  expect(within(screen.getByTestId('mistakes-card')).getByText('LLM mistakes')).toBeInTheDocument()
   expect(mistakes()).toEqual([
     ['Illegal tries', '2'],
     ['Notation slips', '1'],
   ])
   expect(icons(screen.getByTestId('mistakes-card'))).toEqual(['lucide-x', 'lucide-pen-line'])
+})
+
+test('under Chaos rules the card is Rule-breaking: one Illegal moves row for illegal tries and chaos moves, then Spawns', () => {
+  render(<MovesCard game={chaosWithSlip()} />)
+  const card = screen.getByTestId('mistakes-card')
+
+  expect(within(card).getByText('Rule-breaking')).toBeInTheDocument()
+  expect(mistakes()).toEqual([
+    ['Illegal moves', '2'],
+    ['Spawns', '0'],
+  ])
+  expect(icons(card)).toEqual(['lucide-x', 'lucide-sparkles'])
+  expect(within(card).getByText('Illegal moves')).toHaveAttribute(
+    'aria-description',
+    'Illegal moves, played anyway, or retried if they could not be read.',
+  )
 })
 
 test('under Enforced decoding illegal tries are not applicable, unless one gets through anyway', () => {

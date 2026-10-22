@@ -3,6 +3,8 @@
 .moves-card { --red: #e03e3e; --red-soft: #fbe4e4; --slip-soft: color-mix(in oklab, var(--slip) 8%, var(--card)); --hover: var(--accent); --faint: var(--muted-foreground); --move-row: 34px; --move-gap: 2px; --move-pad: 6px; }
 /* A set height of 8 move rows, on a filled surface; rows of mistake chips come on top. */
 .move-scroll { height: calc(8 * var(--move-row) + 7 * var(--move-gap) + 2 * var(--move-pad)); border-radius: 18px; background: var(--muted); }
+/* No scrollbar: the list follows the latest move, and the wheel or a swipe still scrolls it. */
+.move-scroll [data-slot="scroll-area-scrollbar"] { display: none; }
 /* Move list: one row per move number, with the LLM's mistakes under its move */
 .moves { font-size: 16px; font-variant-numeric: tabular-nums; display: grid; grid-template-columns: 36px 1fr 1fr; row-gap: var(--move-gap); padding: var(--move-pad); }
 .moves .no { height: var(--move-row); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--faint); }
@@ -13,9 +15,11 @@
 /* The move viewed in the move history, in the board's last-move olive. */
 .moves .ply.viewed { background: var(--move-viewed); }
 .moves .ply.slip { box-shadow: inset 0 0 0 1px var(--slip); }
-/* Under Chaos rules: a chaos move in red, a spawn in purple, as the LLM wrote them. */
-.moves .ply.chaos { color: var(--red); font-weight: 600; }
-.moves .ply.spawn { color: var(--spawn); font-weight: 600; }
+/* Under Chaos rules: a chaos move in a muted red, a spawn in a muted purple, as the LLM wrote them, at the moves'
+   own weight, with a dotted underline in the same tint. */
+.moves .ply.chaos, .moves .ply.spawn { text-decoration: underline dotted 1.5px; text-underline-offset: 4px; }
+.moves .ply.chaos { color: color-mix(in oklab, var(--red) 65%, var(--foreground)); text-decoration-color: color-mix(in oklab, var(--red) 45%, transparent); }
+.moves .ply.spawn { color: color-mix(in oklab, var(--spawn) 65%, var(--foreground)); text-decoration-color: color-mix(in oklab, var(--spawn) 45%, transparent); }
 /* The latest move pulses when it arrives while a past position is viewed; held as a ring without motion. */
 @keyframes move-arrived { 0%, 100% { box-shadow: inset 0 0 0 0 transparent; } 50% { box-shadow: inset 0 0 0 2px var(--move-olive); } }
 .moves .ply.arrived { animation: move-arrived .8s ease-in-out 2; }

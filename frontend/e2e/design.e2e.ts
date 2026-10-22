@@ -141,6 +141,27 @@ test('at desktop width the game page has three columns: the Game card ¼, the bo
   await expect(page.getByRole('region', { name: 'Game' })).toBeVisible()
 })
 
+for (const [width, height] of [
+  [1440, 900],
+  [1101, 600],
+]) {
+  test(`on a wide window, ${width}×${height}, the game page fits it: no page scroll, the Turn panel scrolls inside itself`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await openGame(page)
+
+    const page_ = await page.evaluate(() => ({
+      scrolls: document.scrollingElement!.scrollHeight - window.innerHeight,
+      turnPanel: getComputedStyle(document.querySelector('[data-testid=game-column] > :last-child')!).overflowY,
+    }))
+    expect(page_.scrolls).toBeLessThanOrEqual(0)
+    expect(page_.turnPanel).toBe('auto')
+    const { game, board, moves } = await columns(page)
+    for (const column of [game, board, moves]) expect(column.y + column.height).toBeLessThanOrEqual(height)
+  })
+}
+
 test('between 760px and 1100px: two columns, the board, and the moves with the Game card under them', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
   await openGame(page)
@@ -161,39 +182,43 @@ test('below 760px: one column, the board, the moves, then the Game card', async 
   expect(game.y).toBeGreaterThan(moves.y + moves.height)
 })
 
-const settingChips = (page: Page) => page.getByRole('list', { name: 'Settings' }).getByRole('img')
+const gameCard = (page: Page) => page.getByRole('region', { name: 'Game' })
 
-/** Expects every setting chip to be a 28px circle holding one icon, inside the Game card. */
-async function expectChipsWhole(page: Page) {
-  const card = (await page.getByRole('region', { name: 'Game' }).boundingBox())!
-  for (const chip of await settingChips(page).all()) {
-    const box = (await chip.boundingBox())!
-    expect([box.width, box.height]).toEqual([28, 28])
-    expect(box.x).toBeGreaterThanOrEqual(card.x)
-    expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width)
-    await expect(chip.locator('svg')).toHaveCount(1)
-  }
+/** Expects the element to lie whole inside the Game card. */
+async function expectInCard(page: Page, element: ReturnType<Page['locator']>) {
+  const card = (await gameCard(page).boundingBox())!
+  const box = (await element.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(card.x)
+  expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width)
 }
 
-test("the Game card's settings are icons, each explained in a tooltip on hover and on keyboard focus", async ({ page }) => {
+test("the Game card's one setting shown is the Rules, an icon named beside it, explained in a tooltip on hover and on keyboard focus", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openGame(page)
 
-  await expect(settingChips(page)).toHaveCount(5)
-  await expectChipsWhole(page)
-  await settingChips(page).first().hover()
+  const rules = gameCard(page).getByRole('img', { name: 'Standard rules' })
+  await expect(rules).toHaveText('Standard rules')
+  await expect(rules.locator('svg')).toHaveCount(1)
+  await expectInCard(page, rules)
+  // The settings the LLMs share are not shown.
+  await expect(gameCard(page).getByRole('list', { name: 'Settings' })).toHaveCount(0)
+  await expect(gameCard(page)).not.toContainText('Board only (Free)')
+
+  await rules.hover()
   const tooltip = page.locator('[data-slot=tooltip-content]')
-  await expect(tooltip).toHaveText('Board only (Free) The LLM finds its own moves and can play an illegal one.')
+  await expect(tooltip).toHaveText('Normal chess. Rated.')
   await expect(tooltip).toBeInViewport({ ratio: 1 })
   await page.mouse.move(0, 0)
   await expect(tooltip).toBeHidden()
 
-  await settingChips(page).nth(1).focus()
-  await expect(tooltip).toHaveText('Standard rules Normal chess. Rated.')
+  await rules.focus()
+  await expect(tooltip).toHaveText('Normal chess. Rated.')
 })
 
 for (const width of [1101, 761]) {
-  test(`at ${width}px a faceoff's per-side settings show whole, each with its side's dot`, async ({ page }) => {
+  test(`at ${width}px a faceoff's per-side settings show whole, on each player's row`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.request.post('/e2e/script', { data: {} })
     const started = await page.request.post('/api/games', {
@@ -205,9 +230,14 @@ for (const width of [1101, 761]) {
     })
     expect(started.ok()).toBe(true)
     await page.goto('/')
-    await expect(settingChips(page).first()).toHaveAccessibleName('White: Shown and kept legal (Listed enforced)')
+    const white = gameCard(page).getByRole('list', { name: "White's settings" })
+    const black = gameCard(page).getByRole('list', { name: "Black's settings" })
+    await expect(white.getByRole('listitem').first()).toHaveText('Shown and kept legal (Listed enforced)')
+    await expect(black).toContainText('Hinted feedback')
 
-    await expectChipsWhole(page)
-    await expect(settingChips(page).first().locator('[data-side=white]')).toBeVisible()
+    for (const item of [...(await white.getByRole('listitem').all()), ...(await black.getByRole('listitem').all())]) {
+      await expect(item).toBeVisible()
+      await expectInCard(page, item)
+    }
   })
 }
