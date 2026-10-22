@@ -7,7 +7,6 @@ from fastapi import APIRouter, BackgroundTasks
 from chessllm.analytics.analysis import analyse_game
 from chessllm.api.deps import ConfigDep, CurrentGame, EnginesDep, GameStoreDep
 from chessllm.api.errors import error_responses
-from chessllm.api.game_state import GameState
 from chessllm.api.schemas.games import HumanMove, NewGame
 from chessllm.api.state import Engines
 from chessllm.exceptions import (
@@ -17,6 +16,7 @@ from chessllm.exceptions import (
     RefusedLlmTurn,
     RejectedHumanMove,
 )
+from chessllm.game.records import GameState
 from chessllm.game.session import GameSession, Settings
 from chessllm.llm.models import load_sampling
 from chessllm.logs.game_log import GameLog
@@ -48,12 +48,12 @@ def start_game(
     players = {color: engines.player_for(settings, color) for color in settings.llm_sides()}
     session = GameSession(players, settings, GameLog(config.games_dir, *settings.side_names()))
     games.start(session)
-    return GameState.model_validate(session.state())
+    return session.state()
 
 
 @router.get("/api/games/current", responses=error_responses(NoGameStarted))
 def get_game(session: CurrentGame) -> GameState:
-    return GameState.model_validate(session.state())
+    return session.state()
 
 
 @router.post("/api/games/current/moves", responses=error_responses(RejectedHumanMove, NoGameStarted))
@@ -74,7 +74,7 @@ def play_llm_turn(session: CurrentGame, engines: EnginesDep, background: Backgro
 
 def respond(session: GameSession, engines: Engines, background: BackgroundTasks) -> GameState:
     """The game's state, and its analysis started, after the response is sent, if this request ended it."""
-    state = GameState.model_validate(session.state())
+    state = session.state()
     if state.status == "over" and engines.analyses_games():
         background.add_task(analyse, session, engines)
     return state

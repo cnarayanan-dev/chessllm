@@ -7,7 +7,8 @@ import chess.pgn
 from tests.conftest import Raw, ScriptedPlayer, play_llm, play_move
 
 from chessllm.exceptions import LlmTimeout
-from chessllm.game.session import GameSession, HumanSide, LlmSide, Settings
+from chessllm.game.session import GameSession, Settings
+from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.logs.game_log import GameLog
 
 START_FEN = chess.STARTING_FEN
@@ -108,6 +109,25 @@ def test_with_thinking_off_the_log_keeps_the_reasoning_as_the_attempts_thinking(
     *_, attempt = events(logs(tmp_path / "games", ".jsonl")[0])
     assert attempt["thinking"] == "Mirror the centre pawn."
     assert "reasoning" not in attempt
+
+
+def test_an_attempt_keeps_its_fields_in_the_order_the_log_and_the_api_always_had(scripted, tmp_path):
+    """The log is written from the attempt's record, and must read byte for byte as before (ADR 0004)."""
+    client, _ = scripted(["e5"])
+    client.post("/api/games")
+
+    state = play_move(client, "e2e4").json()
+
+    *_, logged = events(logs(tmp_path / "games", ".jsonl")[0])
+    assert list(logged) == [
+        "type", "color", "ply", "attempt", "pgn", "fen", "move", "san", "notation_slip", "result", "feedback_sent",
+        "raw_reply", "thinking", "error", "latency_s", "prompt", "thinking_tokens", "answer_tokens", "prompt_tokens",
+        "stop_reason", "token_split_estimated",
+    ]
+    assert list(state["llm_turn"]["attempts"][0]) == [
+        "move", "san", "notation_slip", "result", "feedback_sent", "raw_reply", "thinking", "reasoning", "error",
+        "latency_s", "prompt",
+    ]
 
 
 def test_a_finished_game_ends_its_log_with_the_summary_and_writes_a_pgn(scripted, tmp_path):

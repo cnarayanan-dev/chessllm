@@ -6,7 +6,8 @@ from tests.conftest import Raw, ScriptedPlayer
 
 from chessllm.api.state import GameStore
 from chessllm.exceptions import NoGameStarted
-from chessllm.game.session import GameSession, HumanSide, LlmSide, Settings
+from chessllm.game.session import GameSession, Settings
+from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.logs.game_log import GameLog
 
 

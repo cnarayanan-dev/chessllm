@@ -6,7 +6,8 @@ import chess.pgn
 
 from tests.conftest import play_llm, play_move
 
-from chessllm.game.session import HumanSide, LlmSide, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.llm.players import Message
 from chessllm.game.prompt import SYSTEM_PROMPT_FILE, system_prompt
 

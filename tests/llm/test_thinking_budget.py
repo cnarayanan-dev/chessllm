@@ -12,7 +12,8 @@ from tests.conftest import ScriptedPlayer, play_llm
 
 from chessllm.cli.common import player_for
 from chessllm.cli.faceoff_batch import main
-from chessllm.game.session import BenchmarkLlmSide, LlmSide, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import BenchmarkLlmSide, LlmSide
 from chessllm.analytics.leaderboard import llm_configuration
 from chessllm.llm.ollama_player import OllamaPlayer
 

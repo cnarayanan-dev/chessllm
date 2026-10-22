@@ -23,7 +23,8 @@ from httpx2 import Response
 from chessllm.game.runner import play_anchor_match
 from chessllm.api.app import create_app
 from chessllm.core.types import Color, Sampling
-from chessllm.game.session import AnchorSide, BenchmarkLlmSide, LlmSide, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import AnchorSide, BenchmarkLlmSide, LlmSide
 from chessllm.logs.game_log import GameLog
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer

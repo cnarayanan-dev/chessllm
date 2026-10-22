@@ -4,7 +4,9 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chessllm.game.session import HumanSide, LlmSide, MAX_ATTEMPTS_RANGE, Rules, Settings
+from chessllm.game.session import MAX_ATTEMPTS_RANGE, Settings
+from chessllm.game.sides import HumanSide, LlmSide
+from chessllm.core.types import Rules
 
 
 class HumanMove(BaseModel):

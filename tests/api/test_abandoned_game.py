@@ -7,7 +7,8 @@ from tests.conftest import BlockingPlayer, Raw, ScriptedPlayer, play_llm
 from fastapi.testclient import TestClient
 
 from chessllm.api.app import create_app
-from chessllm.game.session import GameSession, HumanSide, LlmSide, Settings
+from chessllm.game.session import GameSession, Settings
+from chessllm.game.sides import HumanSide, LlmSide
 from chessllm.logs.game_log import GameLog
 
 
@@ -82,5 +83,5 @@ def test_an_llm_turn_asked_for_after_the_game_was_abandoned_is_never_played(tmp_
     game.play_llm_turn()
 
     state = game.state()
-    assert (state["llm_turn"], state["llm_turns"], state["status"]) == (None, [], "playing")
+    assert (state.llm_turn, state.llm_turns, state.status) == (None, [], "playing")
     assert player.prompts == []

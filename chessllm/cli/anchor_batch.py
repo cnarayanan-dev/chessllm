@@ -26,7 +26,6 @@ import sys
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from chessllm.analytics.leaderboard import settings_configuration
 from chessllm.cli.common import (
@@ -47,8 +46,10 @@ from chessllm.core.types import Color, opponent, score_for
 from chessllm.engines.move_model import MoveModel
 from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
 from chessllm.game.ladder import FIRST_SKILL, AnchoredGame, earlier_games, next_color, next_skill
+from chessllm.game.records import GameState
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import AnchorSide, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import AnchorSide
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 
@@ -120,7 +121,8 @@ def main(
                 return fail(FAILED, f"{error}. Game {number} was left unfinished in {log and log.path}")
             finally:
                 anchor.close()
-            game = AnchoredGame(skill, llm_color, score_for(state["result"], llm_color))
+            assert state.result is not None  # played to its end
+            game = AnchoredGame(skill, llm_color, score_for(state.result, llm_color))
             history.append(game)
             played.append(game)
             print(f"Game {number}/{args.games}: Skill {skill}, LLM as {llm_color}: {outcome(game, state)}", flush=True)
@@ -137,9 +139,9 @@ def main(
     return 0
 
 
-def outcome(game: AnchoredGame, state: dict[str, Any]) -> str:
+def outcome(game: AnchoredGame, state: GameState) -> str:
     word = {1.0: "win", 0.5: "draw", 0.0: "loss"}[game.score]
-    return f"{word} ({state['result']}, {state['end_reason']})"
+    return f"{word} ({state.result}, {state.end_reason})"
 
 
 def summary(played: list[AnchoredGame], history: list[AnchoredGame]) -> None:

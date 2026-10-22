@@ -5,7 +5,7 @@ resolved here and applied by editing the board by hand."""
 
 import re
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import chess
 
@@ -16,7 +16,10 @@ CASTLE_RE = re.compile(r"^[O0]-[O0](-[O0])?[+#]?$")
 
 
 @dataclass(frozen=True)
-class Resolution:
+class ResolvedMove:
+    """How the resolver read a move, on python-chess squares and pieces. Its record, which the game log and the page
+    get, is records.Resolution."""
+
     kind: ResolutionKind
     reason: str  # one line, e.g. "no bishop can reach d3 by its movement; c1 is nearest"
     from_square: chess.Square | None = None  # None for a spawn
@@ -24,21 +27,6 @@ class Resolution:
     piece: chess.Piece | None = None  # the piece that ends up on to_square, after any promotion
     rook: tuple[chess.Square, chess.Square] | None = None  # the rook's from and to in a castle
     move: chess.Move | None = None  # the legal move, for a legal resolution only
-
-    def as_dict(self) -> dict[str, Any]:
-        """The resolution as the game log and the page get it, with square names and the piece's symbol, so a
-        replay never has to resolve the move again."""
-        def name(square: chess.Square | None) -> str | None:
-            return chess.square_name(square) if square is not None else None
-
-        return {
-            "kind": self.kind,
-            "from": name(self.from_square),
-            "to": name(self.to_square),
-            "piece": self.piece.symbol() if self.piece else None,
-            "rook": [name(square) for square in self.rook] if self.rook else None,
-            "reason": self.reason,
-        }
 
     def uci(self, board: chess.Board) -> str:
         """The resolved move in UCI, given the board it is played on: a spawn as a drop, e.g. "Q@d5", and a pawn
@@ -50,8 +38,8 @@ class Resolution:
         return chess.Move(self.from_square, self.to_square, promotion).uci()
 
 
-def invalid(reason: str) -> Resolution:
-    return Resolution("invalid", reason)
+def invalid(reason: str) -> ResolvedMove:
+    return ResolvedMove("invalid", reason)
 
 
 def fits(board: chess.Board, piece: chess.Piece, start: chess.Square, target: chess.Square) -> bool:
@@ -93,7 +81,7 @@ def rook_squares(long: bool, rank: int) -> tuple[chess.Square, chess.Square]:
     return chess.square(0 if long else 7, rank), chess.square(3 if long else 5, rank)
 
 
-def castle(board: chess.Board, long: bool) -> Resolution:
+def castle(board: chess.Board, long: bool) -> ResolvedMove:
     """An illegal castle: the king goes to c or g on its back rank, and the corner rook, if there, to d or f."""
     color = board.turn
     rank = 0 if color == chess.WHITE else 7
@@ -107,7 +95,7 @@ def castle(board: chess.Board, long: bool) -> Resolution:
     if king == king_to and not rook:
         return invalid(f"{side}, but the king already stands on {chess.square_name(king_to)} and no rook is in the corner")
     rook_note = f", rook {chess.square_name(corner)}→{chess.square_name(rook_to)}" if rook else ", no rook in the corner"
-    return Resolution(
+    return ResolvedMove(
         "chaos",
         f"illegal {side}: king {chess.square_name(king)}→{chess.square_name(king_to)}{rook_note}",
         king,
@@ -124,7 +112,7 @@ def by_type(
     file_hint: int | None,
     rank_hint: int | None,
     promotion: str | None,
-) -> Resolution:
+) -> ResolvedMove:
     """Steps 2 to 5 of ADR 0006: a hint, then the movement pattern, then distance pick the mover's piece of
     this type; with none on the board, one spawns."""
     color = board.turn
@@ -135,7 +123,7 @@ def by_type(
         if piece_type == chess.KING:
             return invalid("no king on the board, and a king is never spawned")
         piece = promoted(chess.Piece(piece_type, color), target, promotion)
-        return Resolution("spawn", f"no {name} on the board; one appears on {target_name}", None, target, piece)
+        return ResolvedMove("spawn", f"no {name} on the board; one appears on {target_name}", None, target, piece)
     candidates = [s for s in on_board if s != target]
     if not candidates:
         return invalid(f"the only {name} already stands on {target_name}")
@@ -165,10 +153,10 @@ def by_type(
     if sum(chess.square_distance(s, target) == nearest for s in candidates) > 1:
         notes.append("tie broken a1→h8")
     piece = promoted(chess.Piece(piece_type, color), target, promotion)
-    return Resolution("chaos", "; ".join([reason, *notes]), start, target, piece)
+    return ResolvedMove("chaos", "; ".join([reason, *notes]), start, target, piece)
 
 
-def resolve(board: chess.Board, text: str) -> Resolution:
+def resolve(board: chess.Board, text: str) -> ResolvedMove:
     """Resolve the LLM's move text: legal as python-chess reads it, else a chaos move or spawn, else invalid."""
     try:
         move = board.parse_san(text)
@@ -187,7 +175,7 @@ def resolve(board: chess.Board, text: str) -> Resolution:
         if board.is_castling(move):
             long = chess.square_file(move.to_square) < chess.square_file(move.from_square)
             rook = rook_squares(long, chess.square_rank(move.from_square))
-        return Resolution("legal", "a legal move", move.from_square, move.to_square, piece, rook, move)
+        return ResolvedMove("legal", "a legal move", move.from_square, move.to_square, piece, rook, move)
 
     if castling := CASTLE_RE.match(text):
         return castle(board, long=bool(castling.group(1)))
@@ -208,7 +196,7 @@ def resolve(board: chess.Board, text: str) -> Resolution:
                 return invalid(f"from and to are both {target_name}")
             ignored = f" (the {chess.piece_name(named)} letter is ignored)" if named and named != own.piece_type else ""
             reason = f"the {chess.piece_name(own.piece_type)} on {chess.square_name(start)} moves{ignored}"
-            return Resolution("chaos", reason, start, target, promoted(own, target, promotion))
+            return ResolvedMove("chaos", reason, start, target, promoted(own, target, promotion))
         if named is None:
             whose = "the opponent's piece" if own else "an empty square"
             return invalid(f"UCI from {whose} on {chess.square_name(start)} names no piece type")
@@ -216,7 +204,7 @@ def resolve(board: chess.Board, text: str) -> Resolution:
     return by_type(board, named or chess.PAWN, target, file_hint, rank_hint, promotion)
 
 
-def apply(board: chess.Board, resolution: Resolution) -> chess.Board:
+def apply(board: chess.Board, resolution: ResolvedMove) -> chess.Board:
     """The board after the resolved move; an invalid move leaves it unchanged. Chaos moves and spawns are
     applied by hand, never through `push`."""
     if resolution.kind == "invalid":

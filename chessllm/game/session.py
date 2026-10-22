@@ -2,16 +2,33 @@
 
 import random
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Any, Literal, cast
 
 import chess
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
-from chessllm.core.types import COLORS, Color, GameResult, Sampling, color_of
+from chessllm.core.types import COLORS, Color, GameResult, Mode, Rules, Sampling, color_of
 from chessllm.game import chaos
+from chessllm.game.records import (
+    ILLEGAL_RESULTS,
+    Attempt,
+    AttemptResult,
+    EndReason,
+    GameSettings,
+    GameState,
+    IllegalMoves,
+    IllegalResult,
+    LlmSideStats,
+    LlmTurn,
+    Ply,
+    PromptMessage,
+    Resolution,
+    Stats,
+)
+from chessllm.game.sides import AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side, side_log_shape
 from chessllm.engines.anchors import DRAGON_SKILLS, Anchor
 from chessllm.exceptions import (
     AnchorUnavailable,
@@ -29,119 +46,19 @@ from chessllm.game.prompt import (
     LISTED,
     SYSTEM_PROMPT_FILES,
     LlmConstraints,
-    PositionFormat,
-    RetryFeedback,
     cut_off_feedback,
     describe_position,
     retry_feedback,
     turn_messages,
 )
 
-# Play LLM: a human plays one side and an LLM the other. LLM faceoff: an LLM plays each side. Anchor match: an LLM
-# plays an Anchor, started from the command line.
-Mode = Literal["play_llm", "llm_faceoff", "anchor_match"]
+# The Modes by name, e.g. in the PGN.
 MODE_NAMES: dict[Mode, str] = {"play_llm": "Play LLM", "llm_faceoff": "LLM faceoff", "anchor_match": "Anchor match"}
 # Unattended games, with no human to stop them, end as a draw after MOVE_CAP moves per side (the Move cap, ADR 0005).
 UNATTENDED_MODES: tuple[Mode, ...] = ("llm_faceoff", "anchor_match")
 MOVE_CAP = 150
-# Standard rules never play an illegal move; Chaos rules play an LLM's rule-breaking or ambiguous move (ADR 0006).
-Rules = Literal["standard", "chaos"]
 # How many illegal moves an LLM may make in one turn before it forfeits: one attempt, the rest retries.
 MAX_ATTEMPTS_RANGE = range(1, 26)
-
-
-@dataclass(frozen=True)
-class HumanSide:
-    player: Literal["human"] = "human"
-
-
-@dataclass(frozen=True)
-class LlmSide:
-    """An LLM side with the settings it plays under, in the game log's shape (ADR 0004)."""
-
-    player: Literal["llm"] = "llm"
-    model: str = "llama3:8b"
-    thinking: bool = False
-    llm_constraints: LlmConstraints = "free"
-    retry_feedback: RetryFeedback = "explained"
-    # How each turn gives the position; None is the default, fen. Left out of the API's output and the game log
-    # (log_shape) when it is fen, so games from before the setting read the same.
-    position: Annotated[PositionFormat | None, Field(exclude_if=lambda position: position in (None, "fen"))] = None
-
-    def log_shape(self) -> dict[str, Any]:
-        """The side as game_start logs it: without position when it is the default, so that logs from before the
-        setting existed and logs since describe the same Player configuration the same way."""
-        shape = asdict(self)
-        if self.position in (None, "fen"):
-            del shape["position"]
-        return shape
-
-    def think(self) -> bool | str:
-        """The thinking sent to Ollama: on or off, on meaning the model's default level."""
-        return self.thinking
-
-    def name(self) -> str:
-        """The side's name in the PGN, e.g. "llama3:8b (no thinking)"."""
-        return f"{self.model} ({'thinking' if self.thinking else 'no thinking'})"
-
-
-@dataclass(frozen=True)
-class BenchmarkLlmSide(LlmSide):
-    """An LLM side with the settings only the benchmark's commands can set: never the API, whose sides are LlmSide,
-    so its types and output don't change (#67). Each is left out of the game log (log_shape) when unset, so a side
-    without them logs, and keeps its Player configuration id, as a plain LlmSide."""
-
-    # One of the Thinking levels the model offers, e.g. "xhigh", sent instead of plain thinking on; needs thinking on.
-    thinking_level: str | None = None
-    # The Thinking budget: the most tokens of thinking and answer per attempt before the model is made to answer
-    # (ADR 0007); needs thinking on. None is no budget.
-    thinking_budget: int | None = None
-
-    def log_shape(self) -> dict[str, Any]:
-        shape = super().log_shape()
-        for setting in ("thinking_level", "thinking_budget"):
-            if shape[setting] is None:
-                del shape[setting]
-        return shape
-
-    def think(self) -> bool | str:
-        return self.thinking_level if self.thinking_level is not None else self.thinking
-
-    def name(self) -> str:
-        """The side's name in the PGN, e.g. "qwen3.8:latest (thinking xhigh, budget 3072)"."""
-        if self.thinking_level is None and self.thinking_budget is None:
-            return super().name()
-        thinking = "thinking" if self.thinking_level is None else f"thinking {self.thinking_level}"
-        budget = "" if self.thinking_budget is None else f", budget {self.thinking_budget}"
-        return f"{self.model} ({thinking}{budget})"
-
-
-AnchorEngine = Literal["dragon", "stockfish"]
-
-
-@dataclass(frozen=True)
-class AnchorSide:
-    """An Anchor side: Komodo Dragon 1, or Stockfish standing in for it, at a Skill level, in the game log's shape."""
-
-    player: Literal["anchor"] = "anchor"
-    engine: AnchorEngine = "dragon"
-    skill: int = 1
-
-    def name(self) -> str:
-        """The side's name in the PGN, e.g. "Dragon (Skill 1)"."""
-        return f"{self.engine.capitalize()} (Skill {self.skill})"
-
-    def file_name(self) -> str:
-        """The side's part of the game log's file name, e.g. "dragon-skill1"."""
-        return f"{self.engine}-skill{self.skill}"
-
-
-Side = HumanSide | LlmSide | AnchorSide
-
-
-def side_log_shape(side: Side) -> dict[str, Any]:
-    """A side as game_start logs it (ADR 0004)."""
-    return side.log_shape() if isinstance(side, LlmSide) else asdict(side)
 # How many sides of each kind each Mode has.
 MODE_SIDES: dict[Mode, dict[str, int]] = {
     "play_llm": {"human": 1, "llm": 1, "anchor": 0},
@@ -236,39 +153,10 @@ class Settings:
                 raise InvalidSettings(f"{wanted}, not {side.model} ({color}) under {side.llm_constraints}")
 
 
-# Why a game ended: the python-chess terminations a standard board reaches without a claim, by name, then the
-# draws claimed as soon as they arise, and the ends of the game's own.
-EndReason = Literal[
-    "checkmate",
-    "stalemate",
-    "insufficient_material",
-    "seventyfive_moves",
-    "fivefold_repetition",
-    "threefold_repetition",
-    "fifty_moves",
-    "king_capture",
-    "king_left_in_check",
-    "forfeit",
-    "move_cap",
-]
-
-
 @dataclass(frozen=True)
 class GameEnd:
     result: GameResult
     reason: EndReason
-
-
-# The illegal moves: the kinds of answer that aren't a legal move (ADR 0002).
-IllegalResult = Literal["invalid", "illegal", "ambiguous"]
-ILLEGAL_RESULTS: tuple[IllegalResult, ...] = get_args(IllegalResult)
-# What an attempt in a game from the app comes to: a legal move, an illegal one, or no answer, as the call timed out
-# or failed. The API's attempts have these; a cut-off (below) never happens in an app game.
-AppAttemptResult = Literal["legal", IllegalResult, "timeout", "error"]
-# What an attempt comes to. cut_off is a forced answer that was itself cut off at its token cap, so there is no move
-# to judge (ADR 0007). Not an illegal move: it takes an attempt and gets a Retry, with a fresh Thinking budget, but no
-# illegal-move metric counts it. Only a side with a Thinking budget can have one, so never a game from the app.
-AttemptResult = Literal[AppAttemptResult, "cut_off"]
 
 
 def reasoning(raw: str) -> str | None:
@@ -291,15 +179,6 @@ def token_accounting(reply: LlmReply) -> dict[str, Any]:
         "token_split_estimated": reply.token_split_estimated,
         **({"forced": True} if reply.forced else {}),
     }
-
-
-def logged_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
-    """The attempt as the game log has it, unchanged since before the API gave the Reasoning a field of its own:
-    with thinking off, the Reasoning is the attempt's thinking."""
-    logged = {key: value for key, value in attempt.items() if key != "reasoning"}
-    if attempt["reasoning"] is not None:
-        logged["thinking"] = attempt["reasoning"]
-    return logged
 
 
 def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, Literal["legal", IllegalResult]]:
@@ -338,21 +217,22 @@ class SideStats:
         self.chaos_moves = 0  # spawns included, as a spawn is a chaos move
         self.spawns = 0
 
-    def as_dict(self) -> dict[str, Any]:
+    def record(self) -> LlmSideStats:
         """Under Enforced decoding the illegal-move metrics are None, not applicable: they would be true by
         construction (ADR 0003). Notation slips can't happen there, so they need no special case. The chaos
         counts are only given under Chaos rules, which Enforced decoding never plays under."""
         if self.enforced:
-            not_applicable = {"legal_move_streak": None, "illegal_moves": None, "recovered_turns": None}
-            return not_applicable | {"notation_slips": self.notation_slips}
-        chaos_counts = {"chaos_moves": self.chaos_moves, "spawns": self.spawns} if self.chaos else {}
-        return {
-            "legal_move_streak": self.legal_move_streak,
-            "illegal_moves": dict(self.illegal_moves),
-            "recovered_turns": self.recovered_turns,
-            "notation_slips": self.notation_slips,
-            **chaos_counts,
-        }
+            return LlmSideStats(
+                legal_move_streak=None, illegal_moves=None, recovered_turns=None, notation_slips=self.notation_slips
+            )
+        return LlmSideStats(
+            legal_move_streak=self.legal_move_streak,
+            illegal_moves=IllegalMoves(**self.illegal_moves),
+            recovered_turns=self.recovered_turns,
+            notation_slips=self.notation_slips,
+            chaos_moves=self.chaos_moves if self.chaos else None,
+            spawns=self.spawns if self.chaos else None,
+        )
 
 
 class GameSession:
@@ -377,13 +257,22 @@ class GameSession:
         self._moves: list[tuple[str, str]] = []  # each ply's move in UCI and as written in the Move record
         # Each ply as the page gets it for its move history: the move and the whole position before and after it,
         # so the page can step through the game without any chess logic (ADR 0001).
-        self._plies: list[dict[str, Any]] = []
+        self._plies: list[Ply] = []
         self._standard_moves: list[chess.Move] = []  # the moves up to the first chaos move, for the PGN export
         self._first_chaos_ply: int | None = None
-        self._llm_turns: list[dict[str, Any]] = []  # every LLM turn of the game, the last one included
-        # The LLM turn being played, kept out of the state until it lands, played or forfeited.
-        self._running_llm_turn: dict[str, Any] | None = None
+        # Every LLM turn of the game, the last one included. A turn joins only once it has landed, played or
+        # forfeited.
+        self._llm_turns: list[LlmTurn] = []
         self._end: GameEnd | None = None
+        # The settings as the state has them, fixed for the whole game.
+        self._game_settings = GameSettings(
+            mode=settings.mode,
+            white=settings.white,
+            black=settings.black,
+            sampling=settings.sampling,
+            rules=settings.rules,
+            max_attempts=settings.max_attempts,
+        )
         self._stats = {
             color: SideStats(side.llm_constraints, settings.rules) for color, side in self._llm_sides.items()
         }
@@ -485,26 +374,24 @@ class GameSession:
                 raise RefusedLlmTurn("the game is over", code="game_over")
             if color_of(self._board.turn) not in self._llm_sides:
                 raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
-            forfeit = self._play_llm_turn()
+            turn, forfeit = self._play_llm_turn()
             with self._ending:
                 if self._abandoned.is_set():
                     return  # the running turn, stopped early or not, is never published
-                self._publish_llm_turn()
+                self._publish_llm_turn(turn)
                 self._end = forfeit
                 if self._end is None:
                     self._check_end()
                 if self._end is not None:
                     self._write_end(self._end)
         finally:
-            self._running_llm_turn = None
             self._llm_turn_running.release()
 
-    def _publish_llm_turn(self) -> None:
+    def _publish_llm_turn(self, turn: LlmTurn) -> None:
         """Add the turn just played to the state in one step, so state(), which takes no lock, never shows a turn
         half-built. It comes after the turn's move is on the board and before the game ends: a page waiting on a
         running turn checks for llm_turns to grow or the game to be over, so neither may run ahead of it."""
-        assert self._running_llm_turn is not None
-        self._llm_turns.append(self._running_llm_turn)
+        self._llm_turns.append(turn)
 
     def _write_end(self, end: GameEnd) -> None:
         # Under Chaos rules, the plies played from the first chaos move on, by any side.
@@ -515,7 +402,7 @@ class GameSession:
             result=end.result,
             reason=end.reason,
             plies=len(self._moves),
-            stats=self._all_stats(),
+            stats=self._all_stats().log_shape(),
             **chaos_plies,
             ended_at=now(),
         )
@@ -571,10 +458,11 @@ class GameSession:
         elif self._settings.mode in UNATTENDED_MODES and len(self._moves) >= 2 * MOVE_CAP:
             self._end = GameEnd("1/2-1/2", "move_cap")
 
-    def _play_llm_turn(self) -> GameEnd | None:
+    def _play_llm_turn(self) -> tuple[LlmTurn, GameEnd | None]:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
         illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on.
-        Returns the Forfeit, for play_llm_turn to end the game with unless the game was abandoned meanwhile."""
+        Returns the turn and the Forfeit, for play_llm_turn to publish and end the game with unless the game was
+        abandoned meanwhile."""
         board = self._board
         color = color_of(board.turn)
         side, player, stats = self._llm_sides[color], self._players[color], self._stats[color]
@@ -593,37 +481,35 @@ class GameSession:
         last_move = self._moves[-1][1] if self._moves else None
         description = describe_position(board, last_move) if side.position == "described" else None
         messages = turn_messages(pgn, fen, color, prompt_file, listed_moves, description)
-        attempts: list[dict[str, Any]] = []
-        turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None, "reasoning": None}
-        self._running_llm_turn = turn
+        turn = LlmTurn(ply=ply, color=color, attempts=[], thinking=None, reasoning=None)
         feedback = None
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._settings.max_attempts
         for number in range(1, max_attempts + 1):
             if self._abandoned.is_set():
-                return None
-            attempt: dict[str, Any] = {
-                "move": None, "san": None, "notation_slip": False, "result": None, "feedback_sent": feedback,
-                "raw_reply": None, "thinking": None, "reasoning": None, "error": None, "latency_s": None,
-                "prompt": [asdict(message) for message in messages],  # the Prompt as sent for this attempt
-            }
-            if self._chaos:
-                attempt["resolution"] = None  # None when there was no move the resolver could look at
-            attempts.append(attempt)
+                return turn, None
+            # The Prompt as sent for this attempt.
+            prompt = [PromptMessage(role=message.role, content=message.content) for message in messages]
+            failure: tuple[AttemptResult, str] | None = None
             try:
                 reply = player.reply(messages, allowed_moves)
             except LlmTimeout as timeout:
                 minutes = timeout.timeout_s / 60
-                error_text = f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
-                attempt |= {"result": "timeout", "error": error_text}
+                failure = "timeout", f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
             except Exception as error:
-                attempt |= {"result": "error", "error": f"{model} did not reply: {error}"}
-            if attempt["error"] is not None:
+                failure = "error", f"{model} did not reply: {error}"
+            if failure is not None:
+                failed, error_text = failure
+                attempt = Attempt(
+                    move=None, san=None, notation_slip=False, result=failed, feedback_sent=feedback, raw_reply=None,
+                    thinking=None, reasoning=None, error=error_text, latency_s=None, prompt=prompt,
+                )
+                turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
-                    **logged_attempt(attempt),
+                    **attempt.log_shape(self._settings.rules),
                 )
-                turn["reasoning"] = None  # the turn's Reasoning is its last attempt's: none without an answer
+                turn.reasoning = None  # the turn's Reasoning is its last attempt's: none without an answer
                 break
             result: AttemptResult
             written, move, result = judge(board, reply.raw)
@@ -631,31 +517,31 @@ class GameSession:
                 result = "cut_off"  # the forced answer ran out of tokens too: no answer, rather than a bad one
             # Thinking with thinking on; with it off, the Reasoning written in the answer instead.
             thinking, reasoned = (reply.thinking, None) if side.thinking else (None, reasoning(reply.raw))
-            attempt |= {
-                "move": written, "result": result, "raw_reply": reply.raw, "thinking": thinking, "reasoning": reasoned,
-            }
-            if move is not None:  # legal as written; a slip if not written exactly as its standard SAN (ADR 0002)
-                attempt["san"] = board.san(move)
-                attempt["notation_slip"] = written != attempt["san"]
+            # Legal as written; a slip if not written exactly as its standard SAN (ADR 0002).
+            san = board.san(move) if move is not None else None
             # Under Chaos rules a rule-breaking or ambiguous move is resolved; badly formed notation never is.
             resolution = chaos.resolve(board, written) if self._chaos and result not in ("invalid", "cut_off") else None
-            if resolution is not None:
-                attempt["resolution"] = resolution.as_dict()
-            attempt["latency_s"] = reply.latency_s
+            attempt = Attempt(
+                move=written, san=san, notation_slip=san is not None and written != san, result=result,
+                feedback_sent=feedback, raw_reply=reply.raw, thinking=thinking, reasoning=reasoned, error=None,
+                latency_s=reply.latency_s, prompt=prompt,
+                resolution=Resolution.of(resolution) if resolution is not None else None,
+            )
+            turn.attempts.append(attempt)
             self._log.write(
                 "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
-                **logged_attempt(attempt), **token_accounting(reply),
+                **attempt.log_shape(self._settings.rules), **token_accounting(reply),
             )
-            turn |= {"thinking": thinking, "reasoning": reasoned}
+            turn.thinking, turn.reasoning = thinking, reasoned
             if move is not None:
                 self._play_legal(move)
                 if illegal_in_turn:
                     stats.recovered_turns += 1
-                if attempt["notation_slip"]:
+                if attempt.notation_slip:
                     stats.notation_slips += 1
                 if not stats.streak_broken:
                     stats.legal_move_streak += 1
-                return None
+                return turn, None
             if result == "cut_off":
                 feedback = cut_off_feedback(number, max_attempts)
                 messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
@@ -667,35 +553,35 @@ class GameSession:
                 self._play_chaos(resolution, written)
                 stats.chaos_moves += 1
                 stats.spawns += resolution.kind == "spawn"
-                return None
+                return turn, None
             feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
-        return GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
+        return turn, GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
 
-    def state(self) -> dict[str, Any]:
+    def state(self) -> GameState:
         board = self._board
-        return {
-            "game_id": self._log.game_id,
-            "fen": board.fen(),
-            "pgn": self._pgn(),
-            "turn": color_of(board.turn),
-            "human_legal_moves": self._human_legal_moves(),
-            "last_move": self._moves[-1][0] if self._moves else None,
-            "plies": self._plies,
-            "check": board.is_check(),  # the side to move's king, so the page needn't work it out (ADR 0001)
-            "llm_turn": self._llm_turns[-1] if self._llm_turns else None,
-            "llm_turns": self._llm_turns,
-            "settings": asdict(self._settings)
-            | {color: side_log_shape(self._settings.side(color)) for color in COLORS},
-            "status": "over" if self._end else "playing",
-            "result": self._end.result if self._end else None,
-            "end_reason": self._end.reason if self._end else None,
-            "stats": self._all_stats(),
-        }
+        return GameState(
+            game_id=self._log.game_id,
+            fen=board.fen(),
+            pgn=self._pgn(),
+            turn=color_of(board.turn),
+            human_legal_moves=self._human_legal_moves(),
+            last_move=self._moves[-1][0] if self._moves else None,
+            plies=self._plies,
+            check=board.is_check(),  # the side to move's king, so the page needn't work it out (ADR 0001)
+            llm_turn=self._llm_turns[-1] if self._llm_turns else None,
+            llm_turns=self._llm_turns,
+            settings=self._game_settings,
+            status="over" if self._end else "playing",
+            result=self._end.result if self._end else None,
+            end_reason=self._end.reason if self._end else None,
+            stats=self._all_stats(),
+        )
 
-    def _all_stats(self) -> dict[Color, dict[str, Any] | None]:
+    def _all_stats(self) -> Stats:
         """The totals of each side; a human's side has none (ADR 0004)."""
-        return {color: stats.as_dict() if (stats := self._stats.get(color)) else None for color in COLORS}
+        white, black = (stats.record() if (stats := self._stats.get(color)) else None for color in COLORS)
+        return Stats(white=white, black=black)
 
     def _human_legal_moves(self) -> list[str]:
         board = self._board
@@ -719,7 +605,7 @@ class GameSession:
         self._played(move.uci(), san, fen_before)
         return san
 
-    def _play_chaos(self, resolution: chaos.Resolution, written: str) -> None:
+    def _play_chaos(self, resolution: chaos.ResolvedMove, written: str) -> None:
         """Play a chaos move or spawn by editing the board by hand (ADR 0006), recorded as the LLM wrote it."""
         uci, fen_before = resolution.uci(self._board), self._board.fen()
         self._board = chaos.apply(self._board, resolution)
@@ -727,16 +613,21 @@ class GameSession:
             self._first_chaos_ply = len(self._moves) + 1
         self._played(uci, written, fen_before, resolution)
 
-    def _played(self, uci: str, written: str, fen_before: str, resolution: chaos.Resolution | None = None) -> None:
+    def _played(self, uci: str, written: str, fen_before: str, resolution: chaos.ResolvedMove | None = None) -> None:
         """Record the ply just played. Only a chaos move or spawn has a resolution, the same as the attempt that
         played it has, so the page can replay it without resolving it again."""
         self._moves.append((uci, written))
         self._positions.append(position_key(self._board))
-        ply: dict[str, Any] = {"ply": len(self._moves), "color": color_of(not self._board.turn), "move": uci}
-        ply |= {"written": written, "fen_before": fen_before, "fen_after": self._board.fen()}
-        ply["check"] = self._board.is_check()  # after the ply, as the state's check is for the live position
-        if resolution is not None:
-            ply["resolution"] = resolution.as_dict()
+        ply = Ply(
+            ply=len(self._moves),
+            color=color_of(not self._board.turn),
+            move=uci,
+            written=written,
+            fen_before=fen_before,
+            fen_after=self._board.fen(),
+            check=self._board.is_check(),  # after the ply, as the state's check is for the live position
+            resolution=Resolution.of(resolution) if resolution is not None else None,
+        )
         self._plies.append(ply)
 
 

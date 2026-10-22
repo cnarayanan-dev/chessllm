@@ -17,8 +17,9 @@ from pydantic.json_schema import SkipJsonSchema
 from chessllm.analytics.analysis import analysis_path
 from chessllm.engines.anchors import ANCHOR_RATINGS, AnchorRating, anchor_name
 from chessllm.core.config import VALIDATION_FILE
-from chessllm.core.types import COLORS, Color, Sampling, opponent, score_for
-from chessllm.game.session import BenchmarkLlmSide, Rules, Settings
+from chessllm.core.types import COLORS, Color, Rules, Sampling, opponent, score_for
+from chessllm.game.session import Settings
+from chessllm.game.sides import BenchmarkLlmSide
 from chessllm.analytics.move_quality import (
     ConfigurationMoves,
     MoveQuality,

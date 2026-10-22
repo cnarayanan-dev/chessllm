@@ -17,7 +17,8 @@ from chessllm.core.config import SAMPLING_FILE
 from chessllm.core.types import COLORS, Color, opponent
 from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import AnchorSide, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import AnchorSide
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 
@@ -64,7 +65,7 @@ def main(
         return fail(FAILED, f"{error}. The game was left unfinished in {log.path}")
     finally:
         anchor.close()
-    print(f"{state['result']} by {state['end_reason']}: {log.path}")
+    print(f"{state.result} by {state.end_reason}: {log.path}")
     return 0
 
 

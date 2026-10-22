@@ -177,7 +177,6 @@ def test_the_state_shows_a_running_llm_turn_only_once_it_has_landed(tmp_path):
     ],
 )
 def test_every_llm_turn_lands_in_the_state_exactly_once(tmp_path, replies, usage, rules, results):
-    # On the game itself: the API's attempt results don't take a cut-off yet.
     player = ScriptedPlayer(replies)
     player.usage = usage
     log = GameLog(tmp_path, "human", "llama3:8b")
@@ -187,8 +186,20 @@ def test_every_llm_turn_lands_in_the_state_exactly_once(tmp_path, replies, usage
     game.play_llm_turn()
 
     state = game.state()
-    [turn] = state["llm_turns"]
-    assert state["llm_turn"] == turn
-    assert [attempt["result"] for attempt in turn["attempts"]] == results
+    [turn] = state.llm_turns
+    assert state.llm_turn == turn
+    assert [attempt.result for attempt in turn.attempts] == results
     logged = [event for event in map(json.loads, log.path.read_text().splitlines()) if event["type"] == "llm_attempt"]
     assert [event["result"] for event in logged] == results
+
+
+def test_a_cut_off_answer_reaches_the_page_as_a_cut_off(scripted):
+    """A forced answer cut off at its token cap is not an illegal move (ADR 0007), and the API says so."""
+    client, player = scripted([Raw(' {"mo'), "e5"])
+    player.usage = [{"forced": True, "stop_reason": "length"}, {}]
+    client.post("/api/games")
+
+    response = play_move(client, "e2e4")
+
+    assert response.status_code == 200, response.text
+    assert [attempt["result"] for attempt in response.json()["llm_turn"]["attempts"]] == ["cut_off", "legal"]

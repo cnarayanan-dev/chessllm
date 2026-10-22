@@ -40,7 +40,9 @@ import ollama
 from chessllm.analytics.analysis import mover_evaluations
 from chessllm.engines.evaluator import Evaluator
 from chessllm.core.types import Sampling
-from chessllm.game.session import AttemptResult, BenchmarkLlmSide, HumanSide, Settings, judge
+from chessllm.game.records import AttemptResult
+from chessllm.game.session import Settings, judge
+from chessllm.game.sides import BenchmarkLlmSide, HumanSide
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.exceptions import InvalidSettings, LlmTimeout

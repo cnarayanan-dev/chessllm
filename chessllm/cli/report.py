@@ -31,7 +31,7 @@ import chess
 from chessllm.analytics.analysis import analysis_path
 from chessllm.core.config import GAMES_DIR, VALIDATION_FILE
 from chessllm.core.types import COLORS, Color, opponent
-from chessllm.game.session import ILLEGAL_RESULTS
+from chessllm.game.records import ILLEGAL_RESULTS
 from chessllm.analytics.leaderboard import read_sides, side_outcome
 from chessllm.analytics.move_quality import ConfigurationMoves, move_quality, read_analysed_moves, read_validation
 from chessllm.game.prompt import ENFORCED

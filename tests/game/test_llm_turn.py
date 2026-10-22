@@ -1,6 +1,7 @@
 from tests.conftest import Raw, play_llm, play_move
 
-from chessllm.game.session import LlmSide, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import LlmSide
 from chessllm.llm.players import Message
 
 DEFAULT_SYSTEM_PROMPT = """You are playing chess as Black against a human playing White.

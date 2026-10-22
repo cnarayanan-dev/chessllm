@@ -23,6 +23,17 @@ export function chaosResolution(of: { resolution?: Resolution | null } | null | 
 /** Whether the attempt was played: a legal move, or under Chaos rules a chaos move or spawn. */
 export const played = (attempt: Attempt) => attempt.result === 'legal' || chaosResolution(attempt) !== null
 
+const ILLEGAL_RESULTS: Attempt['result'][] = ['invalid', 'illegal', 'ambiguous']
+
+/**
+ * Whether the attempt was an Illegal move: badly formed, rule-breaking or ambiguous, a chaos move included. A cut-off
+ * answer had no move to judge, and a timeout or failed call no answer, so neither is one (ADR 0007).
+ */
+export const illegalMove = (attempt: Attempt) => ILLEGAL_RESULTS.includes(attempt.result)
+
+/** Whether the attempt was an illegal move that was not played: a chaos move is the move itself. */
+export const illegalTry = (attempt: Attempt) => illegalMove(attempt) && !played(attempt)
+
 /**
  * What the board shows for a ply played as a chaos move or spawn, or null for any other ply. The caption is the
  * move, then the resolver's reason: "Qd8→f2: the queen on d8 moves". A spawn and a castle lead with the LLM's own

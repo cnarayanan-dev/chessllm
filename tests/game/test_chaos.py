@@ -1,7 +1,7 @@
 import chess
 import pytest
 
-from chessllm.game.chaos import Resolution, apply, resolve
+from chessllm.game.chaos import ResolvedMove, apply, resolve
 
 START = chess.STARTING_FEN
 ONLY_THE_C1_BISHOP = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQK1NR w KQkq - 0 1"
@@ -17,13 +17,13 @@ def sq(name: str) -> chess.Square:
     return chess.parse_square(name)
 
 
-def played(fen: str, text: str) -> tuple[Resolution, chess.Board]:
+def played(fen: str, text: str) -> tuple[ResolvedMove, chess.Board]:
     board = chess.Board(fen)
     resolution = resolve(board, text)
     return resolution, apply(board, resolution)
 
 
-def summary(resolution: Resolution) -> tuple[str, str | None, str | None, str | None]:
+def summary(resolution: ResolvedMove) -> tuple[str, str | None, str | None, str | None]:
     """The kind, from, to and piece symbol of a resolution."""
 
     def name(square: chess.Square | None) -> str | None:

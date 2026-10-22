@@ -29,10 +29,11 @@ from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.core.config import SAMPLING_FILE
-from chessllm.core.types import COLORS, Color
+from chessllm.core.types import COLORS, Color, Rules
 from chessllm.exceptions import InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import BenchmarkLlmSide, LlmSide, Rules, Settings
+from chessllm.game.session import Settings
+from chessllm.game.sides import BenchmarkLlmSide, LlmSide
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
@@ -159,11 +160,12 @@ def main(
             players = {color: player_for(settings, color) for color in COLORS}
             log = GameLog(args.games_dir, *settings.side_names())
             state = play_anchor_match(settings, players, {}, log)
-            result = state["result"]
+            result = state.result
+            assert result is not None  # played to its end
             white_score = {"1-0": 1.0, "0-1": 0.0}.get(result, 0.5)
             scores[white] += white_score
             scores[black] += 1 - white_score
-            print(f"Game {number}/{args.games}: {white} (White) vs {black} (Black): {result} by {state['end_reason']}")
+            print(f"Game {number}/{args.games}: {white} (White) vs {black} (Black): {result} by {state.end_reason}")
             finished, log = log.path, None
             analyser.analyse(finished)
     except KeyboardInterrupt:
