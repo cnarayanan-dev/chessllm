@@ -90,6 +90,22 @@ _Avoid_: Regicide, king taken
 The end of a game under **Chaos rules** in which a **Chaos move** leaves the mover's own king in check, whether it ignores a check or walks into one; the mover loses at once, without the opponent having to take the king.
 _Avoid_: Hanging king, self-check, exposed king
 
+**Evaluation**:
+Stockfish's judgement of a position at a fixed search, in pawns, capped at ±10, or a mate in so many moves. Shown live in an **LLM faceoff** from White's point of view, and never during a **Play LLM** game. A position a **Chaos move** left that isn't valid chess, such as one with a pawn on a back rank, has none: it is shown as not judged, with the reason, and never patched up to be judged.
+_Avoid_: Eval, score, centipawns (when shown)
+
+**Chaos gain**:
+How much a **Chaos move** gained its mover over a legal alternative: Stockfish's evaluation after the chaos move minus its evaluation of the alternative, in pawns from the mover's point of view, each evaluation capped at ±10 (a **King capture** counting as +10 after the move, a **King left in check** as −10), so the gain itself is capped at ±20: taking a queen for free instead of giving one away is worth more than 10. Negative when breaking the rules did worse. A side's Chaos gains added up are its Chaos gain score, shown with its other rule-breaking counts. Not judged when a position it needs has no **Evaluation**; such moves are counted, but left out of every average. Measured against a **Gain baseline**. Recorded in every **Mode**, and shown in every Mode, live, but only over the **Legal counterpart**: with its switch off no Chaos gain is shown.
+_Avoid_: Illegal-move gain, cheat value, chaos advantage
+
+**Gain baseline**:
+The legal alternative a **Chaos gain** is measured against: the **Legal counterpart**, or Stockfish's best move, which is Stockfish's evaluation of the position before the chaos move. The gain over Stockfish's best move is always recorded but never shown; the gain over the Legal counterpart is recorded only when one was asked for, and is the only one shown.
+_Avoid_: Comparison mode, reference move
+
+**Legal counterpart**:
+The legal move an LLM gives for the same position after its move there was a **Chaos move**. It is asked for once more under **Listed enforced** by default, in one attempt without a **Retry**. Its Thinking and Answer are recorded, but it is never played. Under a conversation kept by **Turn memory**, it is asked at the end of that conversation and then dropped from it, so the LLM answers with what it knew when it made the chaos move and never remembers being asked. Asking for it is a switch, on by default under **Chaos rules**; it is not part of the **Player configuration**, since the moves played are the same either way. Its time is not **Time used**, and if it fails the game goes on without it; it never causes a **Forfeit**.
+_Avoid_: Shadow move, fallback move, legal alternative
+
 **Move record**:
 The moves of a game so far in PGN movetext form, each written as it was played, a **Chaos move** in the LLM's own spelling. Under **Standard rules** it is valid PGN; under **Chaos rules** it may not be.
 _Avoid_: PGN (for a game with chaos moves), move history
@@ -141,7 +157,7 @@ A move proposed by the LLM that cannot be played in the current position: badly 
 _Avoid_: Invalid move, wrong move
 
 **Notation slip**:
-A legal move the LLM writes in anything other than its exact standard SAN, such as UCI, a needless disambiguation, or a missing or false check sign. It is played, and recorded and shown as a slip; it is not an illegal move.
+A legal move the LLM writes in anything other than its exact standard SAN, such as UCI, a needless disambiguation, or a missing or false check sign. It is played, and recorded and shown as a slip; it is not an illegal move. Under **Chaos rules** slips are still recorded but not shown, since there an illegal move is played anyway.
 _Avoid_: Format error, non-SAN move
 
 **Attempt**:
@@ -159,6 +175,10 @@ _Avoid_: Error message, hint mode
 **Forfeit**:
 Loss of the game by an LLM after it uses up its retries without proposing a legal move, or at once when it gives no answer at all (it thinks past the time limit or the call fails).
 _Avoid_: Resign, disqualification
+
+**Time used**:
+The total time a side has spent on its moves in a game, added up move by move and shown for both sides in every **Mode**. For an LLM, the time its **Turns** ran, from when each started to its move or **Forfeit**, so a game nobody is driving charges no one; for an **Anchor**, from when its move is asked for to its move. For the human, the time from their position being ready to their move. It stops when the game ends. Not a time control: no side loses on it.
+_Avoid_: Clock, move timer, latency (one call's time)
 
 **Legal-move streak**:
 The number of legal moves an LLM plays in a game before its first illegal move, whether or not a retry later recovers the game. Not applicable under **Enforced decoding**, where it would be true by construction.
