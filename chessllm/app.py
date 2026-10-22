@@ -3,6 +3,7 @@
 import logging
 import weakref
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -253,7 +254,13 @@ def create_app(
             except Exception:
                 return None
 
-        return [ModelInfo(name=model.name, thinking=model.thinking, sampling=sampling(model)) for model in models]
+        # The models are asked at once, so a stalled Ollama holds the list up for one timeout, not one per model.
+        with ThreadPoolExecutor() as pool:
+            samplings = list(pool.map(sampling, models))
+        return [
+            ModelInfo(name=model.name, thinking=model.thinking, sampling=model_sampling)
+            for model, model_sampling in zip(models, samplings)
+        ]
 
     def sampling_config() -> dict[str, float]:
         try:
