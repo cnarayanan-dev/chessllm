@@ -96,6 +96,10 @@ _Avoid_: PGN (for a game with chaos moves), move history
 
 ### Moves
 
+**Ply**:
+One move by one side: a human's move, an **Anchor**'s, or the move an LLM's **Turn** ends with, a **Chaos move** included. Numbered from 1 for White's first move, so White plays the odd plies; a move number in the **Move record** covers two plies, and the **Move cap** of 150 moves per side is 300 plies.
+_Avoid_: Half-move, move (when one side's single move is meant)
+
 **Turn**:
 One decision by an LLM in a game: it is shown the current position and replies with a move, including any retries. Each turn starts fresh, without the conversation from earlier turns.
 _Avoid_: Round, step
@@ -131,6 +135,10 @@ _Avoid_: Invalid move, wrong move
 **Notation slip**:
 A legal move the LLM writes in anything other than its exact standard SAN, such as UCI, a needless disambiguation, or a missing or false check sign. It is played, and recorded and shown as a slip; it is not an illegal move.
 _Avoid_: Format error, non-SAN move
+
+**Attempt**:
+One try within an LLM's **Turn**: the **Prompt** sent, the model's answer, and how it was judged. A turn's first attempt is its first try; every further attempt is a **Retry**. The turn ends with the attempt whose move is played, or in a **Forfeit**.
+_Avoid_: Try (in code and records), request, call
 
 **Retry**:
 A further attempt the LLM gets after an illegal move, told why the previous move was rejected, or after a forced answer that was itself cut off before it gave a move (with a **Thinking budget** only; not an illegal move). The attempts per turn, retries included, are set for the whole game, 1 to 25 and 5 by default, the same for every LLM in it; a Player configuration includes them.
