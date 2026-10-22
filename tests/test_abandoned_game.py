@@ -59,6 +59,7 @@ def test_an_abandoned_games_turn_makes_no_further_attempts(tmp_path):
     assert len(player.prompts) == 1
     [response] = responses
     assert response.json()["status"] == "playing"
+    assert response.json()["llm_turns"] == []  # stopped before it landed, so never published
 
 
 def test_an_abandoned_games_turn_returns_its_own_state(tmp_path):

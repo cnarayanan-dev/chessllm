@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { requestLlmTurn } from '@/game/useGameLoop'
 import { fakeBackend } from '@/test/fakeBackend'
-import { afterE4, afterE5 } from '@/test/games'
+import { aGame, aTurn, afterE4, afterE5 } from '@/test/games'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
@@ -25,6 +25,25 @@ test('when a turn is already running, checks the game every 2 s until it has lan
   await vi.advanceTimersByTimeAsync(2001)
 
   expect(await turn).toEqual(afterE5())
+  expect(backend.sentTo('GET /api/games/current')).toHaveLength(2)
+})
+
+test('a faceoff reloaded mid-turn waits for the running turn, which the game shows only once it has landed', async () => {
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+  const e4 = aTurn('e4', { ply: 1, color: 'white' })
+  const e5 = aTurn('e5')
+  // As the backend sends it while Black's turn runs: White's turn landed, Black's not in the game yet.
+  const midTurn = afterE4({ settings, llm_turn: e4, llm_turns: [e4] })
+  const landed = afterE5({ settings, human_legal_moves: [], llm_turn: e5, llm_turns: [e4, e5] })
+  const backend = fakeBackend()
+    .on('POST /api/games/current/llm-turn', refused())
+    .on('GET /api/games/current', Response.json(midTurn), Response.json(landed))
+
+  const turn = requestLlmTurn(midTurn, new AbortController().signal)
+  await vi.advanceTimersByTimeAsync(4000)
+
+  expect(await turn).toEqual(landed)
   expect(backend.sentTo('GET /api/games/current')).toHaveLength(2)
 })
 

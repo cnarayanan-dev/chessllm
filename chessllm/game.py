@@ -365,6 +365,8 @@ class GameSession:
         self._standard_moves: list[chess.Move] = []  # the moves up to the first chaos move, for the PGN export
         self._first_chaos_ply: int | None = None
         self._llm_turns: list[dict[str, Any]] = []  # every LLM turn of the game, the last one included
+        # The LLM turn being played, kept out of the state until it lands, played or forfeited.
+        self._running_llm_turn: dict[str, Any] | None = None
         self._end: GameEnd | None = None
         self._stats = {
             color: SideStats(side.llm_constraints, settings.rules) for color, side in self._llm_sides.items()
@@ -465,14 +467,23 @@ class GameSession:
             forfeit = self._play_llm_turn()
             with self._ending:
                 if self._abandoned.is_set():
-                    return
+                    return  # the running turn, stopped early or not, is never published
+                self._publish_llm_turn()
                 self._end = forfeit
                 if self._end is None:
                     self._check_end()
                 if self._end is not None:
                     self._write_end(self._end)
         finally:
+            self._running_llm_turn = None
             self._llm_turn_running.release()
+
+    def _publish_llm_turn(self) -> None:
+        """Add the turn just played to the state in one step, so state(), which takes no lock, never shows a turn
+        half-built. It comes after the turn's move is on the board and before the game ends: a page waiting on a
+        running turn checks for llm_turns to grow or the game to be over, so neither may run ahead of it."""
+        assert self._running_llm_turn is not None
+        self._llm_turns.append(self._running_llm_turn)
 
     def _write_end(self, end: GameEnd) -> None:
         # Under Chaos rules, the plies played from the first chaos move on, by any side.
@@ -563,7 +574,7 @@ class GameSession:
         messages = turn_messages(pgn, fen, color, prompt_file, listed_moves, description)
         attempts: list[dict[str, Any]] = []
         turn: dict[str, Any] = {"ply": ply, "color": color, "attempts": attempts, "thinking": None, "reasoning": None}
-        self._llm_turns.append(turn)
+        self._running_llm_turn = turn
         feedback = None
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._settings.max_attempts
