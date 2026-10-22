@@ -9,8 +9,6 @@ from typing import Any
 import chess
 import chess.pgn
 
-GAMES_DIR = Path("games")
-
 
 def now(timespec: str = "seconds") -> str:
     return datetime.now().astimezone().isoformat(timespec=timespec)

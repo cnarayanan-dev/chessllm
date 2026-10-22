@@ -16,7 +16,7 @@ the pass mark, so an error is in chess.com points. The pass mark (ADR 0005), in 
   mean rating, is at most POOLED_TOLERANCE (±100);
 - bias: in a band at or below chess.com 600 (its centre converted), the mean error is at most BIAS_TOLERANCE (100).
 
-The outcome goes to chessllm/analytics/move_quality_validation.json (chessllm.analytics.move_quality.VALIDATION_FILE), which marks the
+The outcome goes to chessllm/analytics/move_quality_validation.json (chessllm.core.config.VALIDATION_FILE), which marks the
 leaderboard's estimates validated only when it passed for the same move model and grid; the report goes to REPORT_FILE.
 
 Run:
@@ -41,7 +41,7 @@ import chess.pgn
 
 from chessllm.analytics.analysis import estimate
 from chessllm.engines.move_model import MoveModel
-from chessllm.analytics.move_quality import VALIDATION_FILE
+from chessllm.core.config import VALIDATION_FILE
 from chessllm.analytics.rating_scales import chess_com_rapid, lichess_floor
 
 ROOT = Path(__file__).resolve().parent.parent

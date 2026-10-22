@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from chessllm.api.app import create_app
-from chessllm.game.session import Color, Settings
+from chessllm.core.types import Color
+from chessllm.game.session import Settings
 from chessllm.llm.players import LlmReply, Message
 from tests.fakes import Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
 

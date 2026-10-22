@@ -15,7 +15,7 @@ The ends that remain carry the conversion's own uncertainty, which grows below t
 (chess.com Rapid 815), so an estimate down there has a wider interval than one inside the table.
 
 The estimate is shown as unvalidated until the validation (#48) has passed for the move model and grid it comes from.
-The validation writes its outcome to VALIDATION_FILE:
+The validation writes its outcome to chessllm.core.config.VALIDATION_FILE:
 
     {"move_model": "maia2 0.11.0, rapid model, ...", "ratings": [1000, 1100, ...], "passed": true,
      "report": "docs/research/..."}
@@ -31,8 +31,6 @@ from pydantic import BaseModel
 
 from chessllm.analytics.analysis import estimate
 from chessllm.analytics.rating_scales import CHESS_COM_MINIMUM, chess_com_rapid, conversion_margin, is_extrapolated
-
-VALIDATION_FILE = Path(__file__).with_name("move_quality_validation.json")
 
 
 class LichessRapidEstimate(BaseModel):

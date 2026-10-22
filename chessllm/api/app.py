@@ -18,10 +18,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from chessllm.analytics.analysis import analyse_game
 from chessllm.api.errors import error_responses, register_error_handlers
+from chessllm.core.config import DIST_DIR, GAMES_DIR, SAMPLING_FILE, STATIC_DIR, VALIDATION_FILE
+from chessllm.core.types import Color, GameResult, Sampling
 from chessllm.engines.evaluator import Evaluator
+from chessllm.game.chaos import ResolutionKind
 from chessllm.game.session import (
     AnchorSide,
-    Color,
+    AppAttemptResult,
     GameSession,
     HumanSide,
     LlmSide,
@@ -37,16 +40,12 @@ from chessllm.exceptions import (
     RefusedLlmTurn,
     RejectedHumanMove,
 )
-from chessllm.logs.game_log import GAMES_DIR, GameLog
+from chessllm.logs.game_log import GameLog
 from chessllm.analytics.leaderboard import Leaderboard, leaderboard
-from chessllm.analytics.move_quality import VALIDATION_FILE
 from chessllm.engines.move_model import MoveModel
-from chessllm.llm.models import LLM_MODELS, SAMPLING_FILE, LlmModel, load_sampling
-from chessllm.llm.players import LlmPlayer
+from chessllm.llm.models import LLM_MODELS, LlmModel, load_sampling
+from chessllm.llm.players import LlmPlayer, MessageRole
 
-STATIC_DIR = Path(__file__).parent.parent / "static"
-# The React app's build (frontend/, `pnpm build`), git-ignored. Its files are served under /static/dist/.
-DIST_DIR = STATIC_DIR / "dist"
 # The fingerprint of the API description the build's types (frontend/src/api/schema.ts) were made from.
 BUILD_FINGERPRINT_FILE = "api-fingerprint.txt"
 
@@ -82,10 +81,6 @@ class NewGame(BaseModel):
     max_attempts: int = Field(default=Settings.max_attempts, ge=MAX_ATTEMPTS_RANGE[0], le=MAX_ATTEMPTS_RANGE[-1])
 
 
-# Sampling options keep the type they were given in: an int stays an int in the JSON (top_k 40, not 40.0).
-Sampling = dict[str, int | float]
-
-
 class ModelInfo(BaseModel):
     """A model the game can be played against, with the sampling it would play at."""
 
@@ -101,7 +96,7 @@ def is_none(value: object) -> bool:
 class Resolution(BaseModel):
     """How the resolver read an LLM's move under Chaos rules (ADR 0006), so a replay never resolves it again."""
 
-    kind: Literal["legal", "chaos", "spawn", "invalid"]
+    kind: ResolutionKind
     from_square: str | None = Field(alias="from")  # None for a spawn
     to: str | None
     piece: str | None  # the symbol of the piece that ends up on to, e.g. "q" for a black queen
@@ -112,7 +107,7 @@ class Resolution(BaseModel):
 class PromptMessage(BaseModel):
     """One message of the Prompt, as sent to the LLM."""
 
-    role: Literal["system", "user", "assistant"]
+    role: MessageRole
     content: str
 
 
@@ -122,7 +117,7 @@ class Attempt(BaseModel):
     move: str | None  # the move as written, or the raw reply if it isn't the move schema
     san: str | None  # the move's standard SAN, when it is legal
     notation_slip: bool
-    result: Literal["legal", "invalid", "illegal", "ambiguous", "timeout", "error"] | None
+    result: AppAttemptResult | None
     feedback_sent: str | None  # the retry feedback this try answers, None on the first
     raw_reply: str | None
     thinking: str | None  # the Thinking, with thinking on
@@ -207,8 +202,8 @@ class GameState(BaseModel):
     llm_turns: list[LlmTurn]
     settings: GameSettings
     status: Literal["playing", "over"]
-    result: Literal["1-0", "0-1", "1/2-1/2"] | None
-    end_reason: str | None  # "checkmate", "forfeit", "king_capture", ...
+    result: GameResult | None
+    end_reason: str | None  # one of session.EndReason
     stats: Stats
 
 
@@ -216,7 +211,7 @@ def create_app(
     player_for: Callable[[Settings, Color], LlmPlayer],
     games_dir: Path = GAMES_DIR,
     models: list[LlmModel] = LLM_MODELS,
-    sampling_defaults: Callable[[str], dict[str, float]] = lambda model: {},
+    sampling_defaults: Callable[[str], Sampling] = lambda model: {},
     sampling_file: Path = SAMPLING_FILE,
     dist_dir: Path = DIST_DIR,
     move_model: MoveModel | None = None,

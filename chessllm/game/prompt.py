@@ -7,6 +7,8 @@ from typing import Literal
 
 import chess
 
+from chessllm.core.config import PROMPTS_DIR
+from chessllm.core.types import Color, opponent
 from chessllm.llm.players import Message
 
 # What the LLM is told after an illegal move: explained (the default), bare or hinted.
@@ -20,8 +22,8 @@ PositionFormat = Literal["fen", "described"]
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
-SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system.txt"
-LISTED_SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_listed.txt"
+SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system.txt"
+LISTED_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_listed.txt"
 SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {
     "free": SYSTEM_PROMPT_FILE,
     "listed": LISTED_SYSTEM_PROMPT_FILE,
@@ -35,7 +37,7 @@ EXAMPLE_ANSWERS = {"white": "e4", "black": "e5"}
 NO_MOVES_YET = "(no moves yet)"
 
 
-def system_prompt(llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE) -> str:
+def system_prompt(llm_color: Color, system_prompt_file: Path = SYSTEM_PROMPT_FILE) -> str:
     """The system prompt for the LLM playing llm_color ("white" or "black").
 
     The file is a template: $color and $opponent are the two colours, and $example_pgn, $example_fen,
@@ -45,10 +47,9 @@ def system_prompt(llm_color: str, system_prompt_file: Path = SYSTEM_PROMPT_FILE)
         board.push_san(san)
     legal_moves = [board.san(move) for move in board.legal_moves]
     random.Random(0).shuffle(legal_moves)  # the prompt says the order is random; a fixed seed keeps it stable
-    opponent = "black" if llm_color == "white" else "white"
     return Template(system_prompt_file.read_text(encoding="utf-8")).substitute(
         color=llm_color.capitalize(),
-        opponent=opponent.capitalize(),
+        opponent=opponent(llm_color).capitalize(),
         example_pgn=chess.Board().variation_san(board.move_stack) or NO_MOVES_YET,
         example_fen=board.fen(),
         example_legal_moves=" ".join(legal_moves),
@@ -90,7 +91,7 @@ def describe_position(board: chess.Board, last_move: str | None) -> str:
 def turn_messages(
     pgn: str,
     fen: str,
-    llm_color: str,
+    llm_color: Color,
     system_prompt_file: Path = SYSTEM_PROMPT_FILE,
     legal_moves: str | None = None,
     description: str | None = None,

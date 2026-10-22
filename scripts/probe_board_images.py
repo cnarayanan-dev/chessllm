@@ -42,7 +42,8 @@ import resvg_py
 
 from chessllm.game.chaos import CASTLE_RE
 from chessllm.game.session import judge
-from chessllm.logs.game_log import GAMES_DIR
+from chessllm.core.config import GAMES_DIR
+from chessllm.core.types import Color, Sampling, opponent
 from chessllm.llm.models import load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer
 from chessllm.llm.players import Message
@@ -77,7 +78,7 @@ PIECE_RE = re.compile(r"^([KQRBNP])?([a-h][1-8])$")
 class Position:
     fen: str
     pgn: str
-    color: Literal["white", "black"]  # the side to move, the LLM's
+    color: Color  # the side to move, the LLM's
     ply: int
     phase: str  # opening, middlegame or late (see stage)
     in_check: bool
@@ -161,8 +162,7 @@ def move_messages(position: Position, condition: Condition) -> list[Message]:
     if condition == "text+image":
         system, user = turn_messages(position.pgn, position.fen, position.color)
         return [system, Message("user", f"{user.content}\n{image_line(position.color)}")]
-    opponent = "black" if position.color == "white" else "white"
-    system_text = IMAGE_SYSTEM.format(color=position.color.capitalize(), opponent=opponent.capitalize())
+    system_text = IMAGE_SYSTEM.format(color=position.color.capitalize(), opponent=opponent(position.color).capitalize())
     user_text = f"{image_line(position.color)}\n{position.color.capitalize()} to move."
     return [Message("system", system_text), Message("user", user_text)]
 
@@ -260,7 +260,7 @@ def score_pieces(board: chess.Board, listed: Sequence[str]) -> dict[str, Any]:
 
 def ask_move(
     chat: Callable[..., ollama.ChatResponse], model: str, position: Position, condition: Condition,
-    sampling: dict[str, float], keep_alive: str | None = None,
+    sampling: Sampling, keep_alive: str | None = None,
 ) -> dict[str, Any]:
     """One first attempt, judged as the game judges it."""
     image = render_png(position.fen, position.color) if condition != "text" else None
@@ -284,7 +284,7 @@ def ask_move(
 
 
 def ask_perception(
-    client: ollama.Client, model: str, position: Position, source: PerceptionSource, sampling: dict[str, float],
+    client: ollama.Client, model: str, position: Position, source: PerceptionSource, sampling: Sampling,
     keep_alive: str | None = None,
 ) -> dict[str, Any]:
     messages: list[dict[str, Any]] = [{"role": m.role, "content": m.content} for m in perception_messages(position, source)]

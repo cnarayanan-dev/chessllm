@@ -7,7 +7,7 @@ from pathlib import Path
 
 from chessllm.analytics.leaderboard import PlayerConfiguration, finished_game, llm_configuration
 from chessllm.engines.anchors import DRAGON_SKILLS
-from chessllm.game.session import COLORS, Color
+from chessllm.core.types import COLORS, Color, opponent, score_for
 
 FIRST_SKILL = DRAGON_SKILLS[0]
 
@@ -44,13 +44,7 @@ def next_skill(history: list[AnchoredGame]) -> int:
 
 def next_color(history: list[AnchoredGame]) -> Color:
     """The LLM's colour in the next game: the other colour from its last game, White to start."""
-    return "black" if history and history[-1].llm_color == "white" else "white"
-
-
-def llm_score(result: str, llm_color: Color) -> float:
-    if result == "1/2-1/2":
-        return 0.5
-    return 1.0 if result == ("1-0" if llm_color == "white" else "0-1") else 0.0
+    return opponent(history[-1].llm_color) if history else "white"
 
 
 def earlier_games(
@@ -68,11 +62,11 @@ def earlier_games(
         start, end = events[0], events[-1]
         llm_color: Color
         for llm_color in COLORS:
-            llm, anchor = start[llm_color], start["black" if llm_color == "white" else "white"]
+            llm, anchor = start[llm_color], start[opponent(llm_color)]
             if (
                 llm["player"] == "llm"
                 and anchor.get("engine") == engine
                 and llm_configuration(start, llm_color, llm) == configuration
             ):
-                history.append(AnchoredGame(anchor["skill"], llm_color, llm_score(end["result"], llm_color)))
+                history.append(AnchoredGame(anchor["skill"], llm_color, score_for(end["result"], llm_color)))
     return history

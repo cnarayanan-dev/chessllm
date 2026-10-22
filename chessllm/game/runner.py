@@ -4,7 +4,8 @@ batches and the sample logs play their games with."""
 from typing import Any
 
 from chessllm.engines.anchors import Anchor
-from chessllm.game.session import Color, GameSession, Settings
+from chessllm.core.types import Color
+from chessllm.game.session import GameSession, Settings
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 

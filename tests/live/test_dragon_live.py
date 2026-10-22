@@ -15,7 +15,8 @@ import pytest
 from tests.conftest import Raw, ScriptedPlayer
 
 from chessllm.cli.anchor_match import main
-from chessllm.engines.anchors import DRAGON_PATH_VARIABLE, DragonAnchor
+from chessllm.core.config import DRAGON_PATH_VARIABLE
+from chessllm.engines.anchors import DragonAnchor
 
 pytestmark = pytest.mark.dragon
 

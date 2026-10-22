@@ -7,12 +7,12 @@ from typing import Any
 import httpx
 import ollama
 
+from chessllm.core.config import OLLAMA_REPLY_TIMEOUT_S
+from chessllm.core.types import Sampling
 from chessllm.llm.models import FORCED_ANSWER_TOKENS
 from chessllm.llm.players import LlmReply, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.exceptions import LlmTimeout
 
-# Long thinking can run for many minutes and still end without an answer, so a turn is cut off here.
-TIMEOUT_S = 300.0
 # Closes the thinking handed back when a Thinking budget runs out, so the model gives its move (ADR 0007).
 BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
 
@@ -22,8 +22,8 @@ def time_limit_s(budget: int | None, tokens_per_s: float | None) -> float:
     budget's time with 50% to spare, plus 60 s for the prompt, a re-prefill for the forced answer and a model swap,
     and never below the limit without a budget."""
     if budget is None or tokens_per_s is None:
-        return TIMEOUT_S
-    return max(TIMEOUT_S, 60 + 1.5 * budget / tokens_per_s)
+        return OLLAMA_REPLY_TIMEOUT_S
+    return max(OLLAMA_REPLY_TIMEOUT_S, 60 + 1.5 * budget / tokens_per_s)
 
 
 class OllamaPlayer:
@@ -44,8 +44,8 @@ class OllamaPlayer:
         model: str,
         thinking: bool | str = True,
         chat: Callable[..., ollama.ChatResponse] | None = None,
-        timeout_s: float = TIMEOUT_S,
-        sampling: dict[str, float] | None = None,
+        timeout_s: float = OLLAMA_REPLY_TIMEOUT_S,
+        sampling: Sampling | None = None,
         budget: int | None = None,
     ) -> None:
         self._model = model

@@ -6,7 +6,8 @@ from typing import Any
 
 import chess
 
-from chessllm.game.session import Color, Settings
+from chessllm.core.types import Color
+from chessllm.game.session import Settings
 from chessllm.llm.players import LlmReply, Message
 
 

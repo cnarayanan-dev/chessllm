@@ -8,9 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, get_args
 
 from chessllm.analytics.analysis import analyse_game
+from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH_VARIABLE
 from chessllm.engines.anchors import (
-    DRAGON_PATH_VARIABLE,
-    STOCKFISH_PATH_VARIABLE,
     Anchor,
     DragonAnchor,
     StockfishAnchor,
@@ -21,9 +20,9 @@ from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
 from chessllm.game.prompt import LlmConstraints, PositionFormat, RetryFeedback
-from chessllm.game.session import AnchorEngine, AnchorSide, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
+from chessllm.core.types import Color
+from chessllm.game.session import AnchorEngine, AnchorSide, BenchmarkLlmSide, LlmSide, Rules, Settings
 from chessllm.llm.models import LLM_MODELS, load_sampling
-from chessllm.logs.game_log import GAMES_DIR
 
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
@@ -47,7 +46,7 @@ def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def add_games_dir_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help=f"where logs go (default {GAMES_DIR})")
+    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help="where logs go (default: the project's games/)")
 
 
 def add_analysis_argument(parser: argparse.ArgumentParser) -> None:

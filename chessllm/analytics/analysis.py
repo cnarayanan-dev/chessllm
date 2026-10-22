@@ -63,6 +63,7 @@ from typing import Any
 import chess
 import chess.engine
 
+from chessllm.core.types import COLORS, Color, color_of
 from chessllm.engines.evaluator import Evaluator
 from chessllm.logs.game_log import now
 from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
@@ -74,8 +75,6 @@ ANALYSIS_SUFFIX = ".analysis.json"
 LOG_LIKELIHOOD_DROP_95 = 3.8415 / 2
 # Evaluations are capped at +-1000 centipawns and a mate counts as 1000, as lichess does (scalachess Eval.Cp.CEILING).
 CENTIPAWN_CAP = 1000
-
-Colour = str  # "white" or "black"
 
 
 def analysis_path(log: Path) -> Path:
@@ -110,14 +109,14 @@ def read_events(log: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def llm_colours(start: dict[str, Any]) -> list[Colour]:
+def llm_colours(start: dict[str, Any]) -> list[Color]:
     """The colours played by an LLM. Version 1 logs have one LLM side, llm_color (ADR 0004)."""
     if "log_version" not in start:
         return [start["llm_color"]]
-    return [colour for colour in ("white", "black") if start[colour].get("player") == "llm"]
+    return [colour for colour in COLORS if start[colour].get("player") == "llm"]
 
 
-def scored_moves(events: list[dict[str, Any]]) -> list[tuple[Colour, int, str, str]]:
+def scored_moves(events: list[dict[str, Any]]) -> list[tuple[Color, int, str, str]]:
     """The legal moves the LLMs played, as (colour, ply, fen before, UCI). Illegal attempts are skipped, and so are
     chaos moves, which are logged as illegal attempts with a resolution (ADR 0006)."""
     moves = []
@@ -127,7 +126,7 @@ def scored_moves(events: list[dict[str, Any]]) -> list[tuple[Colour, int, str, s
         board = chess.Board(event["fen"])
         # Early version 1 logs have no san; the move as written is legal then, a notation slip at worst.
         move = board.parse_san(event.get("san") or event["move"])
-        colour = "white" if board.turn == chess.WHITE else "black"
+        colour = color_of(board.turn)
         moves.append((colour, event["ply"], event["fen"], move.uci()))
     return moves
 
@@ -135,7 +134,7 @@ def scored_moves(events: list[dict[str, Any]]) -> list[tuple[Colour, int, str, s
 def move_quality(log_events: list[dict[str, Any]], move_model: MoveModel) -> dict[str, Any]:
     """The move_quality section: each LLM side's Move-quality estimate from the move model."""
     ratings = list(move_model.ratings)
-    sides: dict[Colour, dict[str, Any] | None] = dict.fromkeys(("white", "black"))
+    sides: dict[Color, dict[str, Any] | None] = dict.fromkeys(COLORS)
     for colour in llm_colours(log_events[0]):
         played = [(ply, fen, uci) for moved, ply, fen, uci in scored_moves(log_events) if moved == colour]
         log_probabilities = [[math.log(p) for p in move_model.probabilities(fen, uci)] for _, fen, uci in played]
@@ -191,7 +190,7 @@ def mover_evaluations(fen: str, uci: str, evaluator: Evaluator) -> tuple[int, in
 
 def centipawn_loss_and_accuracy(log_events: list[dict[str, Any]], evaluator: Evaluator) -> dict[str, Any]:
     """The centipawn_loss_and_accuracy section: each LLM side's legal moves judged by the engine."""
-    sides: dict[Colour, dict[str, Any] | None] = dict.fromkeys(("white", "black"))
+    sides: dict[Color, dict[str, Any] | None] = dict.fromkeys(COLORS)
     for colour in llm_colours(log_events[0]):
         moves: list[dict[str, Any]] = []
         losses: list[float] = []

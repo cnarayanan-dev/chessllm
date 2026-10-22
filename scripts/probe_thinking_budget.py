@@ -39,7 +39,8 @@ import ollama
 
 from chessllm.analytics.analysis import mover_evaluations
 from chessllm.engines.evaluator import Evaluator
-from chessllm.game.session import CUT_OFF, BenchmarkLlmSide, HumanSide, Settings, judge
+from chessllm.core.types import Sampling
+from chessllm.game.session import AttemptResult, BenchmarkLlmSide, HumanSide, Settings, judge
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.exceptions import InvalidSettings, LlmTimeout
@@ -130,7 +131,7 @@ def speed(model: str) -> float | None:
 
 def ask(
     chat: Callable[..., ollama.ChatResponse], model: str, index: int, position: Position, condition: Condition,
-    pass_: Pass, evaluator: Evaluator, sampling: dict[str, float],
+    pass_: Pass, evaluator: Evaluator, sampling: Sampling,
 ) -> dict[str, Any]:
     """One first attempt, made by the game's player, judged as the game judges it; under Listed enforced its move
     is scored by its centipawn loss, as the game's analysis scores a played move."""
@@ -154,9 +155,10 @@ def ask(
     except Exception as error:  # a failed call is recorded, not fatal to the probe, and asked again on a rerun
         return record | {"result": "error", "error": str(error)}
     board = chess.Board(position.fen)
+    result: AttemptResult
     written, move, result = judge(board, reply.raw)
     if result == "invalid" and reply.forced and reply.stop_reason == "length":
-        result = CUT_OFF  # the forced answer ran out of tokens too, as the game counts it
+        result = "cut_off"  # the forced answer ran out of tokens too, as the game counts it
     record |= {
         "raw": reply.raw, "move": written, "result": result, "thinking_tokens": reply.thinking_tokens,
         "answer_tokens": reply.answer_tokens, "prompt_tokens": reply.prompt_tokens, "stop_reason": reply.stop_reason,
@@ -240,7 +242,7 @@ def summary(every: Sequence[dict[str, Any]]) -> str:
             f"| {key[0]} | {key[1]} | {legal}/{len(free)} ({percent(legal, len(free))}) | {quality} | "
             f"{sum(loss >= BLUNDER_CP for loss in losses)} | {spent} | "
             f"{percent(sum(bool(r['forced']) for r in answered), len(answered))} | {statistics.median(times):.1f} | "
-            f"{sum(r['result'] in ('timeout', CUT_OFF) for r in group)} |"
+            f"{sum(r['result'] in ('timeout', 'cut_off') for r in group)} |"
         )
     return "\n".join(lines)
 

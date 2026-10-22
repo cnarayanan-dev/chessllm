@@ -6,7 +6,6 @@ CHESSLLM_DRAGON. Stockfish is the stand-in where Dragon can't be had: its own st
 Dragon's Skill levels, so each of its Skill levels is a Stockfish Skill Level held to a shallow search depth, and its
 ratings are rough guesses, not published ones."""
 
-import os
 import platform
 import shutil
 from dataclasses import dataclass
@@ -16,11 +15,16 @@ from typing import Any, Protocol
 import chess
 import chess.engine
 
+from chessllm.core.config import (
+    DRAGON_PATH_VARIABLE,
+    STOCKFISH_PATH_VARIABLE,
+    dragon_path_from_environment,
+    stockfish_path_from_environment,
+)
 from chessllm.exceptions import AnchorUnavailable
 
 # The Dragon Skill levels that are Anchors: Skill s is rated 125 × (s + 1) on the chess.com scale.
 DRAGON_SKILLS = range(1, 8)
-DRAGON_PATH_VARIABLE = "CHESSLLM_DRAGON"
 # Dragon's strength is set by its Skill, not by its thinking time; this only keeps a game quick.
 MOVE_TIME_S = 0.1
 START_TIMEOUT_S = 30.0
@@ -43,7 +47,6 @@ ANCHOR_RATINGS: dict[str, AnchorRating] = {
 # Stockfish's Skill s (Stockfish Skill Level and search depth below) is guessed to play about as well as Dragon's Skill
 # s. The guess is uncalibrated, so its prior is three times as wide as Dragon's and the fit can move it a long way.
 STOCKFISH_LEVELS: dict[int, tuple[int, int]] = {1: (0, 1), 2: (0, 2), 3: (1, 3), 4: (2, 4), 5: (3, 5), 6: (4, 6), 7: (5, 7)}
-STOCKFISH_PATH_VARIABLE = "CHESSLLM_STOCKFISH"
 ANCHOR_RATINGS |= {
     f"anchor:stockfish:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=300) for skill in STOCKFISH_LEVELS
 }
@@ -68,7 +71,7 @@ def configured_dragon_path(path: str | None = None) -> Path:
     """The Dragon executable: the given path, else the CHESSLLM_DRAGON environment variable.
 
     Raises AnchorUnavailable if neither is set."""
-    path = path or os.environ.get(DRAGON_PATH_VARIABLE)
+    path = path or dragon_path_from_environment()
     if not path:
         raise AnchorUnavailable(
             f"Dragon isn't configured: pass --dragon or set {DRAGON_PATH_VARIABLE} to the path of the Dragon "
@@ -134,7 +137,7 @@ class DragonAnchor:
 def configured_stockfish_path(path: str | None = None) -> Path:
     """The Stockfish executable: the given path, else the CHESSLLM_STOCKFISH environment variable, else stockfish on
     the PATH. Raises AnchorUnavailable if there is none."""
-    path = path or os.environ.get(STOCKFISH_PATH_VARIABLE) or shutil.which("stockfish")
+    path = path or stockfish_path_from_environment() or shutil.which("stockfish")
     if not path:
         raise AnchorUnavailable(
             f"Stockfish isn't installed: pass --stockfish or set {STOCKFISH_PATH_VARIABLE} to its executable."

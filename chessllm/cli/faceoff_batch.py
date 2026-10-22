@@ -28,10 +28,12 @@ from chessllm.cli.common import (
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
+from chessllm.core.config import SAMPLING_FILE
+from chessllm.core.types import COLORS, Color
 from chessllm.exceptions import InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import COLORS, BenchmarkLlmSide, Color, LlmSide, Rules, Settings
-from chessllm.llm.models import LLM_MODELS, SAMPLING_FILE, load_sampling
+from chessllm.game.session import BenchmarkLlmSide, LlmSide, Rules, Settings
+from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 

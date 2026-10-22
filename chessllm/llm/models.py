@@ -4,9 +4,10 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from chessllm.core.config import SAMPLING_FILE
+from chessllm.core.types import Sampling
 from chessllm.exceptions import InvalidSamplingConfig
 
-SAMPLING_FILE = Path(__file__).parent / "sampling.toml"
 
 # The Ollama options that change how a model samples its reply. Others (num_ctx, stop, ...) aren't sampling.
 SAMPLING_OPTIONS = frozenset(
@@ -72,7 +73,7 @@ CONTEXT_TOKENS = 8192
 THINKING_BUDGET_RANGE = range(FORCED_ANSWER_TOKENS, 6144 + 1)
 
 
-def load_sampling(path: Path = SAMPLING_FILE) -> dict[str, float]:
+def load_sampling(path: Path = SAMPLING_FILE) -> Sampling:
     """The sampling options set in the config file. Empty (or no file) means the model's own defaults.
 
     The file is read at the start of every game, so edits apply to the next game without restarting the app.

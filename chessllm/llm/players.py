@@ -6,9 +6,13 @@ from typing import Literal, Protocol
 from pydantic import BaseModel
 
 
+# Who a message of the Prompt is from.
+MessageRole = Literal["system", "user", "assistant"]
+
+
 @dataclass(frozen=True)
 class Message:
-    role: Literal["system", "user", "assistant"]
+    role: MessageRole
     content: str
 
 

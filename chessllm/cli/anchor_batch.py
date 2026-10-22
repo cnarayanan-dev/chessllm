@@ -42,12 +42,13 @@ from chessllm.cli.common import (
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
+from chessllm.core.config import SAMPLING_FILE
+from chessllm.core.types import Color, opponent, score_for
 from chessllm.engines.move_model import MoveModel
 from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
-from chessllm.game.ladder import FIRST_SKILL, AnchoredGame, earlier_games, llm_score, next_color, next_skill
+from chessllm.game.ladder import FIRST_SKILL, AnchoredGame, earlier_games, next_color, next_skill
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import AnchorSide, Color, Settings
-from chessllm.llm.models import SAMPLING_FILE
+from chessllm.game.session import AnchorSide, Settings
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 
@@ -109,7 +110,7 @@ def main(
             except AnchorUnavailable as error:
                 summary(played, history)
                 return fail(FAILED, str(error))
-            anchor_color: Color = "black" if llm_color == "white" else "white"
+            anchor_color = opponent(llm_color)
             try:
                 players = {llm_color: player_for(settings, llm_color)}
                 log = GameLog(args.games_dir, *settings.side_names())
@@ -119,7 +120,7 @@ def main(
                 return fail(FAILED, f"{error}. Game {number} was left unfinished in {log and log.path}")
             finally:
                 anchor.close()
-            game = AnchoredGame(skill, llm_color, llm_score(state["result"], llm_color))
+            game = AnchoredGame(skill, llm_color, score_for(state["result"], llm_color))
             history.append(game)
             played.append(game)
             print(f"Game {number}/{args.games}: Skill {skill}, LLM as {llm_color}: {outcome(game, state)}", flush=True)

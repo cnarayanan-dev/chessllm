@@ -13,10 +13,11 @@ from pathlib import Path
 from chessllm.cli.common import add_configuration_arguments, anchor_match_settings, default_anchor, fail
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.anchors import Anchor
+from chessllm.core.config import SAMPLING_FILE
+from chessllm.core.types import COLORS, Color, opponent
 from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
-from chessllm.game.session import COLORS, AnchorSide, Color, Settings
-from chessllm.llm.models import SAMPLING_FILE
+from chessllm.game.session import AnchorSide, Settings
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 
@@ -54,7 +55,7 @@ def main(
         anchor = anchor_for(anchor_side)  # started before the game, so a missing Dragon leaves no log behind
     except AnchorUnavailable as error:
         return fail(FAILED, str(error))
-    anchor_color: Color = "black" if llm_color == "white" else "white"
+    anchor_color = opponent(llm_color)
     try:
         players = {llm_color: player_for(settings, llm_color)}
         log = GameLog(args.games_dir, *settings.side_names())

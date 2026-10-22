@@ -9,16 +9,17 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
 from chessllm.analytics.analysis import analysis_path
 from chessllm.engines.anchors import ANCHOR_RATINGS, AnchorRating, anchor_name
-from chessllm.game.session import COLORS, BenchmarkLlmSide, Color, Rules, Settings
+from chessllm.core.config import VALIDATION_FILE
+from chessllm.core.types import COLORS, Color, Sampling, opponent, score_for
+from chessllm.game.session import BenchmarkLlmSide, Rules, Settings
 from chessllm.analytics.move_quality import (
-    VALIDATION_FILE,
     ConfigurationMoves,
     MoveQuality,
     move_quality,
@@ -38,7 +39,7 @@ class PlayerConfiguration(BaseModel):
     rules: Rules
     retry_feedback: RetryFeedback
     max_retries: int  # per turn, before the LLM forfeits
-    sampling: dict[str, int | float]  # from the config file; empty means the model's defaults
+    sampling: Sampling  # from the config file; empty means the model's defaults
     prompt: str  # the system prompt's file name, e.g. "system.txt"
     # How each turn gives the position; None is the default, fen. Left out when it is fen, as in the game log, so
     # the API's configurations and their ids stay as they were before the setting existed.
@@ -100,12 +101,14 @@ class Leaderboard(BaseModel):
     configurations: list[LeaderboardEntry]
 
 
-SCORES = {"1-0": {"white": "win", "black": "loss"}, "0-1": {"white": "loss", "black": "win"}}
+# A game's result from one side, in words.
+Outcome = Literal["win", "draw", "loss"]
 
 
-def side_outcome(result: str, color: Color) -> str:
+def side_outcome(result: str, color: Color) -> Outcome:
     """The game's result from the side at color: a win, a loss, or, for anything else that ends a game, a draw."""
-    return SCORES.get(result, {}).get(color, "draw")
+    score = score_for(result, color)
+    return "win" if score == 1 else "loss" if score == 0 else "draw"
 
 
 @dataclass
@@ -209,7 +212,7 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
         color: llm_configuration(start, color, side) for color, side in sides.items() if side["player"] == "llm"
     }
     for color, configuration in configurations.items():
-        other: Color = "black" if color == "white" else "white"
+        other = opponent(color)
         outcome = side_outcome(end["result"], color)
         tally = tallies.setdefault(configuration.id(), ConfigurationTally(configuration))
         tally.results.add(outcome)
@@ -229,7 +232,6 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
 
 
 RATED_MODES = ("anchor_match", "llm_faceoff")  # Play LLM games don't count: the human's strength is unknown
-WHITE_SCORES = {"1-0": 1.0, "0-1": 0.0}  # anything else that ends a finished game is a draw, a half point
 
 
 def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
@@ -249,7 +251,7 @@ def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
         else:
             return []
     white, black = players
-    return [RatedGame(white=white, black=black, white_score=WHITE_SCORES.get(end["result"], 0.5))]
+    return [RatedGame(white=white, black=black, white_score=score_for(end["result"], "white"))]
 
 
 def add_analysed_moves(analysed: dict[str, ConfigurationMoves], log: Path, events: list[dict[str, Any]]) -> None:

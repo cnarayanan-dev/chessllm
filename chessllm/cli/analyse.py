@@ -14,7 +14,7 @@ from chessllm.analytics.analysis import analyse_games
 from chessllm.engines.evaluator import Evaluator
 from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
 from chessllm.engines.move_model import MoveModel
-from chessllm.logs.game_log import GAMES_DIR
+from chessllm.core.config import GAMES_DIR
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -23,7 +23,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         description="Analyse every finished game without an analysis file: its Move-quality estimate (Maia-2), "
         "and centipawn loss and accuracy (Stockfish). An engine that can't start is skipped.",
     )
-    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help="where the game logs are (default: games)")
+    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help="where the game logs are (default: the project's games/)")
     parser.add_argument("--all", action="store_true", help="re-analyse every finished game, replacing its analysis")
     args = parser.parse_args(argv)
     from chessllm.engines.maia2_model import Maia2MoveModel

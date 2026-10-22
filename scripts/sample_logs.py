@@ -22,7 +22,8 @@ from httpx2 import Response
 
 from chessllm.game.runner import play_anchor_match
 from chessllm.api.app import create_app
-from chessllm.game.session import AnchorSide, BenchmarkLlmSide, Color, LlmSide, Settings
+from chessllm.core.types import Color, Sampling
+from chessllm.game.session import AnchorSide, BenchmarkLlmSide, LlmSide, Settings
 from chessllm.logs.game_log import GameLog
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
@@ -41,7 +42,7 @@ def reasoned(reasoning: str, move: str) -> Raw:
     return Raw(json.dumps({"reasoning": reasoning, "move": move}))
 
 
-def model_sampling(model: str) -> dict[str, float]:
+def model_sampling(model: str) -> Sampling:
     """Stand-in for Ollama's `show`: each model's own sampling, or no answer for a model that isn't installed."""
     if model == "gemma4:26b":
         raise ConnectionError(f"model {model!r} not found")

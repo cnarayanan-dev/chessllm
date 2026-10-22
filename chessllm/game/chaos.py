@@ -9,14 +9,15 @@ from typing import Any, Literal
 
 import chess
 
-Kind = Literal["legal", "chaos", "spawn", "invalid"]
+# How the resolver read a move: legal as it stands, a chaos move, a spawn, or not a move it can play (ADR 0006).
+ResolutionKind = Literal["legal", "chaos", "spawn", "invalid"]
 
 CASTLE_RE = re.compile(r"^[O0]-[O0](-[O0])?[+#]?$")
 
 
 @dataclass(frozen=True)
 class Resolution:
-    kind: Kind
+    kind: ResolutionKind
     reason: str  # one line, e.g. "no bishop can reach d3 by its movement; c1 is nearest"
     from_square: chess.Square | None = None  # None for a spawn
     to_square: chess.Square | None = None

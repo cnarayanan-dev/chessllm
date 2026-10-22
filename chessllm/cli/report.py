@@ -29,10 +29,11 @@ from typing import Any
 import chess
 
 from chessllm.analytics.analysis import analysis_path
-from chessllm.game.session import COLORS, CUT_OFF, ILLEGAL_KINDS, Color
-from chessllm.logs.game_log import GAMES_DIR
+from chessllm.core.config import GAMES_DIR, VALIDATION_FILE
+from chessllm.core.types import COLORS, Color, opponent
+from chessllm.game.session import ILLEGAL_RESULTS
 from chessllm.analytics.leaderboard import read_sides, side_outcome
-from chessllm.analytics.move_quality import VALIDATION_FILE, ConfigurationMoves, move_quality, read_analysed_moves, read_validation
+from chessllm.analytics.move_quality import ConfigurationMoves, move_quality, read_analysed_moves, read_validation
 from chessllm.game.prompt import ENFORCED
 
 OPENING_PLIES = 20
@@ -172,7 +173,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             thinking_level=side.get("thinking_level"),
             thinking_budget=side.get("thinking_budget"),
         )
-        other = game.sides["black" if color == "white" else "white"]
+        other = game.sides[opponent(color)]
         outcome = None if game.end is None else side_outcome(str(game.end.get("result")), color)
         result.append(LlmSide(game, color, configuration, opponent_label(other), outcome))
     return result
@@ -323,9 +324,9 @@ class Themes:
                     self.forced_answers += attempt.get("forced") is True
                 if result in NO_ANSWER:
                     self.no_answers += 1
-                elif result == CUT_OFF:
+                elif result == "cut_off":
                     self.cut_offs += 1
-                elif result in ILLEGAL_KINDS:
+                elif result in ILLEGAL_RESULTS:
                     illegal_in_turn = streak_broken = True  # even if a retry recovers the turn
                     move = str(attempt.get("move"))
                     self.illegal_attempts += 1
@@ -631,7 +632,7 @@ def theme_lines(themes: dict[str, Any]) -> list[str]:
 
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="games-report", description=__doc__.split("\n\n")[0])
-    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help=f"where the logs are (default {GAMES_DIR})")
+    parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help="where the logs are (default: the project's games/)")
     parser.add_argument("--mode", choices=["play_llm", "llm_faceoff", "anchor_match"])
     parser.add_argument("--model", help="only LLM sides whose model contains this, e.g. llama3")
     parser.add_argument("--constraints", choices=["free", "listed", "blind_enforced", "listed_enforced"])

@@ -24,7 +24,8 @@ from pydantic import BaseModel
 from starlette.types import Receive, Scope, Send
 
 from chessllm.api.app import create_app
-from chessllm.game.session import Color, Settings
+from chessllm.core.types import Color
+from chessllm.game.session import Settings
 from tests.conftest import Raw, ScriptedPlayer
 from tests.e2e.leaderboard import write_leaderboard_games
 
