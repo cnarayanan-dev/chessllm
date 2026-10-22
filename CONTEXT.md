@@ -101,8 +101,16 @@ One move by one side: a human's move, an **Anchor**'s, or the move an LLM's **Tu
 _Avoid_: Half-move, move (when one side's single move is meant)
 
 **Turn**:
-One decision by an LLM in a game: it is shown the current position and replies with a move, including any retries. Each turn starts fresh, without the conversation from earlier turns.
+One decision by an LLM in a game: it is shown the current position and replies with a move, including any retries. Whether it starts fresh or continues the conversation of earlier turns is its side's **Turn memory**.
 _Avoid_: Round, step
+
+**Turn memory**:
+Whether an LLM's **Turns** in a game share one conversation, fixed for the whole game and chosen for each side. One of three: *fresh* (every turn starts a new conversation with the position, the default), *chat with position* (one conversation for the whole game, each turn adding the position as a fresh turn would show it), or *chat with moves* (one conversation, each turn adding only the opponent's last move, so the LLM must keep track of the board itself). A conversation keeps every attempt and its **Retry feedback**, but never the **Thinking**. When it no longer fits the model's context, its oldest turns are dropped whole, and each turn records how many earlier turns it still remembered. The last two are for exploring how a conversation changes an LLM's play.
+_Avoid_: History, context, memory mode, chat mode
+
+**Chaos move report**:
+The line at the start of a turn, in a conversation kept by **Turn memory**, saying what each **Chaos move** since that side's last turn actually did, its own and its opponent's, in the resolver's words, e.g. "Your Bd3 was played as: bishop c1→d3". Legal moves get none. A fresh turn gets none, since its position already shows the board.
+_Avoid_: Resolution message, chaos feedback
 
 **Thinking**:
 The long internal reasoning a model produces before it answers, when thinking is on for its side. Part of the **Player configuration**.
@@ -121,7 +129,7 @@ The short explanation an LLM writes in its answer, before its move, when thinkin
 _Avoid_: Explanation, thinking, justification
 
 **Prompt**:
-Everything sent to the LLM in a **Turn**, exactly as it received it: the **System prompt**, the position (with the **Legal-move list** when shown), and for each **Retry** its previous answer and the **Retry feedback**. Recorded as sent, since the system prompt file can change between turns.
+Everything sent to the LLM in a **Turn**, exactly as it received it: the **System prompt**, the position (with the **Legal-move list** when shown), and for each **Retry** its previous answer and the **Retry feedback**. Under a conversation kept by **Turn memory** it also holds the earlier turns the LLM still remembers, and its system prompt is the one read at the side's first turn, fixed for the game. Recorded as sent, since the system prompt file can change between turns; in a conversation each attempt records only what it added, and the whole prompt is rebuilt from the game's earlier records.
 _Avoid_: Input, context, query
 
 **System prompt**:
@@ -159,7 +167,7 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
+An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Rating**:
