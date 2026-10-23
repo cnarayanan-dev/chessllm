@@ -151,7 +151,7 @@ def test_the_moves_templates_are_two_more_defaults_that_fit_only_chat_with_moves
         check_prompt_template(default_template("free", "described"), "free", "chat_moves")
 
 
-def test_a_chat_with_moves_side_asks_its_legal_counterpart_with_a_template_that_shows_the_position():
+def test_a_counterpart_asked_fresh_never_gets_a_template_that_shows_no_position():
     counterpart = counterpart_template(default_template("listed", "moves"))
 
     assert counterpart == default_template("listed_enforced")

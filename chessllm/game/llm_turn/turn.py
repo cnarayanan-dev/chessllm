@@ -289,16 +289,24 @@ class LlmTurns:
         them: the chaos move isn't played yet. None in an abandoned game, which asks for nothing more.
 
         It is asked apart from the turn, after it, so its call is none of the turn's attempts and its time none of
-        the turn's (Time used), and nothing about it counts in the side's totals."""
+        the turn's (Time used), and nothing about it counts in the side's totals. In a conversation it is asked at
+        its end and dropped from it, so the side's next turn is sent what it would have been without it."""
         if self._abandoned.is_set():
             return None
-        return ask_legal_counterpart(self._player, self._side, self._template, self._color, board, moves)
+        return ask_legal_counterpart(
+            self._player, self._side, self._template, self._color, board, moves, self._conversation
+        )
 
     def log_legal_counterpart(self, answer: CounterpartAnswer, ply: int) -> None:
-        """Log the Legal counterpart of the chaos move of ply, once its turn has landed."""
+        """Log the Legal counterpart of the chaos move of ply, once its turn has landed. In a conversation it logs how
+        many earlier turns its Prompt held, as an llm_attempt does."""
         counterpart = answer.counterpart
+        aside = answer.aside
+        logged_remembered = {"remembered": aside.remembered} if aside is not None else {}
+        logged_context = {"context_may_be_cut": True} if aside is not None and not aside.fits else {}
         self._log.write(
             "legal_counterpart", color=self._color, ply=ply, pgn=answer.pgn, fen=answer.fen,
             legal_moves=answer.listed_moves, **counterpart.attempt.log_shape(), uci=counterpart.move,
-            fen_after=counterpart.fen_after, **(token_accounting(answer.reply) if answer.reply is not None else {}),
+            fen_after=counterpart.fen_after, **logged_remembered, **logged_context,
+            **(token_accounting(answer.reply) if answer.reply is not None else {}),
         )

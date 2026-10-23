@@ -13,3 +13,4 @@ Under **Turn memory** *chat with position* or *chat with moves*, an LLM's turns 
 - Reading one attempt's Prompt from a raw log means rebuilding the conversation; analysis code does it through one helper rather than by hand.
 - The system prompt file is no longer re-read every turn in a conversation: an edit applies from the next game, since rewriting a system prompt already sent would change a past the LLM has seen.
 - Fresh turns keep recording their whole Prompt on every attempt; only conversations use the additions.
+- A chaos move's **Legal counterpart**, asked at the end of a conversation and then dropped from it, records the same way: its attempt holds only its request, and its whole Prompt is the conversation as the chaos move's turn left it, then the request. Should the request not fit the context, the oldest earlier turns are dropped for it alone, and it records how many it still held.

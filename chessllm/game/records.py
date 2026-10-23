@@ -113,7 +113,9 @@ class Attempt(AttemptSummary):
     prompt: list[PromptMessage] | None = None
     # Only when the conversation was trimmed to the context within its turn, after the turn's first attempt: how many
     # of the side's earlier turns this attempt's Prompt still held, fewer than its turn's remembered. Its llm_attempt
-    # logs it as the turn's remembered (log_shape leaves it out).
+    # logs it as the turn's remembered (log_shape leaves it out). A Legal counterpart's, asked aside at the end of a
+    # conversation, only when it was trimmed alone: fewer than its chaos move's turn's last attempt held. Its
+    # legal_counterpart event logs what it held in any conversation.
     remembered: int | None = Field(default=None, exclude_if=is_none)
     # With Tools only (ADR 0011): the attempt's tool calls in the order made, left out when it made none, the calls
     # and their results also being in its prompt; and true when its tool phase ended in a tool call written as text

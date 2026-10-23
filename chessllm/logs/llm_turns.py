@@ -6,19 +6,23 @@ from collections.abc import Iterable
 from typing import Any
 
 from chessllm.core.types import COLORS
-from chessllm.game.records import Attempt, LlmTurn
+from chessllm.game.llm_turn.conversation import last_remembered
+from chessllm.game.records import Attempt, LegalCounterpart, LlmTurn
 
 
 def logged_llm_turns(events: Iterable[dict[str, Any]]) -> list[LlmTurn]:
     """The LLM turns of a version 2 game log, in the order played, from its llm_attempt events: each attempt as its
     record has it, the log's thinking being the Reasoning when the side's thinking is off (Attempt.log_shape), and
-    each turn's Time used and remembered as its attempts log them, the turn's being its first attempt's. Legal
-    counterparts are left out."""
+    each turn's Time used and remembered as its attempts log them, the turn's being its first attempt's, and each
+    chaos move's Legal counterpart from its legal_counterpart event, so its whole Prompt is rebuilt from a log too
+    (counterpart_prompt). Evaluations and Chaos gains are left out."""
     thinks: dict[str, bool] = {}
     turns: dict[int, LlmTurn] = {}
     for event in events:
         if event["type"] == "game_start":
             thinks = {color: bool(event[color]["thinking"]) for color in COLORS if event[color]["player"] == "llm"}
+        if event["type"] == "legal_counterpart":
+            turns[event["ply"]].legal_counterpart = logged_counterpart(event, thinks, turns[event["ply"]])
         if event["type"] != "llm_attempt":
             continue
         thinking, reasoning = (event["thinking"], None) if thinks[event["color"]] else (None, event["thinking"])
@@ -39,3 +43,16 @@ def logged_llm_turns(events: Iterable[dict[str, Any]]) -> list[LlmTurn]:
         if "turn_time_s" in event:
             turn.time_s = event["turn_time_s"]
     return [turns[ply] for ply in sorted(turns)]
+
+
+def logged_counterpart(event: dict[str, Any], thinks: dict[str, bool], turn: LlmTurn) -> LegalCounterpart:
+    """The Legal counterpart a legal_counterpart event logs, of the chaos move turn ended in. In a conversation its
+    attempt's record has remembered only when it was trimmed alone, to fewer earlier turns than the turn's last
+    attempt remembered. One logged before counterparts were asked inside a conversation logs no remembered, and its
+    whole fresh Prompt, which counterpart_prompt gives as recorded."""
+    thinking, reasoning = (event["thinking"], None) if thinks[event["color"]] else (None, event["thinking"])
+    remembered = event.get("remembered")
+    held = last_remembered(turn.attempts, turn.remembered) if turn.remembered is not None else None
+    trimmed = remembered if remembered != held else None
+    attempt = Attempt.model_validate(event | {"thinking": thinking, "reasoning": reasoning, "remembered": trimmed})
+    return LegalCounterpart(move=event["uci"], san=event["san"], fen_after=event["fen_after"], attempt=attempt)
