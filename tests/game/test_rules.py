@@ -64,13 +64,14 @@ def test_only_chaos_rules_count_chaos_moves():
     assert CHAOS.chaos_counts(chaos_moves=2, spawns=1) == (2, 1)
 
 
-def test_chaos_rules_need_stockfish_as_the_anchor_and_every_llm_under_free_or_listed():
+def test_chaos_rules_need_stockfish_or_the_random_mover_as_the_anchor_and_every_llm_under_free_or_listed():
     CHAOS.check_anchor(AnchorSide(engine="stockfish"))
+    CHAOS.check_anchor(AnchorSide(engine="random", skill=0, seed=1))
     CHAOS.check_llm("black", LlmSide(llm_constraints="listed"))
     STANDARD.check_anchor(AnchorSide(engine="dragon"))
     STANDARD.check_llm("black", LlmSide(llm_constraints="listed_enforced"))
 
-    with pytest.raises(InvalidSettings, match="Only Stockfish can be the Anchor under Chaos rules"):
+    with pytest.raises(InvalidSettings, match="Only Stockfish or the random mover can be the Anchor under Chaos"):
         CHAOS.check_anchor(AnchorSide(engine="dragon"))
     with pytest.raises(InvalidSettings, match=r"not llama3:8b \(black\) under listed_enforced"):
         CHAOS.check_llm("black", LlmSide(llm_constraints="listed_enforced"))

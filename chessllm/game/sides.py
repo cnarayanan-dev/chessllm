@@ -130,24 +130,47 @@ class BenchmarkLlmSide(LlmSide):
         return f"{self.model} ({thinking}{budget})"
 
 
-AnchorEngine = Literal["dragon", "stockfish"]
+AnchorEngine = Literal["dragon", "stockfish", "random"]
+# The engines whose Skill 1-7 an Anchor match batch's ladder climbs, above the random mover at Skill 0.
+LadderEngine = Literal["dragon", "stockfish"]
 
 
 @dataclass(frozen=True)
 class AnchorSide:
-    """An Anchor side: Komodo Dragon 1, or Stockfish standing in for it, at a Skill level, in the game log's shape."""
+    """An Anchor side: Komodo Dragon 1, or Stockfish standing in for it, at a Skill level, or the random legal mover
+    with its seed for the game, in the game log's shape. The random mover has no Skill: it stands at
+    RANDOM_MOVER_SKILL (0), the bottom rung of the ladder below the engine it names, and its log shape leaves the
+    Skill out."""
 
     player: Literal["anchor"] = "anchor"
     engine: AnchorEngine = "dragon"
     skill: int = 1
+    seed: int | None = None  # the random mover's, so its game can be replayed; None for an engine
+    # The random mover's: the engine whose ladder it is the bottom rung of, so a Dragon batch and a Stockfish batch
+    # of one Player configuration keep their ladders apart. None for an engine.
+    ladder: LadderEngine | None = None
 
     def name(self) -> str:
-        """The side's name in the PGN, e.g. "Dragon (Skill 1)"."""
+        """The side's name in the PGN, e.g. "Dragon (Skill 1)" or "Random mover"."""
+        if self.engine == "random":
+            return "Random mover"
         return f"{self.engine.capitalize()} (Skill {self.skill})"
 
     def file_name(self) -> str:
-        """The side's part of the game log's file name, e.g. "dragon-skill1"."""
+        """The side's part of the game log's file name, e.g. "dragon-skill1" or "random-mover"."""
+        if self.engine == "random":
+            return "random-mover"
         return f"{self.engine}-skill{self.skill}"
+
+    def log_shape(self) -> dict[str, Any]:
+        """The side as game_start logs it: the random mover with its seed and ladder and without a Skill, an engine as
+        before."""
+        shape = asdict(self)
+        if self.engine == "random":
+            del shape["skill"]
+        else:
+            del shape["seed"], shape["ladder"]
+        return shape
 
 
 Side = HumanSide | LlmSide | AnchorSide
@@ -160,4 +183,4 @@ def side_log_shape(side: Side, template: PromptTemplate | None) -> dict[str, Any
     if isinstance(side, LlmSide):
         assert template is not None, "an LLM side plays with a Prompt template"
         return side.log_shape(template)
-    return asdict(side)
+    return side.log_shape() if isinstance(side, AnchorSide) else asdict(side)

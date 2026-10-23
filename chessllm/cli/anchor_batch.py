@@ -1,20 +1,27 @@
-"""Play a batch of Anchor matches from the command line: a Player configuration against Dragon, unattended, up and
-down the Skill ladder (ADR 0005).
+"""Play a batch of Anchor matches from the command line: a Player configuration against the random legal mover and
+Dragon, unattended, up and down the Skill ladder (ADR 0005, ADR 0011).
 
     uv run anchor-batch --model llama3:8b --games 30 --dragon ~/dragon/dragon-osx
 
-The ladder. Colours alternate, game by game. Dragon's Skill is judged after every second game at it, one game as
-White and one as Black, so White's advantage cancels out: scoring over 50% in that pair (2 or 1.5 of 2 points)
-steps up a Skill level, under 50% steps down, and exactly 50% stays, within Skill 1-7. A pair of games is the
-window because it is the smallest one fair to both colours, and it lets a 30-game batch climb from Skill 1 to 7 and
-still spend most of its games near the level where the LLM scores 50%, where results say most about its Rating.
+The ladder. Its bottom rung, Skill 0, is the random legal mover, which needs no engine; above it are Dragon's Skill
+1-7. Colours alternate, game by game. The Skill is judged after every second game at it, one game as White and one
+as Black, so White's advantage cancels out: scoring over 50% in that pair (2 or 1.5 of 2 points) steps up a Skill
+level, under 50% steps down, and exactly 50% stays, within Skill 0-7. The random mover is the only Anchor a weak LLM
+under Free can beat, so the ladder starts there: a configuration that forfeits often still scores against something.
+A pair of games is the window because it is the smallest one fair to both colours, and it lets a 30-game batch
+climb from Skill 0 to 7 and still spend most of its games near the level where the LLM scores 50%, where results
+say most about its Rating.
 
 Extending. The ladder is a function of the results so far and nothing else, so it reads them from the game logs:
 before the first game, the batch reads every finished Anchor match of the same Player configuration in the games
 directory, oldest first, and goes on from there, at the Skill and colour that history gives, as if the earlier
-games had been the start of this batch. A configuration without earlier games starts at Skill 1 as White. --skill
+games had been the start of this batch. A configuration without earlier games starts at Skill 0 as White. --skill
 overrides the first game's Skill only; the ladder goes on from that game. An unfinished game (one interrupted) is
 not part of the history, and the new games simply join the pool the Rating is fitted from (order doesn't matter).
+Each game against the random mover draws a new seed, which game_start logs, so the game can be replayed, with the
+engine whose ladder it is on: a Dragon batch and a Stockfish batch of one configuration climb ladders of their own.
+The engine isn't needed until the ladder first steps up to it: a batch that never leaves the random mover runs
+without Dragon, and one whose engine is missing, or can't play under its settings, stops there with the reason.
 
 After each game, it is analysed into its analysis file (chessllm.analytics.analysis) unless --no-analysis, as the app and
 `analyse-games` do: the Move-quality estimate with Maia-2 and centipawn loss and accuracy with
@@ -40,7 +47,7 @@ from chessllm.cli.common import (
     warn_of_turn_memory,
 )
 from chessllm.cli.common import player_for as default_player_for
-from chessllm.engines.anchors import Anchor
+from chessllm.engines.anchors import RANDOM_MOVER_SKILL, Anchor
 from chessllm.engines.evaluator import Evaluator
 from chessllm.core.config import SAMPLING_FILE
 from chessllm.core.types import Color, opponent, score_for
@@ -62,15 +69,17 @@ FAILED = "Anchor match batch stopped"
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="anchor-batch",
-        description="Play a batch of Anchor matches of an LLM against Komodo Dragon 1, unattended, stepping Dragon's "
-        "Skill up after scoring over 50% against it and down after under 50%, and log every game.",
+        description="Play a batch of Anchor matches of an LLM against the random legal mover and Komodo Dragon 1, "
+        "unattended, stepping the Skill up after scoring over 50% against it and down after under 50%, and log every "
+        "game.",
     )
     add_configuration_arguments(parser)
     parser.add_argument("--games", type=int, default=DEFAULT_BUDGET, help=f"the budget (default {DEFAULT_BUDGET})")
     parser.add_argument(
         "--skill",
         type=int,
-        help="the first game's Skill, 1-7 (default: where the configuration's earlier games left the ladder, else 1)",
+        help="the first game's Skill, 0-7, 0 the random mover (default: where the configuration's earlier games left "
+        "the ladder, else 0)",
     )
     add_analysis_argument(parser)
     return parser
@@ -91,7 +100,8 @@ def main(
     if args.games < 1:
         return fail(FAILED, f"the budget must be at least one game, not {args.games}")
     try:
-        settings = anchor_match_settings(args, "white", args.skill or FIRST_SKILL, sampling_file)
+        first_skill = FIRST_SKILL if args.skill is None else args.skill
+        settings = anchor_match_settings(args, "white", first_skill, sampling_file)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     warn_of_turn_memory(args)
@@ -107,12 +117,12 @@ def main(
         for number in range(1, args.games + 1):
             skill = args.skill if number == 1 and args.skill is not None else next_skill(history)
             llm_color = next_color(history)
-            settings = anchor_match_settings(args, llm_color, skill, sampling_file)
             try:
-                anchor = anchor_for(AnchorSide(engine=args.engine, skill=skill))
-            except AnchorUnavailable as error:
+                settings = anchor_match_settings(args, llm_color, skill, sampling_file)
+                anchor = anchor_for(settings.anchor_sides()[opponent(llm_color)])
+            except (InvalidSettings, AnchorUnavailable) as error:
                 summary(played, history)
-                return fail(FAILED, str(error))
+                return fail(FAILED, f"game {number} at {rung(skill)} can't be played: {error}")
             anchor_color = opponent(llm_color)
             try:
                 players = {llm_color: player_for(settings, llm_color)}
@@ -127,7 +137,7 @@ def main(
             game = AnchoredGame(skill, llm_color, score_for(state.result, llm_color))
             history.append(game)
             played.append(game)
-            print(f"Game {number}/{args.games}: Skill {skill}, LLM as {llm_color}: {outcome(game, state)}", flush=True)
+            print(f"Game {number}/{args.games}: {rung(skill)}, LLM as {llm_color}: {outcome(game, state)}", flush=True)
             finished, log = log.path, None
             analyser.analyse(finished)
     except KeyboardInterrupt:
@@ -146,14 +156,19 @@ def outcome(game: AnchoredGame, state: GameState) -> str:
     return f"{word} ({state.result}, {state.end_reason})"
 
 
+def rung(skill: int) -> str:
+    """A Skill of the ladder as the batch prints it: "Random mover" for Skill 0, else e.g. "Skill 3"."""
+    return "Random mover" if skill == RANDOM_MOVER_SKILL else f"Skill {skill}"
+
+
 def summary(played: list[AnchoredGame], history: list[AnchoredGame]) -> None:
     """Print the batch's results, per Skill, and where the ladder stands."""
     counts = Counter(game.score for game in played)
     print(f"Batch: {len(played)} games, {counts[1.0]} wins, {counts[0.5]} draws, {counts[0.0]} losses.")
     for skill in sorted({game.skill for game in played}):
         at_skill = Counter(game.score for game in played if game.skill == skill)
-        print(f"  Skill {skill}: {at_skill[1.0]} W · {at_skill[0.5]} D · {at_skill[0.0]} L")
-    print(f"Next game: Skill {next_skill(history)}, LLM as {next_color(history)}.")
+        print(f"  {rung(skill)}: {at_skill[1.0]} W · {at_skill[0.5]} D · {at_skill[0.0]} L")
+    print(f"Next game: {rung(next_skill(history))}, LLM as {next_color(history)}.")
 
 
 if __name__ == "__main__":

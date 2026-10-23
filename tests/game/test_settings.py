@@ -1,7 +1,33 @@
+import pytest
+
 from tests.conftest import play_llm, play_move
 
+from chessllm.exceptions import InvalidSettings
 from chessllm.game.settings import Settings
+from chessllm.game.sides import AnchorSide, LlmSide
 from chessllm.llm.models import LlmModel
+
+
+@pytest.mark.parametrize(
+    ("anchor", "error"),
+    [
+        (AnchorSide(engine="random", skill=0), r"The random mover \(black\) needs a seed"),
+        (AnchorSide(engine="random", skill=5, seed=1), r"The random mover \(black\) has no Skill: .* not 5"),
+        (AnchorSide(engine="dragon", skill=1, seed=1), r"Dragon \(black\) has no seed: only the random mover has one"),
+        (AnchorSide(engine="stockfish", ladder="dragon"), r"Stockfish \(black\) has no ladder"),
+    ],
+)
+def test_an_anchor_side_that_mixes_the_random_movers_settings_and_an_engines_is_refused(anchor, error):
+    settings = Settings("anchor_match", LlmSide(), anchor)
+
+    with pytest.raises(InvalidSettings, match=error):
+        settings.check([LlmModel("llama3:8b")])
+
+
+def test_the_random_mover_with_a_seed_at_skill_0_can_play():
+    Settings("anchor_match", LlmSide(), AnchorSide(engine="random", skill=0, seed=1, ladder="dragon")).check(
+        [LlmModel("llama3:8b")]
+    )
 
 
 def test_the_models_offered_are_the_saved_list_with_whether_each_can_think(scripted):

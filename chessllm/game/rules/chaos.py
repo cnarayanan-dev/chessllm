@@ -264,9 +264,9 @@ class ChaosRules:
     plays_illegal_moves = True
 
     def check_anchor(self, anchor: AnchorSide) -> None:
-        if anchor.engine != "stockfish":
-            why = "it alone copes with chaos positions"
-            raise InvalidSettings(f"Only Stockfish can be the Anchor under Chaos rules: {why}")
+        if anchor.engine not in ("stockfish", "random"):
+            why = "they alone cope with chaos positions"
+            raise InvalidSettings(f"Only Stockfish or the random mover can be the Anchor under Chaos rules: {why}")
 
     def check_llm(self, color: Color, side: LlmSide) -> None:
         if side.llm_constraints in ENFORCED:

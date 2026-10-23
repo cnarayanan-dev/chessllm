@@ -193,6 +193,8 @@ def llm_sides(game: Game) -> list[LlmSide]:
 
 def opponent_label(side: dict[str, Any]) -> str:
     if side.get("player") == "anchor":
+        if side.get("engine") == "random":
+            return "Random mover"
         return f"{str(side.get('engine', 'anchor')).capitalize()} skill {side.get('skill', '?')}"
     if side.get("player") == "llm":
         return str(side.get("model"))

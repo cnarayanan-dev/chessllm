@@ -4,7 +4,7 @@ import json
 
 import chess
 
-from chessllm.cli.report import Filters, analyse, load_games, main
+from chessllm.cli.report import Filters, analyse, load_games, main, opponent_label
 
 LLAMA = {"player": "llm", "model": "llama3:8b", "thinking": False, "llm_constraints": "free", "retry_feedback": "explained"}
 GEMMA = LLAMA | {"model": "gemma3:12b"}
@@ -95,6 +95,11 @@ def test_record_counts_each_llm_side_and_splits_anchor_matches_by_skill(tmp_path
     assert llama["by_anchor"]["Dragon skill 3"]["losses"] == 1
     assert by_label(report)[("gemma3:12b", "free")]["record"]["draws"] == 1
     assert report["end_reasons"] == {"checkmate": 2, "move_cap": 1, "forfeit": 1}
+
+
+def test_the_random_mover_is_named_as_an_opponent_without_a_skill():
+    assert opponent_label({"player": "anchor", "engine": "random", "seed": 7}) == "Random mover"
+    assert opponent_label(dragon(3)) == "Dragon skill 3"
 
 
 def test_a_side_with_turn_memory_is_a_configuration_of_its_own(tmp_path):

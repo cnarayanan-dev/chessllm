@@ -1,21 +1,25 @@
 """The Skill ladder of an Anchor match batch (ADR 0005): the Skill and colour of the next game, from the results so
-far, and those results read back from the game logs (how chessllm.cli.anchor_batch describes it)."""
+far, and those results read back from the game logs (how chessllm.cli.anchor_batch describes it). Its bottom rung,
+Skill 0, is the random legal mover (ADR 0011); Skill 1-7 are the engine's."""
 
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from chessllm.analytics.leaderboard import PlayerConfiguration, finished_game, llm_configuration
-from chessllm.engines.anchors import DRAGON_SKILLS
+from chessllm.engines.anchors import DRAGON_SKILLS, RANDOM_MOVER_SKILL
 from chessllm.core.types import COLORS, Color, opponent, score_for
 from chessllm.game.modes import mode_named
 
-FIRST_SKILL = DRAGON_SKILLS[0]
+FIRST_SKILL = RANDOM_MOVER_SKILL  # the ladder starts at the random mover, below the engine's Skill 1
+TOP_SKILL = DRAGON_SKILLS[-1]
 
 
 @dataclass(frozen=True)
 class AnchoredGame:
-    """One finished Anchor match, as the ladder sees it: Dragon's Skill, the LLM's colour and its score."""
+    """One finished Anchor match, as the ladder sees it: the Anchor's Skill (0 for the random mover), the LLM's colour
+    and its score."""
 
     skill: int
     llm_color: Color
@@ -37,7 +41,7 @@ def next_skill(history: list[AnchoredGame]) -> int:
         return skill
     score = sum(game.score for game in history[-2:])
     if score > 1:
-        return min(skill + 1, DRAGON_SKILLS[-1])
+        return min(skill + 1, TOP_SKILL)
     if score < 1:
         return max(skill - 1, FIRST_SKILL)
     return skill
@@ -51,8 +55,9 @@ def next_color(history: list[AnchoredGame]) -> Color:
 def earlier_games(
     games_dir: Path, configuration: PlayerConfiguration, engine: str = "dragon"
 ) -> list[AnchoredGame]:
-    """The finished Anchor matches against the engine (Dragon by default) of the configuration in games_dir, oldest first: by game_start's
-    started_at, which is to the microsecond (older logs have whole seconds, and their ties go by file name)."""
+    """The finished Anchor matches of the configuration in games_dir on the engine's ladder (Dragon's by default): the
+    engine's games and the random mover's on that ladder, oldest first: by game_start's started_at, which is to the
+    microsecond (older logs have whole seconds, and their ties go by file name)."""
     logs = []
     for path in sorted(games_dir.glob("*.jsonl")) if games_dir.is_dir() else []:
         events = finished_game(path)
@@ -66,8 +71,17 @@ def earlier_games(
             llm, anchor = start[llm_color], start[opponent(llm_color)]
             if (
                 llm["player"] == "llm"
-                and anchor.get("engine") == engine
+                and anchor["player"] == "anchor"
+                and (rung := ladder_rung(anchor))[0] == engine
                 and llm_configuration(start, llm_color, llm) == configuration
             ):
-                history.append(AnchoredGame(anchor["skill"], llm_color, score_for(end["result"], llm_color)))
+                history.append(AnchoredGame(rung[1], llm_color, score_for(end["result"], llm_color)))
     return history
+
+
+def ladder_rung(anchor: dict[str, Any]) -> tuple[str | None, int]:
+    """Where an Anchor side, as game_start logs it, stands: the engine whose ladder it is on and its Skill there. The
+    random mover is at Skill 0 of the ladder it names (None if it names none)."""
+    if anchor["engine"] == "random":
+        return anchor.get("ladder"), RANDOM_MOVER_SKILL
+    return anchor["engine"], anchor["skill"]

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 
 from chessllm.core.types import COLORS, Color, ModeKey, RulesKey, Sampling
-from chessllm.engines.anchors import DRAGON_SKILLS
+from chessllm.engines.anchors import DRAGON_SKILLS, RANDOM_MOVER_SKILL
 from chessllm.exceptions import InvalidSettings
 from chessllm.game.llm_turn.prompt import check_prompt_template, side_template
 from chessllm.game.modes import MODES, Mode
@@ -74,6 +74,16 @@ class Settings:
         rules = self.the_rules()
         self.the_mode().check_sides(self.white, self.black)
         for color, anchor in self.anchor_sides().items():
+            if anchor.engine == "random":
+                if anchor.seed is None:
+                    raise InvalidSettings(f"The random mover ({color}) needs a seed, so that its game can be replayed")
+                if anchor.skill != RANDOM_MOVER_SKILL:
+                    raise InvalidSettings(f"The random mover ({color}) has no Skill: it plays at 0, not {anchor.skill}")
+                continue
+            if anchor.seed is not None or anchor.ladder is not None:
+                setting = "seed" if anchor.seed is not None else "ladder"
+                engine = anchor.engine.capitalize()
+                raise InvalidSettings(f"{engine} ({color}) has no {setting}: only the random mover has one")
             if anchor.skill not in DRAGON_SKILLS:
                 low, high = DRAGON_SKILLS[0], DRAGON_SKILLS[-1]
                 skills = f"Skill {low}-{high}"

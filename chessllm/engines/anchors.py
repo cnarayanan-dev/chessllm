@@ -1,12 +1,14 @@
 """The Anchor port: an opponent of known strength that, given a position, returns a move (ADR 0005).
 
-The adapters are Komodo Dragon 1 and Stockfish, both driven over UCI by python-chess. Dragon isn't bundled: it is
-downloaded from komodochess.com (/pub/dragon.zip) and its executable's path is configured, with --dragon or
-CHESSLLM_DRAGON. Stockfish is the stand-in where Dragon can't be had: its own strength settings don't go as low as
-Dragon's Skill levels, so each of its Skill levels is a Stockfish Skill Level held to a shallow search depth, and its
-ratings are rough guesses, not published ones."""
+The adapters are the random legal mover, Komodo Dragon 1 and Stockfish, the engines driven over UCI by python-chess.
+The random mover needs no engine, so it is always there: it is the lowest Anchor, added by ADR 0011. Dragon isn't
+bundled: it is downloaded from komodochess.com (/pub/dragon.zip) and its executable's path is configured, with
+--dragon or CHESSLLM_DRAGON. Stockfish is the stand-in where Dragon can't be had: its own strength settings don't go
+as low as Dragon's Skill levels, so each of its Skill levels is a Stockfish Skill Level held to a shallow search
+depth, and its ratings are rough guesses, not published ones."""
 
 import platform
+import random
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,9 +41,17 @@ class AnchorRating:
     uncertainty: float
 
 
-# Every Anchor's rating, by the Anchor's name (see anchor_name). The one place they are set: another Anchor, such as a
-# random legal mover at about -122, is added here and then rated games against it count towards the Rating.
-ANCHOR_RATINGS: dict[str, AnchorRating] = {
+# The random legal mover at -122, LLM Chess's calibration on the same Dragon-anchored chess.com scale
+# (docs/research/elo-estimation.md). Its prior is twice as wide as Dragon's: -122 is a published number from another
+# pool, not one we measured, it rests on games far below Dragon Skill 1 (250), against which a player that weak can
+# barely score, and its interval isn't published. It is narrower than Stockfish's guess, which no one calibrated.
+RANDOM_MOVER_RATING = AnchorRating(rating=-122, uncertainty=200)
+# The random mover has no Skill: in its AnchorSide and on the Skill ladder it stands at Skill 0, the rung below Skill 1.
+RANDOM_MOVER_SKILL = 0
+
+# Every Anchor's rating, by the Anchor's name (see anchor_name). The one place they are set: rated games against an
+# Anchor count towards the Rating once it is here.
+ANCHOR_RATINGS: dict[str, AnchorRating] = {"anchor:random": RANDOM_MOVER_RATING} | {
     f"anchor:dragon:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=100) for skill in DRAGON_SKILLS
 }
 # Stockfish's Skill s (Stockfish Skill Level and search depth below) is guessed to play about as well as Dragon's Skill
@@ -53,7 +63,8 @@ ANCHOR_RATINGS |= {
 
 
 def anchor_name(side: dict[str, Any]) -> str:
-    """An Anchor side's name, from its description in game_start, e.g. "anchor:dragon:3" for Dragon at Skill 3."""
+    """An Anchor side's name, from its description in game_start, e.g. "anchor:dragon:3" for Dragon at Skill 3, and
+    "anchor:random" for the random mover, which logs no Skill."""
     return ":".join(["anchor", *(str(side[key]) for key in ("engine", "skill") if key in side)])
 
 
@@ -65,6 +76,25 @@ class Anchor(Protocol):
     def close(self) -> None:
         """Stop the Anchor's engine, if it has one."""
         ...
+
+
+class RandomAnchor:
+    """The random legal mover: a uniformly random legal move in every position, from a seed per game, so the game can
+    be replayed from the seed in its log. It needs no engine. The legal moves are drawn from in UCI order, so a seed
+    plays the same moves whatever order python-chess generates them in. Under Chaos rules it moves in positions
+    python-chess calls invalid too, from the moves python-chess still generates there."""
+
+    def __init__(self, seed: int) -> None:
+        self._random = random.Random(seed)
+
+    def move(self, board: chess.Board) -> chess.Move:
+        moves = sorted(board.legal_moves, key=chess.Move.uci)
+        if not moves:
+            raise AnchorUnavailable("the random mover has no legal move")
+        return self._random.choice(moves)
+
+    def close(self) -> None:
+        pass  # no engine to stop
 
 
 def configured_dragon_path(path: str | None = None) -> Path:

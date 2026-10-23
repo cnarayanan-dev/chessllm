@@ -13,6 +13,9 @@ def dragon(skill):
     return {"player": "anchor", "engine": "dragon", "skill": skill}
 
 
+RANDOM_MOVER = {"player": "anchor", "engine": "random", "seed": 121}
+
+
 def result_of(outcome, white):
     """The game's result for an outcome ("win", "draw", "loss" or "forfeit") of the side that is white or not."""
     if outcome == "draw":
@@ -21,12 +24,14 @@ def result_of(outcome, white):
 
 
 def against_anchor(llm, skill, wins=0, draws=0, losses=0, forfeits=0, rules=None):
-    """An Anchor match batch: the given results of the LLM against Dragon at a Skill level, colours alternating."""
+    """An Anchor match batch: the given results of the LLM against Dragon at a Skill level, or against the random mover
+    at Skill 0, colours alternating."""
     results = ["win"] * wins + ["draw"] * draws + ["loss"] * losses + ["forfeit"] * forfeits
     games = []
     for number, outcome in enumerate(results):
         llm_white = number % 2 == 0
-        white, black = (llm, dragon(skill)) if llm_white else (dragon(skill), llm)
+        anchor = RANDOM_MOVER if skill == 0 else dragon(skill)
+        white, black = (llm, anchor) if llm_white else (anchor, llm)
         reason = {"draw": "move_cap", "forfeit": "forfeit"}.get(outcome, "checkmate")
         games.append(game(white, black, result_of(outcome, llm_white), reason, mode="anchor_match", rules=rules))
     return games
@@ -54,6 +59,32 @@ def test_a_configuration_that_lost_every_anchored_game_gets_an_upper_bound(leade
     # Losing 10 of 10 is a 5% chance for a player rated about 70 against Skill 1 (250), and less for anyone stronger.
     assert 40 < rating["high"] < 100
     assert rating["rated_games"] == 10
+
+
+def test_a_configuration_that_beats_the_random_mover_but_loses_to_every_dragon_level_gets_a_finite_rating(
+    leaderboard,
+):
+    dragon_only = [against_anchor(LLAMA, skill, losses=2, forfeits=2) for skill in range(1, 8)]
+    [alone] = leaderboard(*sum(dragon_only, []))
+    [llama] = leaderboard(*against_anchor(LLAMA, 0, wins=6, draws=2, losses=2), *sum(dragon_only, []))
+
+    assert (alone["rating"]["estimate"], alone["rating"]["low"]) == (None, None)  # "< X" without the random mover
+    rating = llama["rating"]
+    assert rating["low"] < rating["estimate"] < rating["high"]
+    # Below Dragon Skill 1, and near the random mover: the losses to Dragon pull the random mover, held only loosely
+    # at -122 by its prior, down with the configuration that mostly beat it.
+    assert -400 < rating["estimate"] < 250
+    assert rating["rated_games"] == 38
+
+
+def test_games_against_the_random_mover_count_at_its_fixed_rating_and_wide_prior(leaderboard):
+    [even] = leaderboard(*against_anchor(LLAMA, 0, wins=10, losses=10))
+    [at_skill_1] = leaderboard(*against_anchor(LLAMA, 1, wins=10, losses=10))
+
+    # Scoring 50% puts it at the Anchor's rating, and the random mover's wider prior makes the interval wider.
+    assert abs(even["rating"]["estimate"] - -122) < 5 and abs(at_skill_1["rating"]["estimate"] - 250) < 5
+    width = even["rating"]["high"] - even["rating"]["low"]
+    assert width > at_skill_1["rating"]["high"] - at_skill_1["rating"]["low"] + 100
 
 
 GEMMA = LLAMA | {"model": "gemma3:12b"}

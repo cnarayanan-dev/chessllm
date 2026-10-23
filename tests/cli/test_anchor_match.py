@@ -2,7 +2,9 @@
 
 import io
 import json
+import re
 
+import chess
 import chess.pgn
 import pytest
 
@@ -14,7 +16,7 @@ from tests.game.test_move_cap import MOVE_CAP_PLIES, long_game, sans
 
 from chessllm.analytics.analysis import analyse_game
 from chessllm.cli.anchor_match import main
-from chessllm.engines.anchors import ANCHOR_RATINGS, anchor_name
+from chessllm.engines.anchors import ANCHOR_RATINGS, RandomAnchor, anchor_name
 from chessllm.api.app import create_app
 
 
@@ -195,8 +197,9 @@ def test_a_thinking_budget_reaches_the_llms_settings_and_is_logged(anchor_match,
 @pytest.mark.parametrize(
     ("args", "error"),
     [
-        (["--rules", "chaos"], "Only Stockfish can be the Anchor under Chaos rules"),
+        (["--rules", "chaos"], "Only Stockfish or the random mover can be the Anchor under Chaos rules"),
         (["--skill", "8"], "Dragon (black) plays at Skill 1-7, not 8"),
+        (["--seed", "121"], "--seed is the random mover's, which is Skill 0, not 1"),
         (["--model", "nonesuch:1b"], "nonesuch:1b (white) is not in the model list"),
         (["--model", "llama3:8b", "--thinking"], "llama3:8b (white) cannot think"),
     ],
@@ -274,6 +277,64 @@ def test_stockfish_can_stand_in_for_dragon_and_is_logged_and_rated_as_its_own_an
     assert start["white"] == {"player": "anchor", "engine": "stockfish", "skill": 1}
     assert pgn_game(tmp_path / "games").headers["White"] == "Stockfish (Skill 1)"
     assert anchor_name(start["white"]) in ANCHOR_RATINGS
+
+
+class FirstLegalMovePlayer(ScriptedPlayer):
+    """An LLM that always answers with the first legal move, in UCI order, in the FEN its Prompt gives."""
+
+    def __init__(self) -> None:
+        super().__init__([])
+
+    def reply(self, messages, allowed_moves=None):
+        [fen] = re.findall(r"^FEN: (.+)$", messages[-1].content, flags=re.MULTILINE)
+        board = chess.Board(fen)
+        self.replies.append(board.san(min(board.legal_moves, key=chess.Move.uci)))
+        return super().reply(messages, allowed_moves)
+
+
+def replays(log_events: list[dict], seed: int) -> bool:
+    """Whether the random mover from the seed plays every Anchor move of the logged game, given the LLM's moves."""
+    anchor, board = RandomAnchor(seed), chess.Board()
+    for event in log_events:
+        if event["type"] == "anchor_move" and anchor.move(board) != board.parse_san(event["move"]):
+            return False
+        if event["type"] == "anchor_move" or event.get("result") == "legal":
+            board.push_san(event["move"])
+    return True
+
+
+def test_skill_0_plays_the_random_mover_which_needs_no_engine_and_its_logged_seed_replays_the_game(tmp_path):
+    player = FirstLegalMovePlayer()
+
+    code = main(
+        ["--games-dir", str(tmp_path / "games"), "--skill", "0", "--color", "black", "--seed", "121"],
+        player_for=player.for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    assert code == 0
+    [log] = (tmp_path / "games").glob("*.jsonl")
+    assert log.name.endswith("_random-mover_vs_llama3-8b.jsonl")
+    start, *moves, end = events(tmp_path / "games")
+    assert start["white"] == {"player": "anchor", "engine": "random", "seed": 121, "ladder": "dragon"}
+    assert anchor_name(start["white"]) == "anchor:random" and "anchor:random" in ANCHOR_RATINGS
+    assert end["type"] == "game_end" and end["plies"] > 20
+    assert all(move["result"] == "legal" for move in moves if move["type"] == "llm_attempt")
+    assert replays(moves, 121) and not replays(moves, 122)
+    assert pgn_game(tmp_path / "games").headers["White"] == "Random mover"
+
+
+def test_without_seed_each_game_against_the_random_mover_draws_a_seed_of_its_own(anchor_match, tmp_path):
+    built_for = []
+    for _ in range(2):
+        *_, sides = anchor_match(["e5", "Qh4#"], ["f3", "g4"], "--skill", "0", "--color", "black")
+        built_for += sides
+
+    assert [(side.engine, side.skill) for side in built_for] == [("random", 0)] * 2
+    logs = (tmp_path / "games").glob("*.jsonl")
+    starts = [json.loads(path.read_text(encoding="utf-8").splitlines()[0]) for path in logs]
+    assert sorted(start["white"]["seed"] for start in starts) == sorted(side.seed for side in built_for)
+    assert built_for[0].seed != built_for[1].seed
 
 
 def test_under_chaos_rules_the_llms_illegal_move_is_played_against_the_stockfish_anchor(anchor_match, tmp_path):
