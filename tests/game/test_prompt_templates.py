@@ -202,20 +202,6 @@ def test_a_game_with_its_own_template_logs_no_prompt_file_and_is_grouped_by_its_
     assert llm_configuration(start, "white", start["white"]).prompt == "system.txt"
 
 
-def test_a_new_game_through_the_api_takes_no_prompt_template_yet(scripted, tmp_path):
-    client, player = scripted([])
-    side = {"prompt_template": {"id": "x", "name": None, "system_prompt": "$color", "turn_template": "$moves"}}
-
-    response = client.post("/api/games", json=play_llm(**side))
-
-    assert response.status_code == 400
-    assert response.json() == {
-        "detail": "A new game takes no Prompt template yet: the LLM side (black) plays its default one",
-        "code": "prompt_template_not_accepted",
-    }
-    assert not (tmp_path / "games").exists() or not list((tmp_path / "games").glob("*.jsonl"))
-
-
 def test_editing_a_default_file_mid_game_doesnt_change_the_games_prompts(scripted, tmp_path, monkeypatch):
     system_file = tmp_path / "system.txt"
     system_file.write_text("You play $color.", encoding="utf-8")

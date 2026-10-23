@@ -23,4 +23,6 @@ export type ChaosGain = NonNullable<LlmTurn['chaos_gain']>
 // The Legal counterpart switch may be left out of a request: Standard rules ignore it, and the API defaults it to on.
 export type NewGame = Omit<Schemas['NewGame'], 'legal_counterpart'> & { legal_counterpart?: boolean }
 export type ModelInfo = Schemas['ModelInfo']
+/** A Prompt template of the Prompt library, with the LLM constraints it fits and those it is the Default of. */
+export type PromptTemplateInfo = Schemas['PromptTemplateInfo']
 export type Color = GameState['turn']

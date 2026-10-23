@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeftRight, Bot, ChevronDown, type LucideIcon, User } from 'lucide-react'
 import { type ReactElement, type ReactNode, useRef, useState } from 'react'
 import { modelsQuery } from '@/api/models'
+import { promptLibraryQuery } from '@/api/promptLibrary'
+import type { PromptTemplateInfo } from '@/api/types'
 import { settingIcon } from '@/components/game-card/settingIcons'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -26,13 +28,17 @@ import {
   type Rules,
   canThink,
   chaosAllowed,
+  chooseConstraints,
   chooseHumanColor,
   chooseMaxAttempts,
   chooseMode,
   chooseModel,
+  choosePromptTemplate,
+  chosenTemplate,
   chooseRules,
   enforced,
   everyLlmEnforced,
+  fittingTemplates,
   llmColors,
   other,
   setValue,
@@ -43,12 +49,16 @@ import {
   toggleLegalCounterpart,
   toggleThinking,
   value,
+  withDefaultTemplates,
 } from '@/settings/next-game'
+import { usePromptLab } from '@/settings/promptLab'
 
 const THINKING = 'Reasons before each move. Slower, likely stronger.'
 const ADVANCED = 'What the LLM sees, retries, forfeit'
 const LEGAL_COUNTERPART =
   'After a Chaos move, the LLM is asked once more for a legal move: recorded, never played. One more call per Chaos move.'
+const PROMPT =
+  'The System prompt and Turn template the LLM plays the whole game with. Listed: those that fit what the LLM is given.'
 const CUSTOMIZE = 'Off: both LLMs play under the same settings, a fair comparison. On: set each LLM separately.'
 /** The constraints under which an LLM can play an illegal move, by their names in the sheet. */
 const NOT_ENFORCED = `${LLM_CONSTRAINT_WORDS.free.name} or ${LLM_CONSTRAINT_WORDS.listed.name}`
@@ -117,13 +127,17 @@ export function NewGameSheet({ open, onOpenChange, initial, onStart }: NewGameSh
 // Mounted only while the sheet is open: each opening starts from `initial` and lists the models afresh, so new models
 // and config edits show up.
 function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStart'>) {
-  const [next, set] = useState(initial)
+  const promptLab = usePromptLab()
+  // Off, every side plays its Default, even after a game played with another template.
+  const [next, set] = useState(() => (promptLab ? initial : withDefaultTemplates(initial)))
   const [advanced, setAdvanced] = useState(false)
   const query = useQuery({ ...modelsQuery, refetchOnMount: 'always' })
   const models: Models = query.isError ? null : (query.data ?? null)
+  // Listed afresh at each opening too, so a template saved since shows up.
+  const libraryQuery = useQuery({ ...promptLibraryQuery, enabled: promptLab, refetchOnMount: 'always' })
   const isFaceoff = next.mode === 'llm_faceoff'
   const chaosOk = chaosAllowed(next)
-  const sides: SideProps = { next, models, set }
+  const sides: SideProps = { next, models, set, library: promptLab ? (libraryQuery.data ?? null) : undefined }
 
   return (
     <div className="flex flex-col gap-5 px-6 pt-4 pb-6">
@@ -205,7 +219,16 @@ function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStar
   )
 }
 
-type SideProps = { next: NextGame; models: Models; set: (next: NextGame) => void }
+/**
+ * library is the Prompt library while Prompt lab is on, null until it has loaded; undefined with Prompt lab off, when
+ * there is no Prompt picker.
+ */
+type SideProps = {
+  next: NextGame
+  models: Models
+  set: (next: NextGame) => void
+  library: PromptTemplateInfo[] | null | undefined
+}
 
 /** The model of the LLM in Play LLM, or of each side in a faceoff, with the swap button between them. */
 function Opponent({ next, models, set, error }: SideProps & { error: string | null }) {
@@ -283,11 +306,12 @@ function ModelSelect({
   )
 }
 
-/** What the LLM is given, Retry feedback, the forfeit limit and Customize per LLM. */
-function Advanced({ next, models, set }: SideProps) {
+/** What the LLM is given, its Prompt (Prompt lab), Retry feedback, the forfeit limit and Customize per LLM. */
+function Advanced({ next, models, set, library }: SideProps) {
   return (
     <>
-      {!next.custom && <Constraints next={next} set={set} color="white" />}
+      {!next.custom && <Constraints next={next} set={set} library={library} color="white" />}
+      {!next.custom && library !== undefined && <PromptPicker next={next} set={set} library={library} color="white" />}
       {!next.custom && !enforced(next, 'white') && <Feedback next={next} set={set} color="white" />}
       {!everyLlmEnforced(next) && (
         <Row label="Illegal moves before forfeit" description={maxAttemptsHint(next)}>
@@ -334,7 +358,8 @@ function Advanced({ next, models, set }: SideProps) {
                 disabled={!canThink(models, model)}
                 onChange={() => set(toggleThinking(next, models, color))}
               />
-              <Constraints next={next} set={set} color={color} />
+              <Constraints next={next} set={set} library={library} color={color} />
+              {library !== undefined && <PromptPicker next={next} set={set} library={library} color={color} />}
               {!enforced(next, color) && <Feedback next={next} set={set} color={color} />}
             </section>
           )
@@ -347,14 +372,14 @@ function Advanced({ next, models, set }: SideProps) {
 const perSide = (next: NextGame, color: Color, label: string) =>
   next.custom ? `${COLOR_NAMES[color]}: ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label
 
-function Constraints({ next, set, color }: Omit<SideProps, 'models'> & { color: Color }) {
+function Constraints({ next, set, library, color }: Omit<SideProps, 'models'> & { color: Color }) {
   return (
     <Choice<LlmConstraints>
       label="What the LLM is given"
       ariaLabel={perSide(next, color, 'What the LLM is given')}
       columns={2}
       value={value(next, color, 'llm_constraints')}
-      onChange={(choice) => set(setValue(next, color, 'llm_constraints', choice))}
+      onChange={(choice) => set(chooseConstraints(next, library ?? null, color, choice))}
       options={(Object.keys(LLM_CONSTRAINT_WORDS) as LlmConstraints[]).map((choice) => ({
         value: choice,
         name: LLM_CONSTRAINT_WORDS[choice].name,
@@ -366,7 +391,40 @@ function Constraints({ next, set, color }: Omit<SideProps, 'models'> & { color: 
   )
 }
 
-function Feedback({ next, set, color }: Omit<SideProps, 'models'> & { color: Color }) {
+/** A side's Prompt template (Prompt lab): the library's templates that fit its LLM constraints, the Default first. */
+function PromptPicker({
+  next,
+  set,
+  library,
+  color,
+}: Omit<SideProps, 'models' | 'library'> & { library: PromptTemplateInfo[] | null; color: Color }) {
+  const label = perSide(next, color, 'Prompt')
+  const templates = fittingTemplates(library ?? [], value(next, color, 'llm_constraints'))
+  const chosen = chosenTemplate(next, library ?? [], color)
+  const name = (template: PromptTemplateInfo) => template.name ?? template.id
+  return (
+    <Row label={label} description={PROMPT}>
+      <Select
+        value={chosen?.id ?? null}
+        onValueChange={(id) => library && id && set(choosePromptTemplate(next, library, color, id))}
+      >
+        <SelectTrigger aria-label={label} aria-description={PROMPT} className="min-w-[160px] bg-card">
+          {/* The chosen template's name; until the library has loaded, the Default's or the chosen ID. */}
+          <SelectValue>{() => (chosen ? name(chosen) : (value(next, color, 'prompt_template_id') ?? 'Default'))}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {templates.map((template) => (
+            <SelectItem key={template.id} value={template.id}>
+              {name(template)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Row>
+  )
+}
+
+function Feedback({ next, set, color }: Omit<SideProps, 'models' | 'library'> & { color: Color }) {
   return (
     <Choice<RetryFeedback>
       label="After an illegal move, tell the LLM"

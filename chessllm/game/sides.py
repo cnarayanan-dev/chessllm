@@ -53,9 +53,13 @@ class LlmSide:
     thinking: bool = False
     llm_constraints: LlmConstraints = "free"
     retry_feedback: RetryFeedback = "explained"
+    # The Prompt template a new game asked for, by its ID in the Prompt library; None for the Default of its LLM
+    # constraints, and left out of the API's output then, so a game on the Default reads as before the Prompt
+    # library. The API resolves it into prompt_template; game_start logs the template in full instead.
+    prompt_template_id: Annotated[str | None, Field(exclude_if=lambda template_id: template_id is None)] = None
     # The Prompt template it plays with; None for the Default of its LLM constraints, read when the game starts
-    # (llm_turn.prompt.side_template). Only the benchmark's commands give one so far: the API refuses it and leaves it
-    # out of its schema and output, which stay as they were until the Prompt library (#113).
+    # (llm_turn.prompt.side_template). The API takes it only by its ID, so it is left out of the API's schema and
+    # output; the benchmark's commands give it in full.
     prompt_template: Annotated[SkipJsonSchema[PromptTemplate | None], Field(exclude=True)] = None
     # Whether its turns share one conversation (game/llm_turn/conversation.py). Only the benchmark's commands set it
     # so far: the API refuses any but fresh and leaves it out of its schema and output until the page shows a
@@ -66,7 +70,7 @@ class LlmSide:
         """The side as game_start logs it, with the Prompt template it plays the game with in full, last, and its
         Turn memory unless fresh."""
         shape = asdict(self)
-        del shape["prompt_template"]
+        del shape["prompt_template_id"], shape["prompt_template"]
         if self.turn_memory == "fresh":
             del shape["turn_memory"]
         return shape | {"prompt_template": template.log_shape()}

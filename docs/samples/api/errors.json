@@ -67,6 +67,20 @@
     }
   },
   {
+    "request": "POST /api/games",
+    "body": {
+      "black": {
+        "player": "llm",
+        "prompt_template_id": "edited@00000000"
+      }
+    },
+    "status": 400,
+    "response": {
+      "detail": "The Prompt library has no Prompt template edited@00000000: the LLM side (black) can't play it",
+      "code": "unknown_prompt_template"
+    }
+  },
+  {
     "request": "POST /api/games/current/moves",
     "body": {
       "uci": "e2e5"

@@ -1,5 +1,5 @@
 // The game endpoints, typed with the generated API types.
-import type { GameState, NewGame } from '@/api/types'
+import type { GameState, NewGame, PromptTemplateInfo } from '@/api/types'
 
 /** A response other than 2xx, with the backend's detail as its message. */
 export class ApiError extends Error {
@@ -32,6 +32,10 @@ export const getGame = (signal?: AbortSignal) => api<GameState>('GET', '/api/gam
 
 /** The settings a new game takes by default: the New game sheet starts from them when there is no game. */
 export const getNewGameDefaults = (signal?: AbortSignal) => api<NewGame>('GET', '/api/games/defaults', undefined, signal)
+
+/** The Prompt library's templates that aren't hidden, the defaults first. */
+export const getPromptTemplates = (signal?: AbortSignal) =>
+  api<PromptTemplateInfo[]>('GET', '/api/prompt-templates', undefined, signal)
 
 /** Starts a game with these settings, or the backend's default settings with null. */
 export const startGame = (newGame: NewGame | null, signal?: AbortSignal) =>

@@ -60,6 +60,7 @@ def main() -> None:
             sampling_file=temp / "no-sampling.toml",
             move_quality_validation=temp / "no-validation.json",  # no validation has run: estimates are unvalidated
             evaluator=MaterialEvaluator(),
+            prompt_library_dir=temp / "prompt_library",  # the default Prompt templates only
         )
 
         @app.post("/e2e/script", include_in_schema=False)

@@ -70,6 +70,25 @@ test('the Prompt tab shows what was sent, and the Answer tab what came back', as
   await expect(panel(page)).toContainText('Legal')
 })
 
+test('with Prompt lab on, a side picked to play Described gets the piece list in every turn', async ({ page }) => {
+  await playLlm(page, ['e5']) // a game on the page, so the New game sheet doesn't open by itself
+  await page.getByRole('banner').getByRole('button', { name: 'Preferences' }).click()
+  await page.getByRole('switch', { name: 'Prompt lab' }).click()
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await sheet.getByRole('button', { name: 'Advanced settings' }).click()
+  await sheet.getByRole('combobox', { name: 'Prompt' }).click()
+  await page.getByRole('option', { name: 'Described', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Play as White' }).click()
+
+  await clickMove(page, 'e2e4')
+  await expect(badge(page)).toHaveText('1… e5')
+  await tab(page, 'Prompt').click()
+  await expect(panel(page)).toContainText('Your pieces (Black): King e8')
+})
+
 test("after a Forfeit, the last attempt's Reasoning, marked as forfeited, and every attempt one step away", async ({
   page,
 }) => {

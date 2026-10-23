@@ -3,9 +3,11 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { PromptTemplateInfo } from '@/api/types'
 import type { GameSettings, ModelInfo, NextGame, SideValues } from '@/settings/next-game'
 import { newGameRequest, nextGameFrom } from '@/settings/next-game'
 import { NewGameSheet } from '@/settings/NewGameSheet'
+import { setPromptLabOn } from '@/settings/promptLab'
 
 const qwen: ModelInfo = { name: 'qwen3.5:9b', thinking: true, sampling: { temperature: 0.6, top_k: 40 } }
 const gemma: ModelInfo = { name: 'gemma3:4b', thinking: false, sampling: {} }
@@ -52,8 +54,32 @@ function Page({ last, onStart }: { last: GameSettings; onStart: (next: NextGame)
   )
 }
 
+const FREE: PromptTemplateInfo['fits'] = ['free', 'blind_enforced']
+const LISTED: PromptTemplateInfo['fits'] = ['listed', 'listed_enforced']
+const template = (id: string, name: string | null, fits: PromptTemplateInfo['fits'], isDefault = false) => ({
+  id,
+  name,
+  system_prompt: 'You play $color.',
+  turn_template: fits === LISTED ? '$moves $legal_moves' : '$moves',
+  fits,
+  default_for: isDefault ? fits : [],
+})
+/** The Prompt library as GET /api/prompt-templates lists it: the defaults, then a saved template without a name. */
+const library: PromptTemplateInfo[] = [
+  template('default@1', 'Default', FREE, true),
+  template('described@1', 'Described', FREE),
+  template('default-listed@1', 'Default listed', LISTED, true),
+  template('described-listed@1', 'Described listed', LISTED),
+  template('terse@1', null, FREE),
+]
+
+/** Stubs the models' response; the Prompt library answers with `library`. */
 function stubModels(response: () => Response) {
-  const fetch = vi.fn().mockImplementation(() => Promise.resolve(response()))
+  const fetch = vi
+    .fn()
+    .mockImplementation((path: string) =>
+      Promise.resolve(path === '/api/prompt-templates' ? Response.json(library) : response()),
+    )
   vi.stubGlobal('fetch', fetch)
   return fetch
 }
@@ -95,6 +121,7 @@ async function openAdvanced(user: ReturnType<typeof userEvent.setup>) {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   stubModels(() => Response.json(models))
 })
 
@@ -501,6 +528,94 @@ describe('Advanced settings', () => {
       white: llm('qwen3.5:9b', { thinking: true, retry_feedback: 'bare' }),
       black: llm('gemma3:4b', { llm_constraints: 'listed_enforced' }),
     })
+  })
+})
+
+describe('Prompt lab', () => {
+  const described = { ...playLlm, black: { ...llm('qwen3.5:9b', { thinking: true }), prompt_template_id: 'described@1' } }
+  const picker = (name = 'Prompt') => screen.getByRole('combobox', { name })
+  const options = async () => (await screen.findAllByRole('option')).map((option) => option.textContent)
+
+  test('off: no Prompt picker, and a new game plays the defaults, even after a game with another template', async () => {
+    const fetch = stubModels(() => Response.json(models))
+    const { user, started } = await openSheet(described)
+    await openAdvanced(user)
+
+    expect(screen.queryByRole('combobox', { name: /prompt/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started().black).toEqual(llm('qwen3.5:9b', { thinking: true }))
+    expect(fetch).not.toHaveBeenCalledWith('/api/prompt-templates')
+  })
+
+  test("on: a Prompt picker listing the templates that fit what the LLM is given, Default selected", async () => {
+    setPromptLabOn(true)
+    const { user, started } = await openSheet()
+    await openAdvanced(user)
+
+    await waitFor(() => expect(picker()).toHaveTextContent('Default'))
+    expect(picker()).toHaveAttribute('aria-description', expect.stringMatching(/plays the whole game with/))
+    await user.click(picker())
+    expect(await options()).toEqual(['Default', 'Described', 'terse@1'])
+    await user.click(screen.getByRole('option', { name: 'Described' }))
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+    expect(started().black).toEqual({ ...llm('qwen3.5:9b', { thinking: true }), prompt_template_id: 'described@1' })
+  })
+
+  test("its meaning is the row's tooltip", async () => {
+    setPromptLabOn(true)
+    const { user } = await openSheet()
+    await openAdvanced(user)
+
+    await user.hover(screen.getByText('Prompt', { selector: 'div' }))
+    expect(await tooltip()).toHaveTextContent(picker().getAttribute('aria-description')!)
+  })
+
+  test('changing what the LLM is given moves a template that no longer fits back to the fitting default', async () => {
+    setPromptLabOn(true)
+    const { user, started } = await openSheet(described)
+    await openAdvanced(user)
+    await waitFor(() => expect(picker()).toHaveTextContent('Described'))
+
+    await user.click(radio(/^Board \+ legal moves/))
+
+    expect(picker()).toHaveTextContent('Default listed')
+    await user.click(picker())
+    expect(await options()).toEqual(['Default listed', 'Described listed'])
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started().black).toEqual(llm('qwen3.5:9b', { thinking: true, llm_constraints: 'listed' }))
+  })
+
+  test('a template that still fits stays chosen when what the LLM is given changes', async () => {
+    setPromptLabOn(true)
+    const { user, started } = await openSheet(described)
+    await openAdvanced(user)
+    await waitFor(() => expect(picker()).toHaveTextContent('Described'))
+
+    await user.click(radio(/^Kept legal, not told/))
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+    expect(started().black).toMatchObject({ llm_constraints: 'blind_enforced', prompt_template_id: 'described@1' })
+  })
+
+  test('Customize per LLM: a Prompt picker per side', async () => {
+    setPromptLabOn(true)
+    const { user, started } = await openSheet(faceoff)
+    await openAdvanced(user)
+    expect(screen.getAllByRole('combobox', { name: /prompt/i })).toHaveLength(1)
+
+    await user.click(screen.getByRole('switch', { name: 'Customize per LLM' }))
+    expect(picker('White: prompt')).toHaveTextContent('Default')
+    await user.click(picker('Black: prompt'))
+    await user.click(await screen.findByRole('option', { name: 'Described' }))
+    await user.click(screen.getByRole('button', { name: 'Start faceoff' }))
+
+    expect(started()).toMatchObject({
+      white: llm('qwen3.5:9b'),
+      black: { ...llm('qwen3.5:9b'), prompt_template_id: 'described@1' },
+    })
+    expect(started().white).not.toHaveProperty('prompt_template_id')
   })
 })
 

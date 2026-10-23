@@ -2,14 +2,23 @@
 import type { GameSettings, NewGame } from '@/api/types'
 import { COLOR_NAMES } from '@/game/wording'
 
+type Side = GameSettings['white']
+
+/** With Prompt lab off, an LLM side plays the Default of its LLM constraints, whatever it played before. */
+function withDefaultTemplate(side: Side): Side {
+  if (side.player !== 'llm') return side
+  const { prompt_template_id: _, ...rest } = side
+  return rest
+}
+
 /**
  * The rematch's new-game request: each side, the human or an LLM with its model and the settings it played under,
- * takes the other colour.
+ * its Prompt template too with Prompt lab on, takes the other colour.
  */
-export const rematchOf = (settings: GameSettings): NewGame => ({
+export const rematchOf = (settings: GameSettings, promptLab: boolean): NewGame => ({
   mode: settings.mode,
-  white: settings.black,
-  black: settings.white,
+  white: promptLab ? settings.black : withDefaultTemplate(settings.black),
+  black: promptLab ? settings.white : withDefaultTemplate(settings.white),
   rules: settings.rules ?? 'standard', // the API leaves out Standard rules
   max_attempts: settings.max_attempts,
   // Only a Chaos game has the Legal counterpart switch.

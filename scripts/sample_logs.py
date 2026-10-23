@@ -93,6 +93,7 @@ class Samples:
             sampling_file=self.sampling_file,
             clock=self.clock,
             evaluator=evaluator,
+            prompt_library_dir=self.work_dir / "prompt_library",  # the defaults only, whatever the project's holds
         )
         return TestClient(app)
 
@@ -260,15 +261,17 @@ def play(
 
 
 def other_responses(samples: Samples) -> None:
-    """The responses of the routes outside the sample games: the models, the new game's defaults, and requests the
-    API refuses."""
+    """The responses of the routes outside the sample games: the models, the Prompt library, the new game's defaults,
+    and requests the API refuses."""
     client = samples.client("other", {"black": ScriptedPlayer([])})
     samples.response("models", client.get("/api/models"))
+    samples.response("prompt-templates", client.get("/api/prompt-templates"))
     samples.response("games-defaults", client.get("/api/games/defaults"))
     samples.refused(client, "GET", "/api/games/current")  # no game started yet
     chaos_enforced = {"rules": "chaos", "black": {"player": "llm", "llm_constraints": "listed_enforced"}}
     samples.refused(client, "POST", "/api/games", chaos_enforced)
     samples.refused(client, "POST", "/api/games", {"max_attempts": 0})
+    samples.refused(client, "POST", "/api/games", {"black": {"player": "llm", "prompt_template_id": "edited@00000000"}})
     assert client.post("/api/games").status_code == 200  # a game with the defaults, to refuse moves in
     samples.refused(client, "POST", "/api/games/current/moves", {"uci": "e2e5"})
     samples.refused(client, "POST", "/api/games/current/moves", {"uci": "e2"})

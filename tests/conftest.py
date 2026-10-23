@@ -49,8 +49,9 @@ class BlockingPlayer(ScriptedPlayer):
 @pytest.fixture
 def scripted(tmp_path):
     """Makes an app playing against a ScriptedPlayer. Game logs go to tmp_path / "games" unless games_dir is given,
-    and there is no sampling config unless sampling_file is given. Its moves are timed by a FakeClock that stands
-    still, unless a clock is given, so every time is 0 and a state is the same however long the test takes."""
+    there is no sampling config unless sampling_file is given, and the Prompt library holds only the defaults unless
+    prompt_library_dir is given. Its moves are timed by a FakeClock that stands still, unless a clock is given, so
+    every time is 0 and a state is the same however long the test takes."""
 
     def make(
         replies: list[str | Exception], thinking: list[str] | None = None, **options
@@ -58,6 +59,7 @@ def scripted(tmp_path):
         player = ScriptedPlayer(replies, thinking)
         options.setdefault("games_dir", tmp_path / "games")
         options.setdefault("sampling_file", tmp_path / "no-sampling.toml")
+        options.setdefault("prompt_library_dir", tmp_path / "prompt_library")
         options.setdefault("clock", FakeClock())
         return TestClient(create_app(player.for_settings, **options)), player
 
@@ -75,6 +77,7 @@ def faceoff(tmp_path):
         players = {"white": ScriptedPlayer(white), "black": ScriptedPlayer(black)}
         options.setdefault("games_dir", tmp_path / "games")
         options.setdefault("sampling_file", tmp_path / "no-sampling.toml")
+        options.setdefault("prompt_library_dir", tmp_path / "prompt_library")
         options.setdefault("clock", FakeClock())
         client = TestClient(create_app(lambda settings, color: players[color].for_settings(settings, color), **options))
         response = client.post("/api/games", json=llm_faceoff(white_settings, black_settings))

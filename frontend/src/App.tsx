@@ -23,6 +23,7 @@ import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
 import { NewGameSheet } from '@/settings/NewGameSheet'
 import { newGameRequest, nextGameFrom, type Models, type NextGame } from '@/settings/next-game'
+import { usePromptLab } from '@/settings/promptLab'
 
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
@@ -43,6 +44,8 @@ export default function App() {
   const { game, error, history } = state
   const shown = shownPosition(state)
   const [sheetOpen, setSheetOpen] = useState(false)
+  // Off, a Rematch plays every LLM's default Prompt template, as a new game does.
+  const promptLab = usePromptLab()
   const openSheet = useCallback(() => setSheetOpen(true), [])
   // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
@@ -130,7 +133,7 @@ export default function App() {
           // The Turn panel follows the position on the board. (`shown` is set whenever `game` is.)
           game && shown ? (
             <>
-              <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
+              <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings, promptLab))} />
               <TurnPanel
                 game={game}
                 ply={shown.ply}

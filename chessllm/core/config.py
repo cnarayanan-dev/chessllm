@@ -19,6 +19,9 @@ SAMPLING_FILE = PACKAGE_DIR / "llm" / "sampling.toml"
 VALIDATION_FILE = PACKAGE_DIR / "analytics" / "move_quality_validation.json"
 # The system prompt templates, one per kind of LLM constraints.
 PROMPTS_DIR = PACKAGE_DIR / "game" / "prompts"
+# The Prompt library's saved Prompt templates, one JSON file each, kept in the repo so that their history is the
+# project's (ADR 0010).
+PROMPT_LIBRARY_DIR = PROJECT_ROOT / "prompt_library"
 STATIC_DIR = PACKAGE_DIR / "static"
 # The React app's build (frontend/, `pnpm build`), git-ignored. Its files are served under /static/dist/.
 DIST_DIR = STATIC_DIR / "dist"
@@ -51,3 +54,4 @@ class AppConfig:
     dist_dir: Path = DIST_DIR
     move_quality_validation: Path = VALIDATION_FILE
     static_dir: Path = STATIC_DIR
+    prompt_library_dir: Path = PROMPT_LIBRARY_DIR

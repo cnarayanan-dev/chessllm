@@ -8,7 +8,7 @@ const llm = aGame().settings.black as Extract<GameState['settings']['black'], { 
 test('Play LLM: the human takes the other colour, the LLM keeps its model and settings', () => {
   const game = aGame({ settings: { ...aGame().settings, black: { ...llm, thinking: true, llm_constraints: 'listed' } } })
 
-  expect(rematchOf(game.settings)).toEqual({
+  expect(rematchOf(game.settings, false)).toEqual({
     mode: 'play_llm',
     white: { player: 'llm', model: 'qwen3.5:9b', thinking: true, llm_constraints: 'listed', retry_feedback: 'explained' },
     black: { player: 'human' },
@@ -28,7 +28,7 @@ test('LLM faceoff: each LLM takes its whole side to the other colour', () => {
     },
   })
 
-  expect(rematchOf(game.settings)).toEqual({
+  expect(rematchOf(game.settings, false)).toEqual({
     mode: 'llm_faceoff',
     white: { player: 'llm', model: 'qwen3.5:9b', thinking: true, llm_constraints: 'listed_enforced', retry_feedback: 'bare' },
     black: { player: 'llm', model: 'gemma3:4b', thinking: false, llm_constraints: 'free', retry_feedback: 'hinted' },
@@ -38,14 +38,30 @@ test('LLM faceoff: each LLM takes its whole side to the other colour', () => {
 })
 
 test('the rules stay: a Chaos game is followed by a Chaos game', () => {
-  expect(rematchOf(chaosGame(1).settings).rules).toBe('chaos')
+  expect(rematchOf(chaosGame(1).settings, false).rules).toBe('chaos')
 })
 
 test('so does the Legal counterpart switch of a Chaos game', () => {
   const settings = { ...chaosGame(1).settings, legal_counterpart: false }
 
-  expect(rematchOf(settings)).toMatchObject({ rules: 'chaos', legal_counterpart: false })
-  expect(rematchOf(aGame().settings)).not.toHaveProperty('legal_counterpart')
+  expect(rematchOf(settings, false)).toMatchObject({ rules: 'chaos', legal_counterpart: false })
+  expect(rematchOf(aGame().settings, false)).not.toHaveProperty('legal_counterpart')
+})
+
+test("with Prompt lab on, each LLM keeps its Prompt template; off, every LLM plays its default one", () => {
+  const settings = {
+    ...aGame().settings,
+    mode: 'llm_faceoff' as const,
+    white: { ...llm, prompt_template_id: 'described@1' },
+    black: { ...llm, model: 'gemma3:4b' },
+  }
+
+  expect(rematchOf(settings, true)).toMatchObject({
+    white: { model: 'gemma3:4b' },
+    black: { model: 'qwen3.5:9b', prompt_template_id: 'described@1' },
+  })
+  expect(rematchOf(settings, true).white).not.toHaveProperty('prompt_template_id')
+  expect(rematchOf(settings, false).black).toEqual(llm)
 })
 
 test('the tooltip says which colour you will play, or that the LLMs swap', () => {

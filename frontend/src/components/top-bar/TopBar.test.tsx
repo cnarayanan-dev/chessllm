@@ -113,6 +113,34 @@ describe('Preferences', () => {
     expect(await tooltip()).toHaveTextContent(explanation)
   })
 
+  test('Prompt lab is off in a browser that never turned it on, and remembered once switched on', async () => {
+    const { unmount } = render(<TopBar onNewGame={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Preferences' }))
+    const lab = await screen.findByRole('switch', { name: 'Prompt lab' })
+    expect(lab).not.toBeChecked()
+
+    await userEvent.click(lab)
+
+    expect(lab).toBeChecked()
+    unmount()
+    render(<TopBar />)
+    await userEvent.click(screen.getByRole('button', { name: 'Preferences' }))
+    expect(await screen.findByRole('switch', { name: 'Prompt lab' })).toBeChecked()
+  })
+
+  test("Prompt lab's meaning is a tooltip on hover and its aria-description", async () => {
+    render(<TopBar onNewGame={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Preferences' }))
+    const panel = await screen.findByRole('dialog', { name: 'Preferences' })
+    const meaning = within(panel).getByRole('switch', { name: 'Prompt lab' }).getAttribute('aria-description')
+
+    expect(meaning).toMatch(/Prompt template/)
+    expect(panel).not.toHaveTextContent(meaning!)
+    await userEvent.hover(within(panel).getByText('Prompt lab'))
+    // Move sound's tooltip may show too: the panel opens with the focus on its switch.
+    expect((await screen.findByText(meaning!)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
   test("with the keyboard alone, Move sound's explanation shows once its switch has focus", async () => {
     render(<TopBar onNewGame={() => {}} />)
     for (const _ of ['ChessLLM', 'Analytics', 'New game', 'Preferences']) await userEvent.tab()

@@ -493,6 +493,32 @@ describe('Rematch', () => {
     expect(within(sheet).getByRole('combobox', { name: 'White model' })).toHaveTextContent('qwen3.5:9b')
     expect(within(sheet).getByRole('combobox', { name: 'Black model' })).toHaveTextContent('gemma3:4b')
   })
+
+  test.each([
+    [true, { prompt_template_id: 'described@1' }],
+    [false, {}],
+  ])('with Prompt lab on (%s) each LLM keeps its Prompt template, else plays its default one', async (on, kept) => {
+    localStorage.setItem('chessllm.promptLab', on ? 'on' : 'off')
+    const llm = { ...afterE4().settings.black, prompt_template_id: 'described@1' }
+    const over = afterE5({ status: 'over', result: '1-0', end_reason: 'checkmate', human_legal_moves: [] })
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json({ ...over, settings: { ...over.settings, black: llm } }))
+      .on('POST /api/games', Response.json(llmPlaysWhite({ game_id: 'game-2' })))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    renderApp()
+
+    await userEvent.click(await within(await screen.findByRole('region', { name: 'Game' })).findByRole('button', { name: 'Rematch' }))
+
+    await llmMoving('white')
+    expect(backend.sentTo('POST /api/games')[0].body).toEqual({
+      mode: 'play_llm',
+      white: { ...afterE4().settings.black, ...kept },
+      black: { player: 'human' },
+      rules: 'standard',
+      max_attempts: 5,
+    })
+    localStorage.clear()
+  })
 })
 
 describe('the New game sheet', () => {

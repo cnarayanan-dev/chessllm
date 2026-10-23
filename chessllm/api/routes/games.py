@@ -1,14 +1,16 @@
 """The current game: starting one, its state, a human's move and an LLM turn."""
 
 import logging
+from dataclasses import replace
 
 from fastapi import APIRouter, BackgroundTasks
 
 from chessllm.analytics.analysis import analyse_game
-from chessllm.api.deps import ConfigDep, CurrentGame, EnginesDep, GameStoreDep
+from chessllm.api.deps import ConfigDep, CurrentGame, EnginesDep, GameStoreDep, PromptLibraryDep
 from chessllm.api.errors import error_responses
-from chessllm.api.schemas.games import HumanMove, NewGame
+from chessllm.api.schemas.games import HumanMove, NewGame, SideIn
 from chessllm.api.state import Engines
+from chessllm.core.types import Color
 from chessllm.exceptions import (
     InvalidSamplingConfig,
     InvalidSettings,
@@ -16,6 +18,7 @@ from chessllm.exceptions import (
     RefusedLlmTurn,
     RejectedHumanMove,
 )
+from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.records import GameState
 from chessllm.game.session import GameSession
 from chessllm.game.settings import Settings
@@ -35,14 +38,14 @@ def new_game_defaults() -> NewGame:
 
 @router.post("/api/games", responses=error_responses(InvalidSettings, InvalidSamplingConfig))
 def start_game(
-    config: ConfigDep, engines: EnginesDep, games: GameStoreDep, new_game: NewGame | None = None
+    config: ConfigDep,
+    engines: EnginesDep,
+    games: GameStoreDep,
+    library: PromptLibraryDep,
+    new_game: NewGame | None = None,
 ) -> GameState:
     new_game = new_game or NewGame()
     for color, side in (("white", new_game.white), ("black", new_game.black)):
-        # Hidden from the schema until the Prompt library (#113) lets a new game choose one by its ID.
-        if isinstance(side, LlmSide) and side.prompt_template is not None:
-            refused = f"A new game takes no Prompt template yet: the LLM side ({color}) plays its default one"
-            raise InvalidSettings(refused, code="prompt_template_not_accepted")
         # Hidden from the schema until the page shows a conversation's whole Prompt (#108): it would show only what
         # each attempt added (ADR 0009).
         if isinstance(side, LlmSide) and side.turn_memory != "fresh":
@@ -53,8 +56,8 @@ def start_game(
             raise InvalidSettings(refused, code="turn_memory_not_accepted")
     settings = Settings(
         new_game.mode,
-        new_game.white,
-        new_game.black,
+        with_template(new_game.white, "white", library),
+        with_template(new_game.black, "black", library),
         sampling=load_sampling(config.sampling_file),
         rules=new_game.rules,
         max_attempts=new_game.max_attempts,
@@ -66,6 +69,23 @@ def start_game(
     session = GameSession(players, settings, log, clock=engines.clock, evaluator=engines.evaluator)
     games.start(session)
     return session.state()
+
+
+def with_template(side: SideIn, color: Color, library: PromptLibrary) -> SideIn:
+    """An LLM side with the Prompt template its ID names in the library, or with none for the Default of its LLM
+    constraints. Raises InvalidSettings if the library has no such template, or if the side gives one's text: the
+    API takes a template by its ID only, so a game always plays one from the library."""
+    if not isinstance(side, LlmSide):
+        return side
+    if side.prompt_template is not None:
+        refused = (
+            "A new game takes a Prompt template by its ID in the Prompt library (prompt_template_id), not its text: "
+            f"the LLM side ({color})"
+        )
+        raise InvalidSettings(refused, code="prompt_template_not_accepted")
+    if side.prompt_template_id is None:
+        return side
+    return replace(side, prompt_template=library.resolve(side.prompt_template_id, color))
 
 
 @router.get("/api/games/current", responses=error_responses(NoGameStarted))

@@ -21,6 +21,11 @@ def test_every_api_endpoint_describes_its_response_with_a_named_model():
             "items": {"$ref": "#/components/schemas/ModelInfo"},
             "title": "Response List Models Api Models Get",
         },
+        ("GET", "/api/prompt-templates"): {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/PromptTemplateInfo"},
+            "title": "Response List Prompt Templates Api Prompt Templates Get",
+        },
         ("GET", "/api/games/defaults"): {"$ref": "#/components/schemas/NewGame"},
         ("POST", "/api/games"): {"$ref": "#/components/schemas/GameState"},
         ("GET", "/api/games/current"): {"$ref": "#/components/schemas/GameState"},

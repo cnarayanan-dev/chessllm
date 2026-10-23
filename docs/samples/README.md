@@ -19,7 +19,8 @@ running the command twice changes nothing.
 
 - `game-logs/`: each game's JSON Lines log and PGN, as the game wrote them.
 - `api/`: the API's responses, formatted for reading: the game state after each request of the Play LLM and Chaos
-  games (numbered in order), the models (`models.json`, with one model Ollama can't show), the new game's defaults,
+  games (numbered in order), the models (`models.json`, with one model Ollama can't show), the Prompt library's defaults
+  (`prompt-templates.json`), the new game's defaults,
   the leaderboard of these four games, and the requests the API refuses with their status (`errors.json`). The Anchor
   match and the Thinking budget game are played as the benchmark's commands play them, which no route serves, so they
   have logs only.
