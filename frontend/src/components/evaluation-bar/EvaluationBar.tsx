@@ -1,5 +1,6 @@
 // The Evaluation bar, left of the board in an LLM faceoff: Black's dark from the top, White's light from the bottom,
 // filled by White's win chance, the number at the leading side's end. Its details and the engine are in its tooltip.
+// Outlined while it shows a Legal counterpart's position, never played.
 import type { ReactNode } from 'react'
 import type { Bar } from '@/game/evaluation'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -24,6 +25,7 @@ function EvaluationBar({ bar }: { bar: Bar }) {
           <div
             className="evaluation-bar"
             data-state={bar.state}
+            data-preview={bar.preview || undefined}
             tabIndex={0}
             role="meter"
             aria-label="Evaluation"

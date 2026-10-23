@@ -1,5 +1,5 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
-import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, MessageSquareText, Scale } from 'lucide-react'
+import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, Eye, MessageSquareText, Scale, Undo2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import type { Attempt, GameState, LlmTurn, PromptMessage } from '@/api/types'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
@@ -26,6 +26,10 @@ type TurnPanelProps = {
   ply: number
   /** Whether the board shows the game as it is, rather than a past position in the move history. */
   live: boolean
+  /** Whether the board shows the viewed Chaos move's Legal counterpart instead of the Chaos move. */
+  previewing?: boolean
+  /** Shows the Legal counterpart on the board, or the Chaos move again: its move's button. */
+  onPreview?: () => void
 }
 
 /**
@@ -103,7 +107,7 @@ const quiet = 'text-sm text-muted-foreground'
 const mono = 'font-mono text-xs leading-relaxed whitespace-pre-wrap break-words'
 const prose = 'leading-relaxed whitespace-pre-wrap text-card-foreground'
 
-export function TurnPanel({ game, ply, live }: TurnPanelProps) {
+export function TurnPanel({ game, ply, live, previewing = false, onPreview }: TurnPanelProps) {
   const turn = turnShown(game, ply, live)
   const move = turn && moveName(game, turn)
   const gain = turn ? shownGain(game, turn) : undefined
@@ -136,7 +140,13 @@ export function TurnPanel({ game, ply, live }: TurnPanelProps) {
           <p className={quiet}>{faceoff(game) ? 'No LLM has moved yet.' : 'The LLM has not moved yet.'}</p>
         )}
         {turn?.legal_counterpart && turn.ply === ply && (
-          <Counterpart counterpart={turn.legal_counterpart} number={moveNumber(turn)} />
+          <Counterpart
+            counterpart={turn.legal_counterpart}
+            number={moveNumber(turn)}
+            chaosMove={move!}
+            previewing={previewing}
+            onPreview={onPreview}
+          />
         )}
         {turn?.ply === ply && gain && <ChaosGainLine gain={gain} />}
       </CardContent>
@@ -149,11 +159,21 @@ type LegalCounterpart = NonNullable<LlmTurn['legal_counterpart']>
 const COUNTERPART_MEANING =
   'The legal move the LLM gave when asked once more in the same position, after its Chaos move. Never played.'
 
+type CounterpartProps = {
+  counterpart: LegalCounterpart
+  number: string
+  /** The Chaos move as the move list numbers it, e.g. "1… Bb4". */
+  chaosMove: string
+  previewing: boolean
+  onPreview?: () => void
+}
+
 /**
- * The Chaos move's Legal counterpart, at the bottom of the panel: its name, then its move on a line of its own, or
- * "none" when it failed, why in its tooltip. No time is shown: it is none of the turn's.
+ * The Chaos move's Legal counterpart, at the bottom of the panel: its name, then its move on a line of its own, a
+ * toggle that shows the position it would have left on the board, or "none" when it failed, why in its tooltip. No
+ * time is shown: it is none of the turn's.
  */
-function Counterpart({ counterpart, number }: { counterpart: LegalCounterpart; number: string }) {
+function Counterpart({ counterpart, number, chaosMove, previewing, onPreview }: CounterpartProps) {
   const why = counterpart.attempt.error ?? 'Its answer was no legal move.'
   return (
     <div role="group" aria-label="Legal counterpart" className="mt-4 flex flex-col gap-1 border-t pt-3">
@@ -175,11 +195,44 @@ function Counterpart({ counterpart, number }: { counterpart: LegalCounterpart; n
           <TooltipContent side="bottom">{why}</TooltipContent>
         </Tooltip>
       ) : (
-        <span data-testid="counterpart-move" className="w-fit font-medium">
-          {`${number} ${counterpart.san}`}
-        </span>
+        <CounterpartButton
+          name={`${number} ${counterpart.san}`}
+          chaosMove={chaosMove}
+          previewing={previewing}
+          onPreview={onPreview}
+        />
       )}
     </div>
+  )
+}
+
+type CounterpartButtonProps = { name: string; chaosMove: string; previewing: boolean; onPreview?: () => void }
+
+/** The counterpart's move as a toggle, pressed while the board shows the position it would have left. */
+function CounterpartButton({ name, chaosMove, previewing, onPreview }: CounterpartButtonProps) {
+  const meaning = previewing
+    ? `Back to ${chaosMove} on the board.`
+    : `Show the position ${name} would have left on the board. It was never played.`
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={previewing ? 'default' : 'secondary'}
+            size="sm"
+            aria-pressed={previewing}
+            aria-description={meaning}
+            data-testid="counterpart-move"
+            onClick={onPreview}
+          />
+        }
+        className="w-fit tabular-nums"
+      >
+        {previewing ? <Undo2 aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        {name}
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{meaning}</TooltipContent>
+    </Tooltip>
   )
 }
 

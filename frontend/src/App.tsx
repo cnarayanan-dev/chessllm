@@ -15,8 +15,8 @@ import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { chaosShown } from '@/game/chaos'
-import { evaluationBar } from '@/game/evaluation'
+import { chaosShown, counterpartAt } from '@/game/chaos'
+import { evaluationBar, previewBar } from '@/game/evaluation'
 import { boardInput, orientation, shownPosition } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
@@ -63,6 +63,23 @@ export default function App() {
   // the ply is, so the board doesn't draw its arrows again at every render.
   const shownPly = shown?.move ?? null
   const chaos = useMemo(() => chaosShown(shownPly), [shownPly])
+  // The Legal counterpart of the Chaos move viewed, which the board can show instead of it: a preview, dropped as
+  // soon as another ply (or another game) is viewed, so it never shows for the wrong move. The game goes on under it.
+  const viewed = game && shown ? `${game.game_id}:${shown.ply}` : null
+  const counterpart = game && shown ? counterpartAt(game, shown.ply) : null
+  const [previewed, setPreviewed] = useState<string | null>(null)
+  if (previewed !== null && previewed !== viewed) setPreviewed(null)
+  const previewing = counterpart !== null && previewed === viewed
+  const togglePreview = useCallback(() => setPreviewed((on) => (on === null ? viewed : null)), [viewed])
+  // While previewing, the bar shows the counterpart's Evaluation, outlined, once the backend sends one.
+  const bar =
+    game && shown ? (previewing && previewBar(game, shown.ply, counterpart!)) || evaluationBar(game, shown.ply) : null
+  // The counterpart's move, drawn dashed and grey on the Chaos move's position. Kept while the move is, as the arrows.
+  const ghostMove = counterpart?.move ?? null
+  const ghostArrows = useMemo(
+    (): readonly [string, string][] => (ghostMove ? [[ghostMove.slice(0, 2), ghostMove.slice(2, 4)]] : NO_ARROWS),
+    [ghostMove],
+  )
   // The player strips, by the live game, with the captures, spawns and +N of the position shown, and each side's Time
   // used, of the live game too.
   const clock = state.clock
@@ -114,7 +131,13 @@ export default function App() {
           game && shown ? (
             <>
               <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings))} />
-              <TurnPanel game={game} ply={shown.ply} live={!history} />
+              <TurnPanel
+                game={game}
+                ply={shown.ply}
+                live={!history}
+                previewing={previewing}
+                onPreview={togglePreview}
+              />
             </>
           ) : (
             startError !== null && (
@@ -129,19 +152,21 @@ export default function App() {
           game && shown ? (
             <>
               {strip(game, orientation(game) === 'white' ? 'black' : 'white')}
-              <BesideBoard bar={evaluationBar(game, shown.ply)}>
+              <BesideBoard bar={bar}>
                 <Board
-                  fen={shown.fen}
+                  // A preview shows the counterpart's position as if played from the Chaos move's position before.
+                  fen={previewing ? counterpart!.fen_after : shown.fen}
                   orientation={orientation(game)}
-                  lastMove={shown.lastMove}
-                  animateFrom={shown.animateFrom}
-                  check={shown.check}
+                  lastMove={previewing ? counterpart!.move : shown.lastMove}
+                  animateFrom={previewing ? (shown.move?.fen_before ?? null) : shown.animateFrom}
+                  check={!previewing && shown.check}
                   // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
-                  // position the move left. Locked while the move history shows the past.
-                  input={boardInput(state)}
+                  // position the move left. Locked while the move history shows the past, and during a preview.
+                  input={previewing ? null : boardInput(state)}
                   legalMoves={legalMoves}
-                  arrows={chaos?.arrows ?? NO_ARROWS}
-                  spawn={chaos?.spawn ?? null}
+                  arrows={previewing ? NO_ARROWS : (chaos?.arrows ?? NO_ARROWS)}
+                  spawn={previewing ? null : (chaos?.spawn ?? null)}
+                  ghostArrows={previewing ? NO_ARROWS : ghostArrows}
                   onMove={humanMove}
                 >
                   {/* The live turn's flashes, kept off a past position. */}

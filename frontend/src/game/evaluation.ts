@@ -3,6 +3,7 @@
   (ADR 0001), it only turns each ply's Evaluation, from White's point of view, into the bar's fill and number.
 */
 import type { Color, Evaluation, GameState } from '@/api/types'
+import type { CounterpartMove } from '@/game/chaos'
 import { faceoff, resultText } from '@/game/wording'
 
 const MINUS = '−'
@@ -20,6 +21,8 @@ export type Bar = {
   /** The tooltip: its title and its detail. */
   title: string
   detail: string
+  /** Whether it shows a position never played, a Legal counterpart's: the bar is outlined. */
+  preview?: boolean
 }
 
 const clamp = (pawns: number) => Math.max(-CAP, Math.min(CAP, pawns))
@@ -148,5 +151,37 @@ export function evaluationBar(game: GameState, ply: number): Bar | null {
     leader: leaderOf(share),
     title: 'Evaluating…',
     detail: `No Evaluation of this position yet. Until then, the last one: ${heldText}. ${engineName(engine)}`,
+  }
+}
+
+/**
+ * The bar for the position the Chaos move at ply `ply` would have left had its Legal counterpart been played,
+ * outlined as a preview, whether or not that position has an Evaluation; null where there is no bar.
+ */
+export function previewBar(game: GameState, ply: number, counterpart: CounterpartMove): Bar | null {
+  const engine = game.evaluator
+  const evaluation = counterpart.evaluation
+  if (!faceoff(game) || !engine) return null
+  const name = `${Math.ceil(ply / 2)}${game.plies[ply - 1].color === 'white' ? '.' : '…'} ${counterpart.san}`
+  const position = `The position after the Legal counterpart ${name}, never played.`
+  const judged = judgedOrNull(evaluation)
+  if (judged) {
+    const text = evaluationText(judged)
+    const share = whiteShare(judged)
+    const detail = `${position} White's point of view · ${engineName(engine)}`
+    const title = `Evaluation ${text}`
+    return { state: 'judged', share, label: text, text, leader: leaderOf(share), title, detail, preview: true }
+  }
+  // No Evaluation at all: the counterpart's move would have ended the game, so its position isn't judged.
+  const why = evaluation?.unjudged ? `It isn't judged: ${evaluation.unjudged}.` : "It isn't judged."
+  return {
+    state: 'unjudged',
+    share: 50,
+    label: '?',
+    text: 'Not judged',
+    leader: 'white',
+    title: 'Not judged',
+    detail: `${position} ${why}`,
+    preview: true,
   }
 }

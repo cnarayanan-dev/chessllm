@@ -20,6 +20,7 @@ async function expectPiece(page: Page, name: string, piece: string) {
   await expect(pieceOn(page, name)).toHaveAttribute('data-piece', piece)
 }
 const arrows = (page: Page) => page.locator('.chessboard .arrow.chaos-arrow')
+const ghostArrows = (page: Page) => page.locator('.chessboard .arrow.ghost-arrow')
 const spawnMarker = (page: Page) => page.locator('.chessboard .marker.spawn')
 const moves = (page: Page) => page.getByTestId('moves')
 const lastMove = (page: Page) => moves(page).locator('.ply.last')
@@ -76,6 +77,19 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expect(lastMove(page)).toHaveClass(/chaos/)
   await expect(page.locator('.center-flash')).toHaveCount(0)
   await expect(page.getByRole('group', { name: 'Legal counterpart' }).getByTestId('counterpart-move')).toHaveText('1… a6')
+  // Its move, drawn dashed and grey; clicking it shows the position it would have left, and clicking again goes back.
+  await expect(ghostArrows(page)).toHaveAttribute('data-arrow', 'a7a6')
+  const counterpart = page.getByRole('button', { name: '1… a6' })
+  await counterpart.click()
+  await expect(counterpart).toHaveAttribute('aria-pressed', 'true')
+  await expectPiece(page, 'a6', 'bp')
+  await expectPiece(page, 'f8', 'bb')
+  await expect(arrows(page)).toHaveCount(0)
+  await expect(ghostArrows(page)).toHaveCount(0)
+  await counterpart.click()
+  await expect(counterpart).toHaveAttribute('aria-pressed', 'false')
+  await expectPiece(page, 'b4', 'bb')
+  await expect(ghostArrows(page)).toHaveCount(1)
 
   // The human's move clears the arrow.
   await move(page, 'c2c3', 'Qg5')

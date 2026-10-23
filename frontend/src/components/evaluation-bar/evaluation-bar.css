@@ -64,6 +64,11 @@
 .evaluation-bar[data-state="unjudged"] .evaluation-bar-white { background: var(--muted); }
 .evaluation-bar[data-state="unjudged"] .evaluation-bar-label { font-size: 12px; color: var(--foreground); }
 
+/* A preview: the Legal counterpart's position, never played, outlined apart from the page. */
+.evaluation-bar[data-preview] {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--muted-foreground);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .evaluation-bar-white, .evaluation-bar-label { transition: none; }
   .evaluation-bar[data-state="evaluating"] .evaluation-bar-label { animation: none; opacity: .5; }

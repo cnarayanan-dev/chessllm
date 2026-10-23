@@ -3,7 +3,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from '@/App'
-import type { GameState } from '@/api/types'
+import type { Evaluation, GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { fakeBackend, later } from '@/test/fakeBackend'
 import { theBoard } from '@/test/fakeChessboard'
@@ -985,6 +985,191 @@ describe('Chaos rules', () => {
     const result = await screen.findByTestId('result')
     expect(within(result).getByText('White wins by King capture')).toBeInTheDocument()
     expect(result).toHaveAttribute('aria-description', 'qwen3.5:9b left its king hanging')
+  })
+})
+
+describe("previewing a Chaos move's Legal counterpart", () => {
+  const AFTER_BB4 = 'rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR'
+  const AFTER_COUNTERPART = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'
+  /**
+   * 1. e4 Bb4, a Chaos move with e5 as its Legal counterpart, after `count` plies, White to move after two; with
+   * `evaluation`, the counterpart's position judged so.
+   */
+  function withCounterpart(count = 2, overrides: Partial<GameState> = {}, evaluation?: Evaluation): GameState {
+    const game = chaosGame(count, overrides)
+    const turns = game.llm_turns.map((turn) =>
+      turn.ply === 2
+        ? {
+            ...turn,
+            legal_counterpart: {
+              move: 'e7e5',
+              san: 'e5',
+              fen_after: `${AFTER_COUNTERPART} w KQkq - 0 2`,
+              attempt: aTurn('e5').attempts[0],
+              ...(evaluation && { evaluation }),
+            },
+          }
+        : turn,
+    )
+    return { ...game, llm_turns: turns, llm_turn: turns.at(-1) ?? null }
+  }
+  const counterpartButton = () => within(turnPanel()).getByRole('button', { name: /1… e5/ })
+  /** The Chaos rules game above as an LLM faceoff, judged by Stockfish. */
+  const aChaosFaceoff = (): Partial<GameState> => {
+    const { settings } = aGame()
+    return { settings: { ...settings, rules: 'chaos', mode: 'llm_faceoff', white: settings.black }, evaluator: STOCKFISH }
+  }
+
+  test("clicking the counterpart's move shows the position it would have left, pressed; clicking again goes back", async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(withCounterpart()))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(board.position).toBe(AFTER_BB4))
+    expect(counterpartButton()).toHaveAttribute('aria-pressed', 'false')
+
+    await userEvent.click(counterpartButton())
+
+    await waitFor(() => expect(board.position).toBe(AFTER_COUNTERPART))
+    expect(counterpartButton()).toHaveAttribute('aria-pressed', 'true')
+    expect(board.marked('last-move')).toEqual(['e5', 'e7'])
+    expect(board.arrows).toEqual([])
+    expect(board.input).toBeNull()
+
+    await userEvent.click(counterpartButton())
+
+    await waitFor(() => expect(board.position).toBe(AFTER_BB4))
+    expect(counterpartButton()).toHaveAttribute('aria-pressed', 'false')
+    expect(board.marked('last-move')).toEqual(['b4', 'f8'])
+    await waitFor(() => expect(board.input?.color).toBe('w'))
+  })
+
+  test('viewing another ply drops the preview, and coming back shows the Chaos move', async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(withCounterpart(3)))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await userEvent.keyboard('{ArrowLeft}') // 1… Bb4
+    await userEvent.click(counterpartButton())
+    await waitFor(() => expect(board.position).toBe(AFTER_COUNTERPART))
+
+    await userEvent.keyboard('{ArrowRight}') // 2. c3, live
+
+    await waitFor(() => expect(board.position).toBe('rnbqk1nr/pppppppp/8/8/1b2P3/2P5/PP1P1PPP/RNBQKBNR'))
+    await userEvent.keyboard('{ArrowLeft}')
+
+    await waitFor(() => expect(board.position).toBe(AFTER_BB4))
+    expect(counterpartButton()).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  test('in a faceoff, the next move landing while previewing the live Chaos move drops the preview', async () => {
+    const turn = later()
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(withCounterpart(2, aChaosFaceoff())))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+    renderApp()
+    const board = await waitFor(theBoard)
+    await userEvent.click(await within(turnPanel()).findByRole('button', { name: /1… e5/ }))
+    await waitFor(() => expect(board.position).toBe(AFTER_COUNTERPART))
+
+    await act(async () => turn.resolve(Response.json(withCounterpart(3, aChaosFaceoff()))))
+
+    await waitFor(() => expect(board.position).toBe('rnbqk1nr/pppppppp/8/8/1b2P3/2P5/PP1P1PPP/RNBQKBNR'))
+    await userEvent.keyboard('{ArrowLeft}')
+    await waitFor(() => expect(board.position).toBe(AFTER_BB4))
+    expect(counterpartButton()).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  test("a move landing while previewing a Chaos move in the history keeps the preview", async () => {
+    const turn = later()
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(withCounterpart(3, aChaosFaceoff())))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+    renderApp()
+    const board = await waitFor(theBoard)
+    await userEvent.keyboard('{ArrowLeft}') // 1… Bb4
+    await userEvent.click(await within(turnPanel()).findByRole('button', { name: /1… e5/ }))
+    await waitFor(() => expect(board.position).toBe(AFTER_COUNTERPART))
+
+    await act(async () => turn.resolve(Response.json(withCounterpart(4, aChaosFaceoff()))))
+
+    expect(await within(screen.getByTestId('moves')).findByRole('button', { name: 'Qg5' })).toBeInTheDocument()
+    expect(board.position).toBe(AFTER_COUNTERPART)
+    expect(counterpartButton()).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test("the counterpart's move is drawn as a dashed grey arrow on the Chaos move, not while previewing it", async () => {
+    fakeBackend().on('GET /api/games/current', Response.json(withCounterpart(3)))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(board.arrows).toEqual([]))
+
+    await userEvent.keyboard('{ArrowLeft}') // 1… Bb4
+
+    await waitFor(() =>
+      expect(board.arrows).toEqual([
+        { class: 'chaos-arrow', from: 'f8', to: 'b4' },
+        { class: 'ghost-arrow', from: 'e7', to: 'e5' },
+      ]),
+    )
+
+    await userEvent.click(counterpartButton())
+
+    await waitFor(() => expect(board.position).toBe(AFTER_COUNTERPART))
+    expect(board.arrows).toEqual([])
+    expect(board.marked('spawn')).toEqual([])
+  })
+
+  test("while previewing, the Evaluation bar shows the counterpart's Evaluation, outlined as never played", async () => {
+    const faceoff = aChaosFaceoff()
+    const game = withCounterpart(2, faceoff, judged(0.4))
+    game.plies = game.plies.map((ply, index) => ({ ...ply, evaluation: judged(index === 0 ? 0.3 : 1.5) }))
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(game))
+      .on('POST /api/games/current/llm-turn', new Promise<Response>(() => {}))
+    renderApp()
+    const bar = () => screen.getByRole('meter', { name: 'Evaluation' })
+    await waitFor(() => expect(bar()).toHaveAttribute('aria-valuetext', '+1.5'))
+    expect(bar()).not.toHaveAttribute('data-preview')
+
+    await userEvent.click(counterpartButton())
+
+    await waitFor(() => expect(bar()).toHaveAttribute('aria-valuetext', '+0.4'))
+    expect(bar()).toHaveAttribute('data-preview')
+    expect(bar()).toHaveAttribute('aria-description', expect.stringContaining('never played'))
+
+    await userEvent.click(counterpartButton())
+
+    expect(bar()).toHaveAttribute('aria-valuetext', '+1.5')
+    expect(bar()).not.toHaveAttribute('data-preview')
+  })
+
+  test("a counterpart's position with no Evaluation still shows outlined, as not judged, never the Chaos move's", async () => {
+    const game = withCounterpart(2, aChaosFaceoff())
+    game.plies = game.plies.map((ply, index) => ({ ...ply, evaluation: judged(index === 0 ? 0.3 : 1.5) }))
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(game))
+      .on('POST /api/games/current/llm-turn', new Promise<Response>(() => {}))
+    renderApp()
+    const bar = () => screen.getByRole('meter', { name: 'Evaluation' })
+    await waitFor(() => expect(bar()).toHaveAttribute('aria-valuetext', '+1.5'))
+
+    await userEvent.click(counterpartButton())
+
+    await waitFor(() => expect(bar()).toHaveAttribute('data-preview'))
+    expect(bar()).not.toHaveAttribute('aria-valuetext', '+1.5')
+    expect(bar()).toHaveAttribute('aria-description', expect.stringContaining("isn't judged"))
+  })
+
+  test('a failed Legal counterpart has nothing to preview and no arrow', async () => {
+    const game = withCounterpart()
+    const failed = { move: null, san: null, fen_after: null, attempt: aTurn('e5').attempts[0] }
+    const turns = game.llm_turns.map((turn) => (turn.ply === 2 ? { ...turn, legal_counterpart: failed } : turn))
+    fakeBackend().on('GET /api/games/current', Response.json({ ...game, llm_turns: turns, llm_turn: turns.at(-1) }))
+    renderApp()
+    const board = await waitFor(theBoard)
+    await waitFor(() => expect(board.arrows).toEqual([{ class: 'chaos-arrow', from: 'f8', to: 'b4' }]))
+
+    expect(within(turnPanel()).getByTestId('counterpart-move')).toHaveTextContent('none')
+    expect(within(turnPanel()).queryByRole('button', { name: /e5/ })).not.toBeInTheDocument()
   })
 })
 

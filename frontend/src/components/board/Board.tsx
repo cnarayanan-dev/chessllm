@@ -52,6 +52,8 @@ type BoardProps = {
   arrows?: readonly (readonly [string, string])[]
   /** The square a Spawn popped in on, marked in purple. */
   spawn?: string | null
+  /** Dashed grey arrows drawn once the position is set, from→to: a Legal counterpart's move, never played. */
+  ghostArrows?: readonly (readonly [string, string])[]
   /** Laid over the board, such as the board flashes. */
   children?: ReactNode
 }
@@ -66,6 +68,7 @@ const MARKER = {
 } satisfies Record<string, MarkerType>
 
 const CHAOS_ARROW = { class: 'chaos-arrow' }
+const GHOST_ARROW = { class: 'ghost-arrow' }
 
 const SQUARES = [...'abcdefgh'].flatMap((file) => [...'12345678'].map((rank) => file + rank))
 const NO_MOVES: readonly string[] = []
@@ -100,6 +103,7 @@ export function Board({
   legalMoves = NO_MOVES,
   arrows = NO_ARROWS,
   spawn = null,
+  ghostArrows = NO_ARROWS,
   onMove,
   children,
 }: BoardProps) {
@@ -177,6 +181,7 @@ export function Board({
         current.removeMarkers(MARKER.check) // at once, not after the pieces have moved
         current.removeMarkers(MARKER.spawn)
         current.removeArrows(CHAOS_ARROW)
+        current.removeArrows(GHOST_ARROW)
         if (lastMove) {
           // A drop (Q@d5) has a target square only, in the same place as a move's.
           if (!lastMove.includes('@')) current.addMarker(MARKER.lastMove, lastMove.slice(0, 2))
@@ -192,13 +197,14 @@ export function Board({
         if (check) showCheck(current, fen) // once the position is set, so the king is found where it now stands
         // Once the pieces have moved, so the arrows point at where they landed and the spawn pops in on its piece.
         for (const [from, to] of arrows) current.addArrow(CHAOS_ARROW, from, to)
+        for (const [from, to] of ghostArrows) current.addArrow(GHOST_ARROW, from, to)
         if (spawn) current.addMarker(MARKER.spawn, spawn)
         current.disableMoveInput()
         if (input && legalMoves.length) current.enableMoveInput(onMoveInput, COLOR[input])
       })
     }
     sync.current()
-  }, [fen, orientation, lastMove, animateFrom, check, input, legalMoves, arrows, spawn, onMove])
+  }, [fen, orientation, lastMove, animateFrom, check, input, legalMoves, arrows, spawn, ghostArrows, onMove])
 
   return (
     <div className="board-wrap">

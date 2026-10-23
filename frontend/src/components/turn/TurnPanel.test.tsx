@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Attempt, LlmTurn } from '@/api/types'
 import { TurnPanel } from '@/components/turn/TurnPanel'
 import { aTurn, afterE4, afterE5, chaosGame, E4, E5, NF3, NC6, plies } from '@/test/games'
@@ -209,6 +209,25 @@ describe('Legal counterpart', () => {
     expect(panel()).not.toHaveTextContent('Never played')
     await userEvent.hover(name)
     expect((await screen.findByText(MEANING)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
+  test("the counterpart's move is a toggle that says on focus what it shows, and when pressed, how to go back", async () => {
+    const onPreview = vi.fn()
+    const { rerender } = render(<TurnPanel game={withCounterpart(e5)} ply={2} live onPreview={onPreview} />)
+    const move = within(block()!).getByRole('button', { name: '1… e5' })
+    expect(move).toHaveAttribute('aria-pressed', 'false')
+
+    for (let i = 0; i < 20 && document.activeElement !== move; i++) await userEvent.tab()
+    const show = 'Show the position 1… e5 would have left on the board. It was never played.'
+    expect((await screen.findByText(show)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+    expect(move).toHaveAttribute('aria-description', show)
+    await userEvent.keyboard('{Enter}')
+    expect(onPreview).toHaveBeenCalledOnce()
+
+    rerender(<TurnPanel game={withCounterpart(e5)} ply={2} live previewing onPreview={onPreview} />)
+
+    expect(move).toHaveAttribute('aria-pressed', 'true')
+    expect(move).toHaveAttribute('aria-description', 'Back to 1… Bb4 on the board.')
   })
 
   test('viewing the next ply, the Chaos move is still the turn shown, but its counterpart is not', () => {
