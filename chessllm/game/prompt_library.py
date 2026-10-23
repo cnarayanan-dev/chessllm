@@ -54,8 +54,9 @@ class PromptLibrary:
 
 
 def default_entries() -> list[LibraryEntry]:
-    """The default Prompt templates as their files say now: Default and Described without the Legal-move list, then
-    with it."""
+    """The default Prompt templates as their files say now: Default, Described and Moves without the Legal-move list,
+    then with it. Moves fits no LLM constraints here, where fits is for fresh Turn memory, the only one the app
+    plays: it is played under chat_moves, as that Turn memory's default (side_template)."""
     templates: dict[str, PromptTemplate] = {}
     default_for: dict[str, list[LlmConstraints]] = {}
     for llm_constraints in sorted(LLM_CONSTRAINTS, key=lambda constraints: constraints in LISTED):

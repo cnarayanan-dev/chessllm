@@ -251,14 +251,3 @@ def test_the_app_refuses_turn_memory_until_the_page_shows_a_conversations_whole_
         assert response.json()["code"] == "turn_memory_not_accepted"
     assert client.post("/api/games", json=play_llm(turn_memory="fresh")).status_code == 200
 
-
-def test_chat_with_moves_is_refused_until_it_can_be_played(tmp_path, capsys):
-    code = faceoff_batch(
-        ["--models", "gemma3:12b", "llama3:8b", "--turn-memory", "chat_moves", "--games-dir", str(tmp_path)],
-        player_for=ScriptedPlayer([]).for_settings,
-        sampling_file=tmp_path / "no-sampling.toml",
-    )
-
-    assert code != 0
-    assert "chat_moves, which can't be played until #105" in capsys.readouterr().err
-

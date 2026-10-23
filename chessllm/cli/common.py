@@ -34,7 +34,7 @@ from chessllm.game.sides import (
     Tool,
     TurnMemory,
 )
-from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
+from chessllm.game.llm_turn.prompt import PositionTemplate, default_template
 from chessllm.llm.models import CONTEXT_TOKENS, LLM_MODELS, load_sampling
 
 if TYPE_CHECKING:
@@ -52,17 +52,19 @@ def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
     parser.add_argument(
         "--prompt-template",
-        choices=get_args(DefaultTemplate),
+        choices=get_args(PositionTemplate),
         default="default",
         help="the default Prompt template: default (the PGN and FEN), or described (also the last move, every "
-        "piece's square and check)",
+        "piece's square and check). Under --turn-memory chat_moves leave it at default, which then means the Moves "
+        "template (only the opponent's last move); described is refused there, as it shows the position",
     )
     parser.add_argument(
         "--turn-memory",
         choices=get_args(TurnMemory),
         default=defaults.turn_memory,
-        help="whether the LLM's turns share one conversation: fresh (the default: each turn starts anew), or "
-        "chat_position (one conversation for the game, each turn adding its message)",
+        help="whether the LLM's turns share one conversation: fresh (the default: each turn starts anew), "
+        "chat_position (one conversation for the game, each turn adding its message), or chat_moves (one "
+        "conversation, each turn adding only the opponent's last move)",
     )
 
 
@@ -102,8 +104,10 @@ def add_rules_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def prompt_template(args: argparse.Namespace) -> PromptTemplate | None:
-    """The Prompt template --prompt-template asks for: None for the Default, read when each game starts."""
-    kind: DefaultTemplate = args.prompt_template
+    """The Prompt template --prompt-template asks for: None for default, the side's default read when each game
+    starts, which under chat_moves is Moves (side_template). Described is refused under chat_moves when the game's
+    settings are checked, as it shows the position."""
+    kind: PositionTemplate = args.prompt_template
     return None if kind == "default" else default_template(args.llm_constraints, kind)
 
 

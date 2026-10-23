@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.conftest import llm_faceoff, play_llm, play_move
 
-from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
+from chessllm.game.llm_turn.prompt import MOVES_SYSTEM_PROMPT_FILES, SYSTEM_PROMPT_FILES
 
 FREE = ["free", "blind_enforced"]
 LISTED = ["listed", "listed_enforced"]
@@ -42,12 +42,26 @@ def test_the_library_lists_the_default_templates_with_the_llm_constraints_each_f
     assert [(entry["name"], entry["fits"], entry["default_for"]) for entry in entries] == [
         ("Default", FREE, FREE),
         ("Described", FREE, []),
+        ("Moves", [], []),  # played only under Turn memory chat_moves, which the app doesn't play yet (#108)
         ("Default listed", LISTED, LISTED),
         ("Described listed", LISTED, []),
+        ("Moves listed", [], []),
     ]
-    assert re.fullmatch("described-listed@[0-9a-f]{8}", entries[3]["id"])
-    assert entries[3]["system_prompt"] == SYSTEM_PROMPT_FILES["listed"].read_text(encoding="utf-8")
-    assert entries[3]["turn_template"] == "PGN: $moves\nFEN: $fen\n$description\nLegal moves: $legal_moves"
+    assert re.fullmatch("described-listed@[0-9a-f]{8}", entries[4]["id"])
+    assert entries[4]["system_prompt"] == SYSTEM_PROMPT_FILES["listed"].read_text(encoding="utf-8")
+    assert entries[4]["turn_template"] == "PGN: $moves\nFEN: $fen\n$description\nLegal moves: $legal_moves"
+    assert entries[5]["system_prompt"] == MOVES_SYSTEM_PROMPT_FILES["listed"].read_text(encoding="utf-8")
+    assert entries[5]["turn_template"] == "$opponent_played\nLegal moves: $legal_moves"
+
+
+def test_a_new_game_cant_play_a_moves_template_under_fresh_turn_memory(scripted):
+    client, _ = scripted([])
+
+    response = client.post("/api/games", json=play_llm(prompt_template_id=id_of(client, "Moves")))
+
+    assert response.status_code == 400, response.text
+    assert response.json()["code"] == "invalid_prompt_template"
+    assert "$opponent_played" in response.json()["detail"]
 
 
 def test_a_game_started_with_a_templates_id_sends_its_prompts_and_records_its_text(scripted, tmp_path):

@@ -14,7 +14,7 @@ RetryFeedback = Literal["explained", "bare", "hinted", "repeat"]
 LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
 # Whether an LLM side's Turns share one conversation, fixed for the game: fresh (every turn starts a new conversation,
 # the default), chat_position (one conversation, each turn adding its message as a fresh turn has it) or chat_moves
-# (one conversation, each turn adding only the opponent's last move; not playable until #105).
+# (one conversation, each turn adding only the opponent's last move, by the Moves default Prompt template).
 TurnMemory = Literal["fresh", "chat_position", "chat_moves"]
 # The Tools an LLM may ask the benchmark during its Turn, each answering about the current position (ADR 0011).
 Tool = Literal["board", "move_history", "legal_moves", "material"]

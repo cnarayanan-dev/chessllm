@@ -34,10 +34,13 @@ class CounterpartAnswer:
 
 def counterpart_template(template: PromptTemplate) -> PromptTemplate:
     """The Prompt template a Legal counterpart is asked with: the side's own if it places the Legal-move list, else
-    the default one under Listed enforced, Described if the side's places the position's description."""
-    if "legal_moves" in Template(template.turn_template).get_identifiers():
+    the default one under Listed enforced, Described if the side's places the position's description. A chat_moves
+    side's own gives only the opponent's last move, which a fresh Prompt can't be asked from, so it gets the default
+    one too, until it is asked inside the conversation (#109)."""
+    placed = Template(template.turn_template).get_identifiers()
+    if "legal_moves" in placed and "opponent_played" not in placed:
         return template
-    described = "description" in Template(template.turn_template).get_identifiers()
+    described = "description" in placed
     return default_template(COUNTERPART_CONSTRAINTS, "described" if described else "default")
 
 

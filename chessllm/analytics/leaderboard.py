@@ -33,18 +33,22 @@ from chessllm.game.llm_turn.prompt import prompt_file, side_template
 from chessllm.analytics.rating import RatedGame, Rating, ratings
 
 
-# How each turn gave the position: fen (the PGN and FEN) or described (also where every piece stands).
-PositionFormat = Literal["fen", "described"]
+# How each turn gave the position: fen (the PGN and FEN), described (also where every piece stands) or moves (only
+# the opponent's last move, under Turn memory chat_moves, the LLM keeping track of the board itself).
+PositionFormat = Literal["fen", "described", "moves"]
 
 
 def prompt_settings(file_name: str, template_id: str | None) -> tuple[str, PositionFormat | None]:
     """The prompt and position of a Player configuration, which games are still grouped by until they are grouped by
-    their Prompt template's text: a default template's System prompt file name, and described for the Described
-    default; any other template's ID."""
+    their Prompt template's text: a default template's System prompt file name, with described for the Described
+    default and moves for the Moves default; any other template's ID."""
     if not file_name:
         return template_id or "", None
-    described = template_id is not None and template_id.startswith("described")
-    return file_name, "described" if described else None
+    positions: tuple[PositionFormat, ...] = ("described", "moves")
+    for position in positions:
+        if template_id is not None and template_id.startswith(position):
+            return file_name, position
+    return file_name, None
 
 
 class PlayerConfiguration(BaseModel):

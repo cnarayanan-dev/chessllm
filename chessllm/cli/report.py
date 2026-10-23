@@ -107,7 +107,7 @@ class Configuration:
             thinking = f"thinking {self.thinking_level}"
         if self.thinking_budget is not None:
             thinking += f", budget {self.thinking_budget}"
-        extra = " / described position" if self.position != "fen" else ""
+        extra = f" / {self.position} position" if self.position != "fen" else ""
         extra += f" / {self.turn_memory}" if self.turn_memory != "fresh" else ""
         if self.tools:
             extra += f" / tools {'+'.join(self.tools)}"
