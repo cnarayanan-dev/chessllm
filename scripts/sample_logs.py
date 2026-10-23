@@ -27,6 +27,7 @@ from chessllm.core.types import Color, Sampling
 from chessllm.game.settings import Settings
 from chessllm.game.sides import AnchorSide, BenchmarkLlmSide, LlmSide
 from chessllm.logs.game_log import GameLog
+from chessllm.logs.probe_log import SUFFIX, probe_log_path
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.exceptions import LlmTimeout
@@ -120,9 +121,10 @@ class Samples:
             directory.mkdir(parents=True)
         for number, game in enumerate(self.games, start=1):
             [log] = self.games_dir(game).glob("*.jsonl")
-            for path in (log, log.with_suffix(".pgn")):
-                text = self.fixed(path.read_text(encoding="utf-8"), number)
-                (out / "game-logs" / f"{game}{path.suffix}").write_text(text, encoding="utf-8")
+            for path, suffix in ((log, ".jsonl"), (log.with_suffix(".pgn"), ".pgn"), (probe_log_path(log), SUFFIX)):
+                if path.exists():  # a probe log only for a game that was probed
+                    text = self.fixed(path.read_text(encoding="utf-8"), number)
+                    (out / "game-logs" / f"{game}{suffix}").write_text(text, encoding="utf-8")
         for name, data in (self.api | {"errors": self.errors}).items():
             text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
             (out / "api" / f"{name}.json").write_text(self.fixed(text), encoding="utf-8")
@@ -136,21 +138,24 @@ class Samples:
         text = text.replace(f"{ROOT}/", "")
         text = re.sub(r'"started_at": "[^"]*"', f'"started_at": "2026-01-01T10:{number:02}:00.000000+00:00"', text)
         text = re.sub(r'"ended_at": "[^"]*"', f'"ended_at": "2026-01-01T10:{number:02}:30+00:00"', text)
+        text = re.sub(r'"asked_at": "[^"]*"', f'"asked_at": "2026-01-01T10:{number:02}:45.000000+00:00"', text)
         text = re.sub(r'"latency_s": [0-9.e+-]+', '"latency_s": 0.0', text)
         return re.sub(r'\[Date "[^"]*"\]', '[Date "2026.01.01"]', text)
 
 
 def play_llm_standard(samples: Samples) -> None:
     """Play LLM under Standard rules, the human as White: a human move, a notation slip, an illegal move then a
-    Retry, and the LLM's checkmate (Fool's mate)."""
+    Retry, the LLM's checkmate (Fool's mate), and two Probes of its last turn once the game is over."""
     game = "play-llm-standard"
     llm = samples.timed(
         ScriptedPlayer([
             reasoned("e7e5 takes the centre.", "e7e5"),  # a notation slip: UCI for e5
             reasoned("The queen takes on f2.", "Qxf2"),  # illegal: the queen can't reach f2
             reasoned("Qh4 is mate: g4 opened the diagonal.", "Qh4#"),
+            reasoned("The knight develops.", "Nc6"),  # the probes, once the game is over
+            reasoned("Mate on the diagonal.", "Qh4#"),
         ]),
-        3.2, 2.75, 4.125,
+        3.2, 2.75, 4.125, 1.5, 2.25,
     )
     client = samples.client(game, {"black": llm})
     new_game = {"mode": "play_llm", "white": {"player": "human"}, "black": {"player": "llm"}}
@@ -163,6 +168,14 @@ def play_llm_standard(samples: Samples) -> None:
     samples.response(f"{game}-06-current", client.get("/api/games/current"))
     samples.refused(client, "POST", "/api/games/current/moves", {"uci": "e2e4"})  # the game is over
     samples.refused(client, "POST", "/api/games/current/llm-turn")
+    # Two Probes of the last turn with Described, then the game's probes as a reopened game lists them.
+    templates = client.get("/api/prompt-templates").json()
+    described = next(entry["id"] for entry in templates if entry["name"] == "Described")
+    probe = {"ply": 4, "color": "black", "prompt_template_id": described}
+    samples.response(f"{game}-07-probe", client.post("/api/games/current/probes", json=probe))
+    samples.response(f"{game}-08-probe", client.post("/api/games/current/probes", json=probe))
+    samples.response(f"{game}-09-probes", client.get(f"/api/games/{state['game_id']}/probes"))
+    samples.refused(client, "POST", "/api/games/current/probes", probe | {"ply": 3, "color": "white"})  # a human's
 
 
 def llm_faceoff_chaos(samples: Samples) -> None:

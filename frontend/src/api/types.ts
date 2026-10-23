@@ -25,4 +25,8 @@ export type NewGame = Omit<Schemas['NewGame'], 'legal_counterpart'> & { legal_co
 export type ModelInfo = Schemas['ModelInfo']
 /** A Prompt template of the Prompt library, with the LLM constraints it fits and those it is the Default of. */
 export type PromptTemplateInfo = Schemas['PromptTemplateInfo']
+/** A Probe (CONTEXT.md): the LLM asked again about a past turn's position with a Prompt template, outside the game. */
+export type Probe = Schemas['Probe']
+/** Which past LLM turn of the current game a Probe asks about, and with which Prompt template of the library. */
+export type ProbeRequest = Schemas['ProbeRequest']
 export type Color = GameState['turn']

@@ -112,3 +112,35 @@ test('with thinking on, the tab is Thinking', async ({ page }) => {
   await expect(badge(page)).toHaveText('1… e5')
   await expect(tab(page, 'Thinking')).toHaveAttribute('aria-selected', 'true')
 })
+
+test("with Prompt lab on, Try probes an illegal move's turn again, its probes and tally kept over a reload", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('chessllm.promptLab', 'on'))
+  // Fool's mate after an illegal Qxf2, then the two probes' answers.
+  await playLlm(page, ['e5', 'Qxf2', 'Qh4#', 'Qh4#', 'Qxf2'])
+  await clickMove(page, 'f2f3')
+  await expect(lastMove(page)).toHaveText('e5')
+  await clickMove(page, 'g2g4')
+  await expect(lastMove(page)).toHaveText('Qh4#')
+  await tab(page, 'Prompt').click()
+
+  await panel(page).getByRole('combobox', { name: 'Prompt to probe with' }).click()
+  await page.getByRole('option', { name: 'Described' }).click()
+  const tryButton = panel(page).getByRole('button', { name: 'Try' })
+  const probes = panel(page).getByRole('list', { name: 'Probes' })
+  await tryButton.click()
+  await expect(probes.getByRole('button')).toHaveCount(1)
+  await tryButton.click()
+
+  await expect(probes.getByRole('button')).toHaveCount(2)
+  await expect(probes.getByRole('button').first()).toContainText('Qxf2 · Illegal')
+  await expect(probes.getByRole('button').last()).toContainText('Qh4# · Legal')
+  await expect(panel(page)).toContainText('Described: 1 of 2 legal')
+  await probes.getByRole('button').last().click()
+  await expect(probes).toContainText('Reasoning for Qh4#.')
+  await expect(probes).toContainText('Your pieces (Black)')
+
+  await page.reload()
+  await tab(page, 'Prompt').click()
+  await expect(panel(page)).toContainText('Described: 1 of 2 legal')
+  await expect(panel(page).getByRole('list', { name: 'Probes' }).getByRole('button')).toHaveCount(2)
+})

@@ -377,5 +377,15 @@
     "search": {
       "depth": 0
     }
+  },
+  "prompt_templates": {
+    "white": {
+      "id": "default-listed@7d131053",
+      "name": "Default listed"
+    },
+    "black": {
+      "id": "default@deee1ac8",
+      "name": "Default"
+    }
   }
 }

@@ -20,6 +20,19 @@
     }
   },
   {
+    "request": "POST /api/games/current/probes",
+    "body": {
+      "ply": 3,
+      "color": "white",
+      "prompt_template_id": "described@24ad892a"
+    },
+    "status": 409,
+    "response": {
+      "detail": "the game has no past LLM turn of white at ply 3",
+      "code": "no_llm_turn"
+    }
+  },
+  {
     "request": "GET /api/games/current",
     "body": null,
     "status": 404,

@@ -521,6 +521,30 @@ describe('Rematch', () => {
   })
 })
 
+test("with Prompt lab on, Try on the LLM's last turn waits while its next turn runs", async () => {
+  localStorage.setItem('chessllm.promptLab', 'on')
+  const turn = later()
+  const afterNf3 = afterE4({ pgn: '1. e4 e5 2. Nf3', plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })
+  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], default_for: ['free'] }]
+  fakeBackend()
+    .on('GET /api/games/current', Response.json(afterNf3))
+    .on('POST /api/games/current/llm-turn', turn.promise)
+    .on('GET /api/prompt-templates', Response.json(library))
+    .on('GET /api/games/game-1/probes', Response.json([]))
+  renderApp()
+  await llmMoving('black')
+
+  await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
+  const tryButton = await within(turnPanel()).findByRole('button', { name: 'Try' })
+  await waitFor(() => expect(within(turnPanel()).getByRole('combobox', { name: 'Prompt to probe with' })).toHaveTextContent('Default'))
+  expect(tryButton).toBeDisabled()
+
+  await act(async () => turn.resolve(Response.json(afterNf3)))
+
+  await waitFor(() => expect(within(turnPanel()).getByRole('button', { name: 'Try' })).toBeEnabled())
+  localStorage.clear()
+})
+
 describe('the New game sheet', () => {
   test('⌘K opens it; closing it leaves the running game as it is and forgets its changes, with no note', async () => {
     const backend = fakeBackend().on('GET /api/games/current', Response.json(aGame())).on('GET /api/models', Response.json(models), Response.json(models))

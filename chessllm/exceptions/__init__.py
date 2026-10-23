@@ -22,6 +22,7 @@ from chessllm.exceptions.game import (  # noqa: E402
     NoGameStarted,
     RefusedAnchorTurn,
     RefusedLlmTurn,
+    RefusedProbe,
     RejectedHumanMove,
 )
 from chessllm.exceptions.llm import LlmTimeout  # noqa: E402
@@ -36,6 +37,7 @@ __all__ = [
     "NoGameStarted",
     "RefusedAnchorTurn",
     "RefusedLlmTurn",
+    "RefusedProbe",
     "RejectedHumanMove",
     "StockfishUnavailable",
 ]

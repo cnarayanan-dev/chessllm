@@ -300,6 +300,14 @@ class GameSettings(BaseModel):
     legal_counterpart: bool | None = Field(default=None, exclude_if=is_none)
 
 
+class PlayedTemplate(BaseModel):
+    """The Prompt template an LLM side plays the game with, by its ID and its name if it has one, so the page can
+    tell it apart from the Prompt library's, among which it may no longer be listed (ADR 0010)."""
+
+    id: str
+    name: str | None
+
+
 class GameState(BaseModel):
     """What GameSession.state() returns: the game as the page shows it."""
 
@@ -324,3 +332,5 @@ class GameState(BaseModel):
     running_s: float | None
     # Only with an evaluator: the engine every ply's Evaluation comes from.
     evaluator: EvaluationEngine | None = Field(default=None, exclude_if=is_none)
+    # The Prompt template of each LLM side, a side on the Default too; a human's or an Anchor's side has none.
+    prompt_templates: dict[Color, PlayedTemplate] = Field(default_factory=dict)

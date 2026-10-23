@@ -13,6 +13,7 @@ from chessllm.core.types import Color
 from chessllm.game.llm_turn.conversation import Conversation, reply_reserve
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer, ask_legal_counterpart
 from chessllm.game.llm_turn.judging import answered, judge, no_answer
+from chessllm.game.llm_turn.probe import ask_probe
 from chessllm.game.llm_turn.prompt import (
     TurnPosition,
     chaos_move_report,
@@ -247,6 +248,12 @@ class LlmTurns:
         if self._abandoned.is_set():
             return None
         return ask_legal_counterpart(self._player, self._side, self._template, self._color, board, moves)
+
+    def probe(self, board: chess.Board, moves: Sequence[str], template: PromptTemplate) -> Attempt:
+        """Ask a Probe about the position of one of the side's turns, with the template: board is that position, and
+        moves every ply before it. Like a Legal counterpart it is none of the side's turns, so nothing about it counts
+        in the side's totals, and its fresh Prompt leaves the side's conversation as it was."""
+        return ask_probe(self._player, self._side, template, self._color, self._rules, board, moves)
 
     def log_legal_counterpart(self, answer: CounterpartAnswer, ply: int) -> None:
         """Log the Legal counterpart of the chaos move of ply, once its turn has landed."""

@@ -17,6 +17,7 @@ from chessllm.exceptions import (
     InvalidSettings,
     NoGameStarted,
     RefusedLlmTurn,
+    RefusedProbe,
     RejectedHumanMove,
 )
 
@@ -25,6 +26,7 @@ STATUSES: dict[type[ChessLlmError], int] = {
     RejectedHumanMove: 400,
     NoGameStarted: 404,
     RefusedLlmTurn: 409,
+    RefusedProbe: 409,
     InvalidSamplingConfig: 500,
 }
 
