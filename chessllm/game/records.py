@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_seri
 
 from chessllm.core.types import Color, GameResult, ModeKey, RulesKey, Sampling
 from chessllm.game.sides import AnchorSide, HumanSide, LlmSide
-from chessllm.llm.players import MessageRole
+from chessllm.llm.players import MessageRole, ToolCall
 
 # How the resolver read a move under Chaos rules: legal as it stands, a chaos move, a spawn, or not a move it can play
 # (ADR 0006).
@@ -64,6 +64,10 @@ class PromptMessage(BaseModel):
 
     role: MessageRole
     content: str
+    # Only in an attempt with Tools (ADR 0011): the tools an assistant message called, in order, and the tool a tool
+    # message gives the result of.
+    tool_calls: list[str] | None = Field(default=None, exclude_if=is_none)
+    tool_name: str | None = Field(default=None, exclude_if=is_none)
 
 
 class AttemptSummary(BaseModel):
@@ -98,11 +102,18 @@ class Attempt(AttemptSummary):
     # The messages sent for this try; None in games from before it was kept. In a conversation kept by Turn memory
     # (its turn's remembered is set) only the messages it added, the whole Prompt rebuilt by full_prompt (ADR 0009);
     # a Legal counterpart's there only its request, rebuilt by counterpart_prompt.
+    # With Tools it ends with the tool calls and their results, as the forced answer was sent them (ADR 0011).
     prompt: list[PromptMessage] | None = None
     # Only on a retry whose conversation had to drop more of the earlier turns than its turn's first attempt, to fit
     # the context: how many it still held (LlmTurn.remembered), so full_prompt can rebuild it. On every Legal
     # counterpart asked in a conversation: how many its Prompt held, so counterpart_prompt can rebuild it.
     remembered: int | None = Field(default=None, exclude_if=is_none)
+    # Only for a side with Tools, and only when there were any: its Tool calls in the order made, so attempts
+    # without tools log as before.
+    tool_calls: list[ToolCall] | None = Field(default=None, exclude_if=is_none)
+    # Only when true: the reply that ended the tool phase wrote a tool call as text instead of calling it, so it
+    # wasn't run.
+    tool_call_as_text: bool | None = Field(default=None, exclude_if=is_none)
 
     # Unannotated, as pydantic would take an annotated return type for the record's schema in the API description.
     @model_serializer(mode="wrap")
@@ -256,6 +267,15 @@ class IllegalMoves(BaseModel):
     ambiguous: int
 
 
+class ToolStats(BaseModel):
+    """The Tool calls of one LLM side with Tools (ADR 0011), over its attempts that got an answer."""
+
+    tool_calls: dict[str, int]  # by tool: each of the side's tools, in the order of TOOL_NAMES, and any other called
+    attempts_without_tool_call: int
+    attempts_at_cap: int  # the attempts that made as many tool calls as the Tool-call cap allows
+    tool_calls_as_text: int  # the attempts whose tool phase ended with a tool call written as text
+
+
 class LlmSideStats(BaseModel):
     """The totals of one LLM side. Under Enforced decoding the illegal-move metrics are None (ADR 0003)."""
 
@@ -266,6 +286,8 @@ class LlmSideStats(BaseModel):
     # Only under Chaos rules: the chaos moves played, spawns included, and the spawns among them.
     chaos_moves: int | None = Field(default=None, exclude_if=is_none)
     spawns: int | None = Field(default=None, exclude_if=is_none)
+    # Only for a side with Tools.
+    tools: ToolStats | None = Field(default=None, exclude_if=is_none)
 
 
 class Stats(BaseModel):

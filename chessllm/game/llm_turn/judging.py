@@ -74,5 +74,6 @@ def answered(
     return Attempt(
         move=written, san=san, notation_slip=san is not None and written != san, result=result,
         feedback_sent=feedback, raw_reply=reply.raw, thinking=thinking, reasoning=reasoned, error=None,
-        latency_s=reply.latency_s, prompt=prompt, resolution=resolution,
+        latency_s=reply.latency_s, prompt=prompt, resolution=resolution, tool_calls=list(reply.tool_calls) or None,
+        tool_call_as_text=reply.tool_call_as_text or None,
     )

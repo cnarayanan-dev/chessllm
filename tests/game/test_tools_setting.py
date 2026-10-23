@@ -1,6 +1,6 @@
 """Tools as a setting of the Player configuration (ADR 0011): in the benchmark only, an LLM side can have a set of
 Tools and a Tool-call cap, fixed for the game, refused where v1 doesn't allow them, logged in game_start when it has
-any, and part of the configuration wherever games are grouped. No tool is called yet (#119)."""
+any, and part of the configuration wherever games are grouped. Calling them: test_tool_calls.py."""
 
 import json
 
@@ -238,6 +238,9 @@ def test_the_leaderboard_shows_a_configuration_with_tools_without_them_under_its
 
     qwen = [entry for entry in configurations if entry["configuration"]["model"] == QWEN]
     assert len(qwen) == 2 and qwen[0]["id"] != qwen[1]["id"]
+    # A side with tools plays the Tools template by default (#119), the only other difference shown.
+    prompts = sorted(entry["configuration"].pop("prompt") for entry in qwen)
+    assert prompts == ["system.txt", "system_tools.txt"]
     assert qwen[0]["configuration"] == qwen[1]["configuration"]
     assert "tools" not in qwen[0]["configuration"]
 

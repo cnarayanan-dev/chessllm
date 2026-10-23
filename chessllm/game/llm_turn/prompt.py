@@ -17,7 +17,7 @@ from chessllm.core.config import PROMPTS_DIR
 from chessllm.core.types import Color, opponent
 from chessllm.exceptions import InvalidSettings
 from chessllm.game.records import Ply
-from chessllm.game.sides import LISTED, LlmConstraints, LlmSide, PromptTemplate, RetryFeedback
+from chessllm.game.sides import LISTED, LlmConstraints, LlmSide, PromptTemplate, RetryFeedback, side_tools
 from chessllm.llm.players import Message
 
 SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system.txt"
@@ -40,6 +40,9 @@ MOVES_SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {
     "blind_enforced": MOVES_SYSTEM_PROMPT_FILE,
     "listed_enforced": LISTED_MOVES_SYSTEM_PROMPT_FILE,
 }
+# The System prompt file of the Tools template, the Default of a side with Tools (ADR 0011): the LLM is told only the
+# opponent's last move and looks at the game with its tools. There is none for Listed, which can't have Tools.
+TOOLS_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_tools.txt"
 
 # The example move shown in the system prompt for each colour the LLM can play: the first move of each side. A
 # conversation's example goes on to the side's second move, after its opponent's reply.
@@ -66,12 +69,13 @@ TURN_PLACEHOLDERS = ("moves", "recent_moves", "fen", "description", "last_move",
 PGN_AND_FEN = "PGN: $moves\nFEN: $fen"
 DESCRIPTION = "\n$description"
 LEGAL_MOVES = "\nLegal moves: $legal_moves"
-# The Moves templates' turn: only the opponent's last move.
+# The Moves and Tools templates' turn: only the opponent's last move, which also says whose move it is.
 OPPONENT_MOVE = "$opponent_move"
 
-# The default Prompt templates: Default, the PGN and FEN, Described, which adds where every piece stands, and Moves,
-# only the opponent's last move, the Default under Turn memory chat_moves.
-DefaultTemplate = Literal["default", "described", "moves"]
+# The default Prompt templates: Default, the PGN and FEN, Described, which adds where every piece stands, Moves, only
+# the opponent's last move, the Default under Turn memory chat_moves, and Tools, only the opponent's last move too,
+# the Default of a side with Tools, which asks them for the rest.
+DefaultTemplate = Literal["default", "described", "moves", "tools"]
 
 
 def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "default") -> PromptTemplate:
@@ -82,7 +86,8 @@ def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "d
     "described-listed@1f0c2a9e": the files can be edited, and an ID always means one text (ADR 0010)."""
     listed = llm_constraints in LISTED
     system_prompt = system_prompt_files(kind)[llm_constraints].read_text(encoding="utf-8")
-    position = OPPONENT_MOVE if kind == "moves" else PGN_AND_FEN + (DESCRIPTION if kind == "described" else "")
+    described = DESCRIPTION if kind == "described" else ""
+    position = OPPONENT_MOVE if kind in ("moves", "tools") else PGN_AND_FEN + described
     turn_template = position + (LEGAL_MOVES if listed else "")
     version = hashlib.sha256(f"{system_prompt}\0{turn_template}".encode("utf-8")).hexdigest()[:8]
     return PromptTemplate(
@@ -95,13 +100,19 @@ def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "d
 
 def system_prompt_files(kind: DefaultTemplate) -> dict[LlmConstraints, Path]:
     """The System prompt file of a kind of default template, for each kind of LLM constraints."""
+    if kind == "tools":
+        return dict.fromkeys(SYSTEM_PROMPT_FILES, TOOLS_SYSTEM_PROMPT_FILE)
     return MOVES_SYSTEM_PROMPT_FILES if kind == "moves" else SYSTEM_PROMPT_FILES
 
 
 def side_template(side: LlmSide) -> PromptTemplate:
     """The Prompt template the side plays with: its own, or else the Default for its LLM constraints, the Moves
-    template under Turn memory chat_moves."""
-    kind: DefaultTemplate = "moves" if side.turn_memory == "chat_moves" else "default"
+    template under Turn memory chat_moves and the Tools template for a side with Tools."""
+    kind: DefaultTemplate = "default"
+    if side.turn_memory == "chat_moves":
+        kind = "moves"
+    elif side_tools(side):
+        kind = "tools"
     return side.prompt_template or default_template(side.llm_constraints, kind)
 
 
@@ -136,6 +147,14 @@ def check_turn_memory(template: PromptTemplate, side: LlmSide) -> None:
             f"not {kind.capitalize()}"
         )
     raise InvalidSettings(reason, code="invalid_prompt_template")
+
+
+def check_tools_template(template: PromptTemplate, side: LlmSide) -> None:
+    """Raises InvalidSettings if the side plays the Tools template without Tools: its turns give only the opponent's
+    last move, and leave the rest to the tools."""
+    if not side_tools(side) and default_kind(template, side.llm_constraints) == "tools":
+        reason = "the Tools template gives only the opponent's last move and leaves the rest to Tools, but it has none"
+        raise InvalidSettings(reason, code="invalid_prompt_template")
 
 
 def check_prompt_template(template: PromptTemplate, llm_constraints: LlmConstraints) -> None:

@@ -34,6 +34,7 @@ from chessllm.game.sides import (
     TOOL_NAMES,
     ToolName,
     TurnMemory,
+    side_tool_call_cap,
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
 from chessllm.llm.models import LLM_MODELS, load_sampling
@@ -218,7 +219,7 @@ def anchor_match_settings(
 
 def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
     """The LLM player of one LLM side of a game, built when the game starts. A benchmark side's Thinking budget
-    sets its time limit, from its model's speed (ADR 0007)."""
+    sets its time limit, from its model's speed (ADR 0007), and its Tool-call cap the player's (ADR 0011)."""
     # Imported late, so the tests never load the Ollama client.
     from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 
@@ -227,7 +228,10 @@ def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
     budget = side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None
     speed = next((model.tokens_per_s for model in LLM_MODELS if model.name == side.model), None)
     timeout_s = time_limit_s(budget, speed)
-    return OllamaPlayer(side.model, side.think(), timeout_s=timeout_s, sampling=settings.sampling, budget=budget)
+    cap = side_tool_call_cap(side)
+    return OllamaPlayer(
+        side.model, side.think(), timeout_s=timeout_s, sampling=settings.sampling, budget=budget, tool_call_cap=cap
+    )
 
 
 def default_anchor(args: argparse.Namespace, side: AnchorSide) -> Anchor:

@@ -1,7 +1,8 @@
 """The Prompt library (ADR 0010): the default Prompt templates, as their files say now, and the saved ones, each a
 JSON file in the library's folder, so saved prompts show up in git. A saved Prompt template never changes, and an
 old one is only hidden: left out of the list, it still resolves for the games that play it. A default can be hidden
-too, until the app can play it: the Moves templates, until it plays Turn memory chat_moves (#108)."""
+too, until the app can play it: the Moves templates, until it plays Turn memory chat_moves (#108), and the Tools
+template, which only the benchmark's commands can play (ADR 0011)."""
 
 import json
 from dataclasses import dataclass
@@ -56,8 +57,9 @@ class PromptLibrary:
 
 def default_entries() -> list[LibraryEntry]:
     """The default Prompt templates as their files say now: Default and Described without the Legal-move list, then
-    with it, each followed by Moves, the Default under Turn memory chat_moves. Moves is hidden until the app plays
-    a conversation (#108): under fresh Turn memory its turns would show the LLM only the last move."""
+    with it, each followed by Moves, the Default under Turn memory chat_moves, and Tools, the Default of a side with
+    Tools. Moves is hidden until the app plays a conversation (#108): under fresh Turn memory its turns would show the
+    LLM only the last move. Tools is hidden, as the app can't give a side Tools."""
     templates: dict[str, PromptTemplate] = {}
     default_for: dict[str, list[LlmConstraints]] = {}
     hidden: set[str] = set()
@@ -68,7 +70,7 @@ def default_entries() -> list[LibraryEntry]:
             default_for.setdefault(template.id, [])
             if kind == "default":
                 default_for[template.id].append(llm_constraints)
-            if kind == "moves":
+            if kind in ("moves", "tools"):
                 hidden.add(template.id)
     return [
         LibraryEntry(template, fits(template), default_for[template_id], hidden=template_id in hidden)

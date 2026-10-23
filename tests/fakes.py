@@ -2,6 +2,7 @@
 (through conftest.py) and the sample games (scripts/sample_logs.py)."""
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 import chess
@@ -10,7 +11,7 @@ from chess.engine import Cp, Score
 from chessllm.core.types import Color
 from chessllm.exceptions import StockfishUnavailable
 from chessllm.game.settings import Settings
-from chessllm.llm.players import LlmReply, Message
+from chessllm.llm.players import LlmReply, Message, Tool
 
 
 class FakeClock:
@@ -56,7 +57,9 @@ class ScriptedPlayer:
         self.colors.append(color)
         return self
 
-    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+    def reply(
+        self, messages: list[Message], allowed_moves: list[str] | None = None, tools: Sequence[Tool] = ()
+    ) -> LlmReply:
         self.prompts.append(messages)
         self.allowed_moves.append(allowed_moves)
         if self.clock is not None and self.reply_s:

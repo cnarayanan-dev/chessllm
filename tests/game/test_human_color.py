@@ -135,4 +135,6 @@ def test_every_prompt_file_fills_in_for_either_colour():
         for color, opponent in [("white", "Black"), ("black", "White")]:
             prompt = system_prompt(color, prompt_file)
             assert "$" not in prompt
-            assert f"as {color.capitalize()} against a human playing {opponent}" in prompt
+            # The Tools prompt, played only in the benchmark's commands, never says the opponent is human (#119).
+            against = opponent if prompt_file.name == "system_tools.txt" else f"a human playing {opponent}"
+            assert f"as {color.capitalize()} against {against}" in prompt

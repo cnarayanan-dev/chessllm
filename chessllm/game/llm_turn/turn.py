@@ -30,18 +30,34 @@ from chessllm.game.records import (
     LlmSideStats,
     LlmTurn,
     Ply,
+    PromptMessage,
+    ToolStats,
 )
 from chessllm.game.rules import Rules
 from chessllm.game.rules.chaos import ResolvedMove
-from chessllm.game.sides import ENFORCED, LISTED, LlmConstraints, LlmSide, PromptTemplate
-from chessllm.llm.players import LlmPlayer, LlmReply
+from chessllm.game.sides import (
+    ENFORCED,
+    LISTED,
+    TOOL_NAMES,
+    LlmConstraints,
+    LlmSide,
+    PromptTemplate,
+    ToolName,
+    side_tool_call_cap,
+    side_tools,
+)
+from chessllm.game.tools import ToolPosition, bound_tools
+from chessllm.llm.players import FailedAfterToolCalls, LlmPlayer, LlmReply, Message, ToolCall
 from chessllm.logs.game_log import GameLog
 
 
 class SideStats:
     """The totals of one LLM side."""
 
-    def __init__(self, llm_constraints: LlmConstraints, rules: Rules) -> None:
+    def __init__(
+        self, llm_constraints: LlmConstraints, rules: Rules, tools: frozenset[ToolName] = frozenset(), cap: int = 0
+    ) -> None:
+        """tools are the side's Tools and cap its Tool-call cap: with none, there are no tool totals."""
         self.enforced = llm_constraints in ENFORCED
         self.rules = rules
         self.legal_move_streak = 0
@@ -51,6 +67,25 @@ class SideStats:
         self.notation_slips = 0
         self.chaos_moves = 0  # spawns included, as a spawn is a chaos move
         self.spawns = 0
+        self.tools: ToolStats | None = None
+        if tools:
+            calls: dict[str, int] = {name: 0 for name in TOOL_NAMES if name in tools}
+            self.tools = ToolStats(
+                tool_calls=calls, attempts_without_tool_call=0, attempts_at_cap=0, tool_calls_as_text=0
+            )
+        self.cap = cap
+
+    def count_tool_calls(self, calls: Sequence[ToolCall], as_text: bool = False) -> None:
+        """Count an attempt's Tool calls, for a side with Tools: an answered attempt's, or those made before a call
+        failed."""
+        tools = self.tools
+        if tools is None:
+            return
+        for call in calls:
+            tools.tool_calls[call.tool] = tools.tool_calls.get(call.tool, 0) + 1
+        tools.attempts_without_tool_call += not calls
+        tools.attempts_at_cap += len(calls) >= self.cap
+        tools.tool_calls_as_text += as_text
 
     def record(self) -> LlmSideStats:
         """Under Enforced decoding the illegal-move metrics are None, not applicable: they would be true by
@@ -58,7 +93,8 @@ class SideStats:
         counts are only given under Chaos rules, which Enforced decoding never plays under."""
         if self.enforced:
             return LlmSideStats(
-                legal_move_streak=None, illegal_moves=None, recovered_turns=None, notation_slips=self.notation_slips
+                legal_move_streak=None, illegal_moves=None, recovered_turns=None, notation_slips=self.notation_slips,
+                tools=self.tools,
             )
         chaos_moves, spawns = self.rules.chaos_counts(self.chaos_moves, self.spawns)
         return LlmSideStats(
@@ -68,6 +104,7 @@ class SideStats:
             notation_slips=self.notation_slips,
             chaos_moves=chaos_moves,
             spawns=spawns,
+            tools=self.tools,
         )
 
 
@@ -97,6 +134,14 @@ def token_accounting(reply: LlmReply) -> dict[str, Any]:
     }
 
 
+def prompt_message(message: Message) -> PromptMessage:
+    """A message of an attempt's tool phase as its prompt records it (ADR 0011)."""
+    return PromptMessage(
+        role=message.role, content=message.content, tool_calls=list(message.tool_calls) or None,
+        tool_name=message.tool_name,
+    )
+
+
 class LlmTurns:
     """One LLM side's turns in a game, each played with the side's settings and LLM player under the game's Rules,
     counted in the side's totals and written to the game log."""
@@ -124,7 +169,8 @@ class LlmTurns:
         self._log = log
         self._abandoned = abandoned
         self._clock = clock
-        self.stats = SideStats(side.llm_constraints, rules)
+        self._tools = side_tools(side)  # none for most sides (ADR 0011)
+        self.stats = SideStats(side.llm_constraints, rules, self._tools, side_tool_call_cap(side))
         # What the side's turns send: one conversation for the game, or a new one every turn (Turn memory).
         self._conversation = Conversation(side.turn_memory, color, template)
 
@@ -160,6 +206,8 @@ class LlmTurns:
         turn = LlmTurn(
             ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None, remembered=remembered
         )
+        # The side's Tools, bound to the position: every attempt of the turn may call them, each with a fresh cap.
+        tools = bound_tools(self._tools, ToolPosition(board, moves, color))
         feedback = None
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._max_attempts
@@ -176,9 +224,16 @@ class LlmTurns:
             logged_remembered = {"remembered": held} if held is not None else {}
             own = {"remembered": turn.own_remembered(held)}
             try:
-                reply = player.reply(messages, allowed_moves)
-            except Exception as error:
+                reply = player.reply(messages, allowed_moves, tools) if tools else player.reply(messages, allowed_moves)
+            except Exception as failure:
+                error, made = failure, None
+                if isinstance(failure, FailedAfterToolCalls):  # the attempt keeps the Tool calls it made
+                    error, made = failure.error, failure
                 attempt = no_answer(model, error, prompt, feedback).model_copy(update=own)
+                if made is not None:
+                    tool_prompt = prompt + [prompt_message(message) for message in made.tool_messages]
+                    attempt = attempt.model_copy(update={"prompt": tool_prompt, "tool_calls": list(made.tool_calls)})
+                    stats.count_tool_calls(made.tool_calls)
                 turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
@@ -194,8 +249,11 @@ class LlmTurns:
                 result = "cut_off"  # the forced answer ran out of tokens too: no answer, rather than a bad one
             resolution = self._rules.resolve(board, written, result)
             recorded = resolution.record() if resolution is not None else None
+            # With Tools, the prompt the forced answer was sent ends with the tool calls and their results.
+            prompt = prompt + [prompt_message(message) for message in reply.tool_messages]
             attempt = answered(board, reply, written, move, result, side.thinking, prompt, feedback, recorded)
             attempt = attempt.model_copy(update=own)
+            stats.count_tool_calls(reply.tool_calls, reply.tool_call_as_text)
             turn.attempts.append(attempt)
             chaos = move is None and resolution is not None and resolution.kind in ("chaos", "spawn")
             last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits

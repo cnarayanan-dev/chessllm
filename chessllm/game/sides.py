@@ -128,6 +128,16 @@ class BenchmarkLlmSide(LlmSide):
         return f"{self.model} ({thinking}{budget})"
 
 
+def side_tools(side: LlmSide) -> frozenset[ToolName]:
+    """The Tools of an LLM side: a benchmark side's own, none for any other (ADR 0011)."""
+    return side.tools if isinstance(side, BenchmarkLlmSide) else frozenset()
+
+
+def side_tool_call_cap(side: LlmSide) -> int:
+    """The Tool-call cap of an LLM side: a benchmark side's own, the default for any other."""
+    return side.tool_call_cap if isinstance(side, BenchmarkLlmSide) else BenchmarkLlmSide.tool_call_cap
+
+
 AnchorEngine = Literal["dragon", "stockfish", "random"]
 
 
