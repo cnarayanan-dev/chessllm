@@ -59,7 +59,7 @@ async function startFromSheet(
 }
 
 test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castle, then King capture', async ({ page }) => {
-  await startFromSheet(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Kh6'] }, async (sheet) => {
+  await startFromSheet(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Bxe1'] }, async (sheet) => {
     await sheet.getByRole('radio', { name: 'Chaos' }).click()
   })
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
@@ -96,16 +96,21 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expect(pieceOn(page, 'e8')).toHaveCount(0)
   await expect(pieceOn(page, 'h8')).toHaveCount(0)
 
-  // The king walks into the bishop's line, and the human takes it.
-  await move(page, 'b1d2', 'Kh6')
-  await move(page, 'g5h6', 'Bxh6')
+  // The bishop jumps over the pawn on c3 and the knight on d2, and takes the king.
+  await move(page, 'b1d2', 'Bxe1')
   const result = page.getByTestId('result')
-  await expect(result).toContainText('White wins by King capture')
-  await expect(result).toContainText(/.+ left its king hanging/)
-  await expect(page.getByTestId('totals')).toHaveText('5 illegal tries · 0 notation slips · 5 chaos moves (1 spawn)')
+  await expect(result).toContainText('Black wins by King capture')
+  // The detail is in the result's tooltip.
+  await expect(result).toHaveAttribute('aria-description', /.+ took your king/)
+  await expect(arrows(page)).toHaveAttribute('data-arrow', 'b4e1')
+  await expectPiece(page, 'e1', 'bb')
+  const mistakes = page.getByTestId('mistakes-card')
+  await expect(mistakes).toContainText('Rule-breaking')
+  await expect(mistakes).toContainText('Illegal moves5')
+  await expect(mistakes).toContainText('Spawns1')
 
   // The history replays the spawn and the chaos move, with their marker and arrow.
-  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('Qd5')
   await expect(spawnMarker(page)).toHaveCount(1)
   await expectPiece(page, 'd5', 'bq')
@@ -122,11 +127,11 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expectPiece(page, 'f8', 'bb')
 })
 
-test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in King capture', async ({ page }) => {
-  // White's queen jumps to f7; Black ignores the check; White takes the king.
+test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in a King left in check', async ({ page }) => {
+  // White's queen jumps to f7; Black ignores the check, and loses at once.
   await startFromSheet(
     page,
-    { white: ['Qxf7', 'Qxe8'], black: ['Nf6'] },
+    { white: ['Qxf7'], black: ['Nf6'] },
     async (sheet) => {
       await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
       await sheet.getByRole('radio', { name: 'Chaos' }).click()
@@ -135,16 +140,16 @@ test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in
   )
 
   const result = page.getByTestId('result')
-  await expect(result).toContainText(/\(White\) wins by King capture/)
-  await expect(result).toContainText(/.+ \(Black\) left its king hanging/)
+  await expect(result).toContainText(/\(White\) wins by a king left in check/)
+  await expect(result).toHaveAttribute('aria-description', /.+ \(Black\) left its own king in check/)
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
   await expect(moves(page).getByRole('button', { name: 'Qxf7' })).toHaveClass(/chaos/)
   await expect(moves(page).getByRole('button', { name: 'Nf6' })).toHaveClass(/chaos/)
-  await expect(moves(page).getByRole('button', { name: 'Qxe8' })).not.toHaveClass(/chaos/)
-  await expect(page.getByTestId('totals')).toContainText('1 chaos move (0 spawns)')
-  await expectPiece(page, 'e8', 'wq')
+  await expect(moves(page).locator('.ply')).toHaveCount(2)
+  await expect(page.getByTestId('mistakes-card')).toContainText('1Illegal moves1')
+  await expectPiece(page, 'f7', 'wq')
+  await expectPiece(page, 'e8', 'bk')
 
-  await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('Qxf7')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'd1f7')

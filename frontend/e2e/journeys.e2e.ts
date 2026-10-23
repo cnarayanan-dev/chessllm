@@ -472,8 +472,8 @@ test('the player strips: the LLM above the board with its logo, the ring and the
   await expect(black).toHaveAttribute('data-to-move')
   await expect(white).not.toHaveAttribute('data-to-move')
   const timer = black.getByRole('timer')
-  await expect(timer).toHaveText('0s')
-  await expect(timer).toHaveText('2s', { timeout: 5000 })
+  await expect(timer).toHaveText('0m 00s')
+  await expect(timer).toHaveText('0m 02s', { timeout: 5000 })
   await expect(page.getByRole('timer')).toHaveCount(1)
 
   await letGo()
