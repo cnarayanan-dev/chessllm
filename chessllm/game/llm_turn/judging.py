@@ -1,12 +1,14 @@
-"""Judging an LLM's answer: the move it gives, legal or which kind of illegal move (ADR 0002), and its Reasoning."""
+"""Judging an LLM's answer: the move it gives, legal or which kind of illegal move (ADR 0002), its Reasoning, and the
+Attempt it makes."""
 
 from typing import Literal
 
 import chess
 from pydantic import ValidationError
 
-from chessllm.game.records import IllegalResult
-from chessllm.llm.players import MoveAnswer, ReasonedMoveAnswer
+from chessllm.exceptions import LlmTimeout
+from chessllm.game.records import Attempt, AttemptResult, IllegalResult, PromptMessage, Resolution
+from chessllm.llm.players import LlmReply, MoveAnswer, ReasonedMoveAnswer
 
 
 def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, Literal["legal", IllegalResult]]:
@@ -37,3 +39,40 @@ def reasoning(raw: str) -> str | None:
         return ReasonedMoveAnswer.model_validate_json(raw).reasoning
     except ValidationError:
         return None
+
+
+def no_answer(model: str, error: Exception, prompt: list[PromptMessage], feedback: str | None) -> Attempt:
+    """The attempt of a call that gave no answer, with why: it timed out, or it failed."""
+    if isinstance(error, LlmTimeout):
+        minutes = error.timeout_s / 60
+        failed: AttemptResult = "timeout"
+        why = f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
+    else:
+        failed, why = "error", f"{model} did not reply: {error}"
+    return Attempt(
+        move=None, san=None, notation_slip=False, result=failed, feedback_sent=feedback, raw_reply=None,
+        thinking=None, reasoning=None, error=why, latency_s=None, prompt=prompt,
+    )
+
+
+def answered(
+    board: chess.Board,
+    reply: LlmReply,
+    written: str,
+    move: chess.Move | None,
+    result: AttemptResult,
+    thinks: bool,
+    prompt: list[PromptMessage],
+    feedback: str | None,
+    resolution: Resolution | None = None,
+) -> Attempt:
+    """The attempt of an answer judged as written, move and result: with thinking on its Thinking, with it off the
+    Reasoning written in the answer instead; a slip if the legal move isn't written exactly as its standard SAN
+    (ADR 0002)."""
+    thinking, reasoned = (reply.thinking, None) if thinks else (None, reasoning(reply.raw))
+    san = board.san(move) if move is not None else None
+    return Attempt(
+        move=written, san=san, notation_slip=san is not None and written != san, result=result,
+        feedback_sent=feedback, raw_reply=reply.raw, thinking=thinking, reasoning=reasoned, error=None,
+        latency_s=reply.latency_s, prompt=prompt, resolution=resolution,
+    )

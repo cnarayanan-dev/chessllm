@@ -41,6 +41,13 @@ test('the rules stay: a Chaos game is followed by a Chaos game', () => {
   expect(rematchOf(chaosGame(1).settings).rules).toBe('chaos')
 })
 
+test('so does the Legal counterpart switch of a Chaos game', () => {
+  const settings = { ...chaosGame(1).settings, legal_counterpart: false }
+
+  expect(rematchOf(settings)).toMatchObject({ rules: 'chaos', legal_counterpart: false })
+  expect(rematchOf(aGame().settings)).not.toHaveProperty('legal_counterpart')
+})
+
 test('the tooltip says which colour you will play, or that the LLMs swap', () => {
   const asBlack = { ...aGame().settings, white: llm, black: { player: 'human' as const } }
 

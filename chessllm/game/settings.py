@@ -25,6 +25,9 @@ class Settings:
     sampling: Sampling = field(default_factory=dict)  # from the config file; empty means the model's defaults
     rules: RulesKey = "standard"  # one value for the whole game, applying to every LLM in it
     max_attempts: int = 5  # per LLM turn; after this many illegal moves the LLM forfeits
+    # Under Chaos rules, whether each chaos move's Legal counterpart is asked for; Standard rules ignore it. Not part
+    # of the Player configuration: the moves played are the same either way.
+    legal_counterpart: bool = True
 
     def the_mode(self) -> Mode:
         """The Mode its key names."""

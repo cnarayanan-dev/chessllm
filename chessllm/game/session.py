@@ -78,6 +78,8 @@ class GameSession:
         # When the move of the side to move started, while it runs: a human's once the position is ready, an LLM's
         # once its Turn starts and an Anchor's once its move is asked for.
         self._move_started: float | None = None
+        # When an LLM's turn ended, while its chaos move waits for its Legal counterpart: the clock stands still.
+        self._move_ended: float | None = None
         # The settings as the state has them, fixed for the whole game.
         self._game_settings = GameSettings(
             mode=settings.mode,
@@ -86,7 +88,10 @@ class GameSession:
             sampling=settings.sampling,
             rules=settings.rules,
             max_attempts=settings.max_attempts,
+            legal_counterpart=settings.legal_counterpart if self._rules.plays_illegal_moves else None,
         )
+        # Whether each chaos move's Legal counterpart is asked for: never under Standard rules, which have none.
+        self._legal_counterparts = bool(self._game_settings.legal_counterpart)
         # Requests run in a threadpool, so two could otherwise both find it an LLM's turn and both ask it to move.
         # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
         self._llm_turn_running = threading.Lock()
@@ -117,6 +122,7 @@ class GameSession:
             max_retries=settings.max_attempts - 1,
             **self._mode.logged_prompt_files(prompt_files),
             **self._rules.game_start_fields(),
+            **self._game_settings.model_dump(include={"legal_counterpart"}, exclude_none=True),
             **({"evaluator": self._evaluation_engine.log_shape()} if self._evaluation_engine else {}),
             # To the microsecond, so games started within the same second still sort in the order they started.
             started_at=now("microseconds"),
@@ -212,9 +218,20 @@ class GameSession:
             if color not in self._llm_sides:
                 raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
             last_move = self._moves[-1][1] if self._moves else None
+            turns, pgn, ply = self._turns_of[color], self._pgn(), len(self._moves) + 1
             self._move_started = started = self._clock()
-            outcome = self._turns_of[color].play(self._board, self._pgn(), last_move, len(self._moves) + 1, started)
+            outcome = turns.play(self._board, pgn, last_move, ply, started)
             time_s = outcome.turn.time_s
+            counterpart = None
+            if outcome.chaos_move is not None and self._legal_counterparts:
+                # Asked once the turn is over and before its chaos move is played, so the move and its counterpart
+                # land together. The side's clock stops at the turn's last attempt: the counterpart's call is never
+                # its Time used, nor on its running clock.
+                with self._landing:
+                    self._move_ended = started + time_s
+                counterpart = turns.legal_counterpart(self._board, pgn, last_move)
+                if counterpart is not None:
+                    outcome.turn.legal_counterpart = counterpart.counterpart
             with self._ending:
                 with self._landing:
                     if outcome.move is not None:
@@ -232,6 +249,8 @@ class GameSession:
                     self._position_ready()
                     played = outcome.move is not None or outcome.chaos_move is not None
                     unjudged = self._ply_to_judge() if played else None
+                if counterpart is not None:  # logged only with its turn: an abandoned game's never is
+                    turns.log_legal_counterpart(counterpart, ply)
                 if self._end is not None:
                     self._write_end(self._end)
             self._judge(unjudged)
@@ -337,10 +356,14 @@ class GameSession:
         it is asked for, and no one's once the game is over."""
         to_move = self._settings.side(color_of(self._board.turn))
         self._move_started = self._clock() if self._end is None and isinstance(to_move, HumanSide) else None
+        self._move_ended = None
 
     def _time_since_move_started(self, now: float) -> float | None:
-        """The time the running move has taken by now, to the millisecond, or None while no move runs."""
-        return round(now - self._move_started, 3) if self._move_started is not None else None
+        """The time the running move has taken by now, to the millisecond, or None while no move runs. Once an LLM's
+        turn has ended and its move waits for its Legal counterpart, the time up to the turn's end."""
+        if self._move_started is None:
+            return None
+        return round((self._move_ended if self._move_ended is not None else now) - self._move_started, 3)
 
     def _move_time(self, now: float) -> float:
         """The time of the human's or the Anchor's move just finished, to the millisecond. It always started: a

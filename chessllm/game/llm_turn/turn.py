@@ -10,8 +10,8 @@ from typing import Any
 import chess
 
 from chessllm.core.types import Color
-from chessllm.exceptions import LlmTimeout
-from chessllm.game.llm_turn.judging import judge, reasoning
+from chessllm.game.llm_turn.counterpart import CounterpartAnswer, ask_legal_counterpart
+from chessllm.game.llm_turn.judging import answered, judge, no_answer
 from chessllm.game.llm_turn.prompt import (
     SYSTEM_PROMPT_FILES,
     cut_off_feedback,
@@ -153,20 +153,10 @@ class LlmTurns:
                 return TurnOutcome(turn)
             # The Prompt as sent for this attempt.
             prompt = [PromptMessage(role=message.role, content=message.content) for message in messages]
-            failure: tuple[AttemptResult, str] | None = None
             try:
                 reply = player.reply(messages, allowed_moves)
-            except LlmTimeout as timeout:
-                minutes = timeout.timeout_s / 60
-                failure = "timeout", f"Too long thinking: {model} gave no answer within {minutes:g} minutes."
             except Exception as error:
-                failure = "error", f"{model} did not reply: {error}"
-            if failure is not None:
-                failed, error_text = failure
-                attempt = Attempt(
-                    move=None, san=None, notation_slip=False, result=failed, feedback_sent=feedback, raw_reply=None,
-                    thinking=None, reasoning=None, error=error_text, latency_s=None, prompt=prompt,
-                )
+                attempt = no_answer(model, error, prompt, feedback)
                 turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
@@ -178,17 +168,9 @@ class LlmTurns:
             written, move, result = judge(board, reply.raw)
             if result == "invalid" and reply.forced and reply.stop_reason == "length":
                 result = "cut_off"  # the forced answer ran out of tokens too: no answer, rather than a bad one
-            # Thinking with thinking on; with it off, the Reasoning written in the answer instead.
-            thinking, reasoned = (reply.thinking, None) if side.thinking else (None, reasoning(reply.raw))
-            # Legal as written; a slip if not written exactly as its standard SAN (ADR 0002).
-            san = board.san(move) if move is not None else None
             resolution = self._rules.resolve(board, written, result)
-            attempt = Attempt(
-                move=written, san=san, notation_slip=san is not None and written != san, result=result,
-                feedback_sent=feedback, raw_reply=reply.raw, thinking=thinking, reasoning=reasoned, error=None,
-                latency_s=reply.latency_s, prompt=prompt,
-                resolution=resolution.record() if resolution is not None else None,
-            )
+            recorded = resolution.record() if resolution is not None else None
+            attempt = answered(board, reply, written, move, result, side.thinking, prompt, feedback, recorded)
             turn.attempts.append(attempt)
             chaos = move is None and resolution is not None and resolution.kind in ("chaos", "spawn")
             last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits
@@ -197,7 +179,7 @@ class LlmTurns:
                 **self._rules.attempt_log_shape(attempt.log_shape()), **token_accounting(reply),
                 **(self._ended(turn, started) if last else {}),
             )
-            turn.thinking, turn.reasoning = thinking, reasoned
+            turn.thinking, turn.reasoning = attempt.thinking, attempt.reasoning
             if move is not None:
                 if illegal_in_turn:
                     stats.recovered_turns += 1
@@ -229,3 +211,22 @@ class LlmTurns:
         attempts are timed: anything asked after them is not its Time used."""
         turn.time_s = round(self._clock() - started, 3)
         return turn.log_shape()
+
+    def legal_counterpart(self, board: chess.Board, pgn: str, last_move: str | None) -> CounterpartAnswer | None:
+        """Ask for the Legal counterpart of the chaos move a turn just ended in. board, pgn and last_move are as the
+        turn had them: the chaos move isn't played yet. None in an abandoned game, which asks for nothing more.
+
+        It is asked apart from the turn, after it, so its call is none of the turn's attempts and its time none of
+        the turn's (Time used), and nothing about it counts in the side's totals."""
+        if self._abandoned.is_set():
+            return None
+        return ask_legal_counterpart(self._player, self._side, self._color, board, pgn, last_move)
+
+    def log_legal_counterpart(self, answer: CounterpartAnswer, ply: int) -> None:
+        """Log the Legal counterpart of the chaos move of ply, once its turn has landed."""
+        counterpart = answer.counterpart
+        self._log.write(
+            "legal_counterpart", color=self._color, ply=ply, pgn=answer.pgn, fen=answer.fen,
+            legal_moves=answer.listed_moves, **counterpart.attempt.log_shape(), uci=counterpart.move,
+            fen_after=counterpart.fen_after, **(token_accounting(answer.reply) if answer.reply is not None else {}),
+        )

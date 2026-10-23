@@ -12,6 +12,8 @@ export const rematchOf = (settings: GameSettings): NewGame => ({
   black: settings.white,
   rules: settings.rules ?? 'standard', // the API leaves out Standard rules
   max_attempts: settings.max_attempts,
+  // Only a Chaos game has the Legal counterpart switch.
+  ...(settings.legal_counterpart != null && { legal_counterpart: settings.legal_counterpart }),
 })
 
 /** What Rematch does, for its tooltip: the colour you will play, or that the LLMs swap. */

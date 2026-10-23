@@ -40,12 +40,15 @@ import {
   thinkingAllowed,
   thinkingOn,
   toggleCustomize,
+  toggleLegalCounterpart,
   toggleThinking,
   value,
 } from '@/settings/next-game'
 
 const THINKING = 'Reasons before each move. Slower, likely stronger.'
 const ADVANCED = 'What the LLM sees, retries, forfeit'
+const LEGAL_COUNTERPART =
+  'After a Chaos move, the LLM is asked once more for a legal move: recorded, never played. One more call per Chaos move.'
 const CUSTOMIZE = 'Off: both LLMs play under the same settings, a fair comparison. On: set each LLM separately.'
 /** The constraints under which an LLM can play an illegal move, by their names in the sheet. */
 const NOT_ENFORCED = `${LLM_CONSTRAINT_WORDS.free.name} or ${LLM_CONSTRAINT_WORDS.listed.name}`
@@ -172,6 +175,14 @@ function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStar
           disabled: rules === 'chaos' && !chaosOk ? chaosReason(next) : undefined,
         }))}
       />
+      {next.rules === 'chaos' && chaosOk && (
+        <SwitchRow
+          label="Legal counterpart"
+          description={LEGAL_COUNTERPART}
+          checked={next.legal_counterpart}
+          onChange={() => set(toggleLegalCounterpart(next))}
+        />
+      )}
       <Collapsible open={advanced} onOpenChange={setAdvanced} className="rounded-3xl bg-muted/60">
         <Tip description={ADVANCED}>
           <CollapsibleTrigger

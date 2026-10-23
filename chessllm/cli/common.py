@@ -53,6 +53,17 @@ def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_rules_arguments(parser: argparse.ArgumentParser) -> None:
+    """The Rules, part of the Player configuration, and under Chaos rules whether Legal counterparts are asked
+    for, which is not."""
+    parser.add_argument("--rules", choices=get_args(RulesKey), default=Settings.rules)
+    parser.add_argument(
+        "--no-legal-counterpart",
+        action="store_true",
+        help="under Chaos rules, don't ask the LLM for a legal move after each chaos move (one call fewer each)",
+    )
+
+
 def add_games_dir_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--games-dir", type=Path, default=GAMES_DIR, help="where logs go (default: the project's games/)")
 
@@ -80,8 +91,8 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         "(needs thinking on)",
     )
     add_prompt_arguments(parser)
-    # Part of the Player configuration. Chaos rules only with the Stockfish Anchor, which copes with chaos positions.
-    parser.add_argument("--rules", choices=get_args(RulesKey), default=Settings.rules)
+    # Chaos rules only with the Stockfish Anchor, which copes with chaos positions.
+    add_rules_arguments(parser)
     parser.add_argument(
         "--max-attempts",
         type=int,
@@ -122,6 +133,7 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         sampling=load_sampling(sampling_file),
         rules=args.rules,
         max_attempts=args.max_attempts,
+        legal_counterpart=not args.no_legal_counterpart,
     )
     settings.check(LLM_MODELS)
     return settings

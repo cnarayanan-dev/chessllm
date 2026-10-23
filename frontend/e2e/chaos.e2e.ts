@@ -59,8 +59,11 @@ async function startFromSheet(
 }
 
 test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castle, then King capture', async ({ page }) => {
-  await startFromSheet(page, { black: ['Bb4', 'Qg5', 'e5', 'Qd5', 'O-O', 'Bxe1'] }, async (sheet) => {
+  // Each chaos move is followed by its Legal counterpart, a6, asked for and never played.
+  const black = ['Bb4', 'a6', 'Qg5', 'a6', 'e5', 'Qd5', 'a6', 'O-O', 'a6', 'Bxe1', 'a6']
+  await startFromSheet(page, { black }, async (sheet) => {
     await sheet.getByRole('radio', { name: 'Chaos' }).click()
+    await expect(sheet.getByRole('switch', { name: 'Legal counterpart' })).toBeChecked()
   })
   await expect(page.getByRole('img', { name: 'Chaos rules' })).toBeVisible()
 
@@ -71,6 +74,7 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expectPiece(page, 'b4', 'bb')
   await expect(lastMove(page)).toHaveClass(/chaos/)
   await expect(page.locator('.center-flash')).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Legal counterpart' }).getByTestId('counterpart-move')).toHaveText('1… a6')
 
   // The human's move clears the arrow.
   await move(page, 'c2c3', 'Qg5')
@@ -128,10 +132,11 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
 })
 
 test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in a King left in check', async ({ page }) => {
-  // White's queen jumps to f7; Black ignores the check, and loses at once.
+  // White's queen jumps to f7; Black ignores the check, and loses at once. Each chaos move is followed by its Legal
+  // counterpart.
   await startFromSheet(
     page,
-    { white: ['Qxf7'], black: ['Nf6'] },
+    { white: ['Qxf7', 'e4'], black: ['Nf6', 'Kxf7'] },
     async (sheet) => {
       await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
       await sheet.getByRole('radio', { name: 'Chaos' }).click()

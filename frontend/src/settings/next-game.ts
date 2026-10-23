@@ -30,6 +30,8 @@ export type NextGame = {
   rules: Rules
   /** Illegal moves per turn before an LLM forfeits, the same for every LLM. */
   max_attempts: number
+  /** Under Chaos rules, whether each Chaos move's Legal counterpart is asked for; kept while Standard rules are chosen. */
+  legal_counterpart: boolean
 }
 
 /** The model list from GET /api/models, or null until it has loaded. */
@@ -74,6 +76,7 @@ export function nextGameFrom(settings: GameSettings | NewGame): NextGame {
     sides,
     rules: settings.rules ?? 'standard', // the API leaves out Standard rules
     max_attempts: settings.max_attempts,
+    legal_counterpart: settings.legal_counterpart ?? true, // the API leaves it out under Standard rules
   }
 }
 
@@ -106,6 +109,8 @@ export const everyLlmEnforced = (next: NextGame) => llmColors(next).every((color
 export const chaosAllowed = (next: NextGame) => llmColors(next).every((color) => !enforced(next, color))
 
 export const chooseRules = (next: NextGame, rules: Rules): NextGame => ({ ...next, rules })
+
+export const toggleLegalCounterpart = (next: NextGame): NextGame => ({ ...next, legal_counterpart: !next.legal_counterpart })
 
 export const chooseMaxAttempts = (next: NextGame, max_attempts: number): NextGame => ({ ...next, max_attempts })
 
@@ -173,5 +178,7 @@ export function newGameRequest(next: NextGame, models: Models): NewGame {
   const side = (color: Color): Side =>
     next.mode === 'play_llm' && color === next.human_color ? { player: 'human' } : llm(color)
   const rules = next.rules === 'chaos' && chaosAllowed(next) ? 'chaos' : 'standard'
-  return { mode: next.mode, white: side('white'), black: side('black'), rules, max_attempts: next.max_attempts }
+  const request: NewGame = { mode: next.mode, white: side('white'), black: side('black'), rules, max_attempts: next.max_attempts }
+  // Standard rules ignore the switch, so it is sent only under Chaos rules.
+  return rules === 'chaos' ? { ...request, legal_counterpart: next.legal_counterpart } : request
 }

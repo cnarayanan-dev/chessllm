@@ -59,6 +59,7 @@ def test_the_settings_of_a_new_game_by_default_are_offered_before_any_game(scrip
         },
         "rules": "standard",
         "max_attempts": 5,
+        "legal_counterpart": True,
     }
     assert client.get("/api/games/current").status_code == 404
 

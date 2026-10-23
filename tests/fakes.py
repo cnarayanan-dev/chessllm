@@ -36,8 +36,9 @@ class ScriptedPlayer:
     {"move": "<san>"}, and records every prompt and the allowed moves it came with. A scripted exception is
     raised instead of answering.
     Thinking texts, if given, go with the replies in order, and so do usages: the token counts and stop reason
-    each reply reports (none by default). It serves every game, recording the settings of each game it is built
-    for. With a clock, each reply advances it by the next of reply_s, the time it took."""
+    each reply reports (none by default) and its latency (0 by default). It serves every game, recording the
+    settings of each game it is built for. With a clock, each reply advances it by the next of reply_s, the time it
+    took."""
 
     def __init__(self, replies: list[str | BaseException], thinking: list[str] | None = None) -> None:
         self.replies = list(replies)
@@ -66,7 +67,7 @@ class ScriptedPlayer:
         raw = move if isinstance(move, Raw) else json.dumps({"move": move})
         thinking = self.thinking.pop(0) if self.thinking is not None else None
         usage = self.usage.pop(0) if self.usage else {}
-        return LlmReply(raw=raw, thinking=thinking, latency_s=0.0, **usage)
+        return LlmReply(**{"raw": raw, "thinking": thinking, "latency_s": 0.0} | usage)
 
 
 class ScriptedAnchor:

@@ -31,6 +31,22 @@ def test_colours_alternate_and_every_game_is_logged_as_a_faceoff(tmp_path, capsy
     assert "Batch: gemma3:12b 1 - 2 llama3:8b" in capsys.readouterr().out
 
 
+def test_legal_counterparts_can_be_turned_off_under_chaos_rules(tmp_path):
+    player = ScriptedPlayer(FOOLS_MATE)
+    args = ["--models", "gemma3:12b", "llama3:8b", "--games", "1", "--games-dir", str(tmp_path), "--no-analysis"]
+
+    code = main(
+        [*args, "--rules", "chaos", "--no-legal-counterpart"],
+        player_for=player.for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    assert code == 0
+    [log] = tmp_path.glob("*.jsonl")
+    start = json.loads(log.read_text().splitlines()[0])
+    assert (start["rules"], start["legal_counterpart"]) == ("chaos", False)
+
+
 def test_a_model_not_in_the_list_is_refused_before_any_game(tmp_path, capsys):
     code = main(
         ["--models", "nonesuch:1b", "llama3:8b", "--games-dir", str(tmp_path), "--no-analysis"],

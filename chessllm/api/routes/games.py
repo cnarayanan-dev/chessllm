@@ -44,6 +44,7 @@ def start_game(
         sampling=load_sampling(config.sampling_file),
         rules=new_game.rules,
         max_attempts=new_game.max_attempts,
+        legal_counterpart=new_game.legal_counterpart,
     )
     settings.check(engines.models)
     players = {color: engines.player_for(settings, color) for color in settings.llm_sides()}

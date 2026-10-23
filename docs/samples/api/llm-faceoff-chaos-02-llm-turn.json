@@ -125,7 +125,8 @@
       "top_k": 40
     },
     "rules": "chaos",
-    "max_attempts": 3
+    "max_attempts": 3,
+    "legal_counterpart": true
   },
   "status": "playing",
   "result": null,

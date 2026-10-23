@@ -18,6 +18,7 @@ export type PromptMessage = Schemas['PromptMessage']
 export type Ply = Schemas['Ply']
 /** Stockfish's judgement of the position after a ply, from White's point of view; `unjudged` says why there is none. */
 export type Evaluation = NonNullable<Ply['evaluation']>
-export type NewGame = Schemas['NewGame']
+// The Legal counterpart switch may be left out of a request: Standard rules ignore it, and the API defaults it to on.
+export type NewGame = Omit<Schemas['NewGame'], 'legal_counterpart'> & { legal_counterpart?: boolean }
 export type ModelInfo = Schemas['ModelInfo']
 export type Color = GameState['turn']

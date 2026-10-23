@@ -115,6 +115,21 @@ class Attempt(AttemptSummary):
         return shape
 
 
+class LegalCounterpartSummary(BaseModel):
+    """The Legal counterpart of a chaos move: the legal move the same LLM gave for the same position when asked once
+    more, under Listed enforced, in one attempt. Never played. Its move and the position it would have left are
+    None when it failed: the call timed out or failed, or its answer was no legal move."""
+
+    move: str | None  # in UCI, with any promotion
+    san: str | None
+    fen_after: str | None  # the position it would have left, so the page can show it without chess logic (ADR 0001)
+    attempt: AttemptSummary
+
+
+class LegalCounterpart(LegalCounterpartSummary):
+    attempt: Attempt
+
+
 class LlmTurnSummary(BaseModel):
     """One LLM turn, its attempts without their text."""
 
@@ -123,6 +138,8 @@ class LlmTurnSummary(BaseModel):
     attempts: Sequence[AttemptSummary]
     # The Turn's Time used: from when it started on the server to its last attempt, so a forfeited Turn has one too.
     time_s: float
+    # Only for a turn that ended in a chaos move, under Chaos rules with Legal counterparts asked for.
+    legal_counterpart: LegalCounterpartSummary | None = Field(default=None, exclude_if=is_none)
 
     def log_shape(self) -> dict[str, Any]:
         """What the turn's last llm_attempt logs of the turn itself: its time."""
@@ -133,6 +150,7 @@ class LlmTurn(LlmTurnSummary):
     attempts: list[Attempt]
     thinking: str | None  # the thinking of the last try that answered
     reasoning: str | None  # the Reasoning of the last try: the one played, or the last before a Forfeit
+    legal_counterpart: LegalCounterpart | None = Field(default=None, exclude_if=is_none)
 
 
 class Evaluation(BaseModel):
@@ -237,6 +255,8 @@ class GameSettings(BaseModel):
     # Left out under Standard rules, so a Standard rules game reads as it did before Chaos rules existed.
     rules: RulesKey | None = Field(default=None, exclude_if=lambda rules: rules in (None, "standard"))
     max_attempts: int
+    # Whether a chaos move's Legal counterpart is asked for: only under Chaos rules, left out under Standard rules.
+    legal_counterpart: bool | None = Field(default=None, exclude_if=is_none)
 
 
 class GameState(BaseModel):

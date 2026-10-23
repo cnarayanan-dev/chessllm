@@ -819,6 +819,26 @@ describe('Chaos rules', () => {
     expect(playMoveSound).toHaveBeenCalledTimes(1)
   })
 
+  test("a chaos move lands with its Legal counterpart's move at the bottom of the Turn panel", async () => {
+    const game = chaosGame(2)
+    const [chaosTurn] = game.llm_turns
+    const counterpart = {
+      move: 'e7e5',
+      san: 'e5',
+      fen_after: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      attempt: aTurn('e5').attempts[0],
+    }
+    const landed = { ...chaosTurn, legal_counterpart: counterpart }
+    fakeBackend().on('GET /api/games/current', Response.json({ ...game, llm_turn: landed, llm_turns: [landed] }))
+    renderApp()
+
+    const block = await within(await screen.findByRole('region', { name: 'Turn' })).findByRole('group', {
+      name: 'Legal counterpart',
+    })
+    expect(within(block).getByTestId('counterpart-move')).toHaveTextContent('1… e5')
+    expect(theBoard().position).toBe('rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR') // never played
+  })
+
   test("the arrow goes once the human's move lands", async () => {
     fakeBackend()
       .on('GET /api/games/current', Response.json(chaosGame(2)))

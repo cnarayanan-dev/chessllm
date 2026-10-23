@@ -1,9 +1,9 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, test } from 'vitest'
-import type { Attempt } from '@/api/types'
+import { beforeEach, describe, expect, test } from 'vitest'
+import type { Attempt, LlmTurn } from '@/api/types'
 import { TurnPanel } from '@/components/turn/TurnPanel'
-import { aTurn, afterE4, afterE5, E4, E5, NF3, NC6, plies } from '@/test/games'
+import { aTurn, afterE4, afterE5, chaosGame, E4, E5, NF3, NC6, plies } from '@/test/games'
 
 beforeEach(() => localStorage.clear())
 
@@ -177,6 +177,62 @@ test('a turn with one attempt has no stepper', () => {
   render(<TurnPanel game={twoMovesIn()} ply={4} live />)
 
   expect(within(panel()).queryByRole('button', { name: 'Earlier attempt' })).not.toBeInTheDocument()
+})
+
+describe('Legal counterpart', () => {
+  const AFTER_E5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
+  type LegalCounterpart = NonNullable<LlmTurn['legal_counterpart']>
+  const MEANING = 'The legal move the LLM gave when asked once more in the same position, after its Chaos move. Never played.'
+
+  /** 1. e4 Bb4, a Chaos move, its turn with the Legal counterpart given; then, with `more`, 2. c3. */
+  const withCounterpart = (counterpart: LegalCounterpart, more = 0) => {
+    const game = chaosGame(2 + more)
+    const turns = game.llm_turns.map((turn) => (turn.ply === 2 ? { ...turn, legal_counterpart: counterpart } : turn))
+    return { ...game, llm_turns: turns, llm_turn: turns.at(-1)! }
+  }
+  const e5: LegalCounterpart = {
+    move: 'e7e5',
+    san: 'e5',
+    fen_after: AFTER_E5,
+    attempt: { ...aTurn('e5').attempts[0], latency_s: 3.4 },
+  }
+  const block = () => within(panel()).queryByRole('group', { name: 'Legal counterpart' })
+
+  test("viewing a Chaos move, the panel ends with its Legal counterpart's move, its meaning in a tooltip", async () => {
+    render(<TurnPanel game={withCounterpart(e5)} ply={2} live />)
+
+    const name = within(block()!).getByText('Legal counterpart')
+    expect(name).toHaveAttribute('aria-description', MEANING)
+    expect(name.querySelector('svg')).toBeInTheDocument()
+    expect(within(block()!).getByTestId('counterpart-move')).toHaveTextContent('1… e5')
+    expect(block()).not.toHaveTextContent('3.4') // no time is shown
+    expect(panel()).not.toHaveTextContent('Never played')
+    await userEvent.hover(name)
+    expect((await screen.findByText(MEANING)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
+  test('viewing the next ply, the Chaos move is still the turn shown, but its counterpart is not', () => {
+    render(<TurnPanel game={withCounterpart(e5, 1)} ply={3} live />)
+
+    expect(badge()).toBe('1… Bb4')
+    expect(block()).not.toBeInTheDocument()
+  })
+
+  test('a Chaos move without a Legal counterpart has no such line', () => {
+    render(<TurnPanel game={chaosGame(2)} ply={2} live />)
+
+    expect(block()).not.toBeInTheDocument()
+  })
+
+  test('a failed Legal counterpart says it gave none, and why in its tooltip', () => {
+    const error = 'Too long thinking: qwen3.5:9b gave no answer within 5 minutes.'
+    const failed = { move: null, san: null, fen_after: null, attempt: { ...e5.attempt, result: 'timeout', error } } as const
+    render(<TurnPanel game={withCounterpart(failed)} ply={2} live />)
+
+    const none = within(block()!).getByTestId('counterpart-move')
+    expect(none).toHaveTextContent('none')
+    expect(none).toHaveAttribute('aria-description', error)
+  })
 })
 
 test('the tab chosen stays chosen on the next turn and after a reload', async () => {

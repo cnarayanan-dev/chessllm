@@ -176,6 +176,33 @@
         }
       ],
       "time_s": 4.0,
+      "legal_counterpart": {
+        "move": "e7e5",
+        "san": "e5",
+        "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        "attempt": {
+          "move": "e5",
+          "san": "e5",
+          "notation_slip": false,
+          "result": "legal",
+          "feedback_sent": null,
+          "raw_reply": "{\"move\": \"e5\"}",
+          "thinking": null,
+          "reasoning": null,
+          "error": null,
+          "latency_s": 0.0,
+          "prompt": [
+            {
+              "role": "system",
+              "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+            },
+            {
+              "role": "user",
+              "content": "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: Nf6 c5 h5 h6 c6 Nh6 g5 d6 Nc6 a6 f5 Na6 e6 a5 f6 e5 b6 b5 g6 d5"
+            }
+          ]
+        }
+      },
       "thinking": null,
       "reasoning": null
     },
@@ -241,7 +268,8 @@
       "top_k": 40
     },
     "rules": "chaos",
-    "max_attempts": 3
+    "max_attempts": 3,
+    "legal_counterpart": true
   },
   "status": "playing",
   "result": null,

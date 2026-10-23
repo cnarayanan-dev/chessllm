@@ -103,7 +103,7 @@ The legal alternative a **Chaos gain** is measured against: the **Legal counterp
 _Avoid_: Comparison mode, reference move
 
 **Legal counterpart**:
-The legal move an LLM gives for the same position after its move there was a **Chaos move**. It is asked for once more under **Listed enforced** by default, in one attempt without a **Retry**. Its Thinking and Answer are recorded, but it is never played. Under a conversation kept by **Turn memory**, it is asked at the end of that conversation and then dropped from it, so the LLM answers with what it knew when it made the chaos move and never remembers being asked. Asking for it is a switch, on by default under **Chaos rules**; it is not part of the **Player configuration**, since the moves played are the same either way. Its time is not **Time used**, and if it fails the game goes on without it; it never causes a **Forfeit**.
+The legal move an LLM gives for the same position after its move there was a **Chaos move**. It is asked for once more under **Listed enforced**, whatever the side's own **LLM constraints**, in one attempt without a **Retry**. Its Thinking and Answer are recorded, but it is never played. Under a conversation kept by **Turn memory**, it is asked at the end of that conversation and then dropped from it, so the LLM answers with what it knew when it made the chaos move and never remembers being asked. Asking for it is a switch, on by default under **Chaos rules**; it is not part of the **Player configuration**, since the moves played are the same either way. Its time is not **Time used**, and if it fails the game goes on without it; it never causes a **Forfeit**.
 _Avoid_: Shadow move, fallback move, legal alternative
 
 **Move record**:

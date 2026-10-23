@@ -31,3 +31,5 @@ class NewGame(BaseModel):
     rules: RulesKey = Settings.rules  # refused unless every LLM side is under Free or Listed
     # Illegal moves per turn before an LLM forfeits, the same for every LLM in the game.
     max_attempts: int = Field(default=Settings.max_attempts, ge=MAX_ATTEMPTS_RANGE[0], le=MAX_ATTEMPTS_RANGE[-1])
+    # Under Chaos rules, whether each chaos move's Legal counterpart is asked for; ignored under Standard rules.
+    legal_counterpart: bool = Settings.legal_counterpart

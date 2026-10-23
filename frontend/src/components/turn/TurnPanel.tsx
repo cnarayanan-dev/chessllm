@@ -1,5 +1,5 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
-import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, MessageSquareText } from 'lucide-react'
+import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, MessageSquareText, Scale } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import type { Attempt, GameState, LlmTurn, PromptMessage } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
@@ -35,10 +35,13 @@ function turnShown(game: GameState, ply: number, live: boolean): LlmTurn | null 
   return game.llm_turns.findLast((turn) => turn.ply <= upTo) ?? null
 }
 
+/** The turn's move number as the move list has it, e.g. "10…". */
+const moveNumber = (turn: LlmTurn) => `${Math.ceil(turn.ply / 2)}${turn.color === 'white' ? '.' : '…'}`
+
 /** The turn's move as the move list numbers it, e.g. "10… Nxa1", or "forfeited" for a turn that played none. */
 function moveName(game: GameState, turn: LlmTurn): string {
   const ply = game.plies[turn.ply - 1]
-  return ply ? `${Math.ceil(turn.ply / 2)}${turn.color === 'white' ? '.' : '…'} ${ply.written}` : 'forfeited'
+  return ply ? `${moveNumber(turn)} ${ply.written}` : 'forfeited'
 }
 
 /** Whether the side thinks, so its tab shows the Thinking rather than the Reasoning written in the answer. */
@@ -129,8 +132,50 @@ export function TurnPanel({ game, ply, live }: TurnPanelProps) {
         ) : (
           <p className={quiet}>{faceoff(game) ? 'No LLM has moved yet.' : 'The LLM has not moved yet.'}</p>
         )}
+        {turn?.legal_counterpart && turn.ply === ply && (
+          <Counterpart counterpart={turn.legal_counterpart} number={moveNumber(turn)} />
+        )}
       </CardContent>
     </Card>
+  )
+}
+
+type LegalCounterpart = NonNullable<LlmTurn['legal_counterpart']>
+
+const COUNTERPART_MEANING =
+  'The legal move the LLM gave when asked once more in the same position, after its Chaos move. Never played.'
+
+/**
+ * The Chaos move's Legal counterpart, at the bottom of the panel: its name, then its move on a line of its own, or
+ * "none" when it failed, why in its tooltip. No time is shown: it is none of the turn's.
+ */
+function Counterpart({ counterpart, number }: { counterpart: LegalCounterpart; number: string }) {
+  const why = counterpart.attempt.error ?? 'Its answer was no legal move.'
+  return (
+    <div role="group" aria-label="Legal counterpart" className="mt-4 flex flex-col gap-1 border-t pt-3">
+      <Tooltip>
+        <TooltipTrigger
+          render={<span aria-description={COUNTERPART_MEANING} />}
+          className="flex w-fit items-center gap-1.5 text-sm font-medium text-muted-foreground"
+        >
+          <Scale aria-hidden="true" className="size-4" />
+          Legal counterpart
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{COUNTERPART_MEANING}</TooltipContent>
+      </Tooltip>
+      {counterpart.san === null ? (
+        <Tooltip>
+          <TooltipTrigger render={<span aria-description={why} data-testid="counterpart-move" />} className={`${quiet} w-fit`}>
+            none
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{why}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <span data-testid="counterpart-move" className="w-fit font-medium">
+          {`${number} ${counterpart.san}`}
+        </span>
+      )}
+    </div>
   )
 }
 

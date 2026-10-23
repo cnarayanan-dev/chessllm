@@ -92,7 +92,7 @@ The board keeps its own small face for the coordinates and its flashes (`board.c
 
 ## Icons: Lucide
 
-All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (the Rules chip and the setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries (and under Chaos rules illegal moves), `PenLine` notation slips, `TriangleAlert` a forfeit's error, `ArrowUp` / `ArrowDown` the sorted column. In the New game sheet: `User` vs `Bot` and `Bot` vs `Bot` on the Mode cards, the Game card's setting icons on the Rules, constraint and Retry feedback cards, `ArrowLeftRight` to swap the sides and `ChevronDown` on Advanced settings. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
+All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (the Rules chip and the setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries (and under Chaos rules illegal moves), `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Scale` the Legal counterpart in the Turn panel, `ArrowUp` / `ArrowDown` the sorted column. In the New game sheet: `User` vs `Bot` and `Bot` vs `Bot` on the Mode cards, the Game card's setting icons on the Rules, constraint and Retry feedback cards, `ArrowLeftRight` to swap the sides and `ChevronDown` on Advanced settings. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
 
 ## Layout
 
@@ -181,6 +181,8 @@ The tab chosen is kept in this browser across turns, games and reloads. A turn w
 
 It follows the position on the board, live or in the move history: on an LLM's move its turn; on the human's move or the start position, the LLM's last move before it, else a muted "The LLM has not moved yet." ("No LLM has moved yet." in a faceoff). Live after a Forfeit, the Badge is `destructive`, "forfeited". The Thinking appears once the attempt has finished; it is never streamed.
 
+On a Chaos move with a **Legal counterpart** (CONTEXT.md), viewed on its own ply, the panel ends, under a top border, with the counterpart: a muted line with `Scale` and "Legal counterpart", what it is in its tooltip and `aria-description`, then the counterpart's move on a line of its own, numbered as the move list numbers it ("1… e5"). A counterpart that failed shows a muted "none", why in its tooltip. No time and no Stockfish's best move are shown.
+
 ## Moves panel
 
 `frontend/src/components/moves/MovesCard.tsx` and `moves.css`, a `Card size="sm"` in the right column:
@@ -233,7 +235,7 @@ Top to bottom, every explanation in a Tooltip and the control's `aria-descriptio
 1. **Mode**: two choice cards, the players as icons above the name: **Play LLM** `User` vs `Bot`, **LLM faceoff** `Bot` vs `Bot`.
 2. **Opponent**: Play LLM, one model `Select`; LLM faceoff, White's and Black's model, each under its side's dot and name, with an `outline` icon Button (`ArrowLeftRight`, "Swap colours") between them that swaps the LLMs with their settings. If the models can't be listed, a `text-destructive` alert line says why and the chosen models stay.
 3. **Thinking**: a row with its name and a `Switch`, "Reasons before each move. Slower, likely stronger."; disabled when the model can't think, the tooltip naming it ("llama3:8b can't think."; in a faceoff each model that can't).
-4. **Rules**: two choice cards, **Standard** `ChessKnight` and **Chaos** `Zap`. Under an enforced constraint Chaos is disabled (40% opacity), its tooltip giving the reason ("Needs an LLM that can play an illegal move: pick Board only or Board + legal moves in Advanced settings.", naming the side when customized per LLM).
+4. **Rules**: two choice cards, **Standard** `ChessKnight` and **Chaos** `Zap`. Under an enforced constraint Chaos is disabled (40% opacity), its tooltip giving the reason ("Needs an LLM that can play an illegal move: pick Board only or Board + legal moves in Advanced settings.", naming the side when customized per LLM). Under Chaos rules a **Legal counterpart** switch follows, on by default, what it costs in its tooltip; it is not part of the Player configuration.
 5. **Advanced settings**: a `Collapsible` on a light `muted` surface (`rounded-3xl`), closed by default, its trigger a `ChevronDown` (turned while closed) and the name, its summary "What the LLM sees, retries, forfeit" as the tooltip. Inside:
    - **What the LLM is given**: the four LLM constraints as cards with the Game card's icons, the plain name with the glossary term under it in muted 12px: Board only (Free), Board + legal moves (Listed), Kept legal, not told (Blind enforced), Shown and kept legal (Listed enforced).
    - **After an illegal move, tell the LLM**: Retry feedback as four cards, two by two, Explained / Bare / Hinted / Repeat.

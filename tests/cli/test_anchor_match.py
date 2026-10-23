@@ -285,6 +285,19 @@ def test_under_chaos_rules_the_llms_illegal_move_is_played_against_the_stockfish
     assert end["stats"]["white"]["chaos_moves"] == 1
 
 
+@pytest.mark.parametrize(("switch", "asked"), [([], True), (["--no-legal-counterpart"], False)])
+def test_under_chaos_rules_legal_counterparts_are_asked_for_unless_turned_off(anchor_match, tmp_path, switch, asked):
+    code, player, _, _ = anchor_match(
+        ["e4", "Qxe8", "d4"], ["e5"], "--engine", "stockfish", "--rules", "chaos", "--color", "white", *switch
+    )
+
+    assert code == 0
+    start, *logged = events(tmp_path / "games")
+    assert start["legal_counterpart"] is asked
+    assert len(player.prompts) == (3 if asked else 2)
+    assert [event["san"] for event in logged if event["type"] == "legal_counterpart"] == (["d4"] if asked else [])
+
+
 def test_a_broken_sampling_config_is_refused_before_the_game_starts(tmp_path, capsys):
     config = tmp_path / "sampling.toml"
     config.write_text('temperature = "hot"\n')

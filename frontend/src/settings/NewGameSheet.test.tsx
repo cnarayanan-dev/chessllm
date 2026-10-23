@@ -338,6 +338,33 @@ describe('Rules', () => {
     expect(await tooltip()).toHaveTextContent(reason)
   })
 
+  test('the Legal counterpart switch shows only under Chaos rules, on by default, its meaning in a tooltip', async () => {
+    const { user, sheet, started } = await openSheet()
+    const counterpart = () => screen.queryByRole('switch', { name: 'Legal counterpart' })
+
+    expect(counterpart()).not.toBeInTheDocument()
+    await user.click(radio('Chaos'))
+    expect(counterpart()).toHaveAttribute('aria-checked', 'true')
+    const meaning = 'After a Chaos move, the LLM is asked once more for a legal move: recorded, never played. One more call per Chaos move.'
+    expect(counterpart()).toHaveAttribute('aria-description', meaning)
+    expect(sheet).not.toHaveTextContent('never played')
+    await user.hover(counterpart()!)
+    expect(await tooltip()).toHaveTextContent(meaning)
+    await user.click(radio('Standard'))
+    expect(counterpart()).not.toBeInTheDocument()
+
+    await user.click(radio('Chaos'))
+    await user.click(counterpart()!)
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started()).toMatchObject({ rules: 'chaos', legal_counterpart: false })
+  })
+
+  test("the sheet keeps the last game's Legal counterpart switch", async () => {
+    await openSheet({ ...playLlm, rules: 'chaos', legal_counterpart: false })
+
+    expect(screen.getByRole('switch', { name: 'Legal counterpart' })).toHaveAttribute('aria-checked', 'false')
+  })
+
   test('customized, one enforced LLM disables Chaos, the reason naming its side', async () => {
     await openSheet({ ...faceoff, black: llm('qwen3.5:9b', { llm_constraints: 'listed_enforced' }) })
 

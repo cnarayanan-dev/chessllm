@@ -111,7 +111,8 @@ def test_illegal_attempts_and_human_moves_are_not_scored(scripted, tmp_path):
 
 
 def test_chaos_moves_are_not_scored(scripted, tmp_path):
-    client, _ = scripted(["Bc5", "Nf6", "Nc6"])  # Bc5 goes through the bishop's own e7 pawn: a chaos move
+    # Bc5 goes through the bishop's own e7 pawn: a chaos move, whose Legal counterpart e5 is never played or scored.
+    client, _ = scripted(["Bc5", "e5", "Nf6", "Nc6"])
     client.post("/api/games", json=play_llm() | {"rules": "chaos"})
     for uci in ("e2e4", "d2d4", "g1f3"):
         play_move(client, uci)

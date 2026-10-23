@@ -11,5 +11,6 @@
     "retry_feedback": "explained"
   },
   "rules": "standard",
-  "max_attempts": 5
+  "max_attempts": 5,
+  "legal_counterpart": true
 }

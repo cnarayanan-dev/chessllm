@@ -6,7 +6,9 @@ import pytest
 
 from tests.conftest import llm_faceoff, play_llm, play_move
 
-CHAOS = {"rules": "chaos"}
+# Without Legal counterparts, so that every scripted reply is a turn's; the counterparts are tested on their own
+# (test_legal_counterpart.py).
+CHAOS = {"rules": "chaos", "legal_counterpart": False}
 
 
 def events(games_dir):

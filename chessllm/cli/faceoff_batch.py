@@ -13,13 +13,13 @@ import argparse
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import get_args
 
 from chessllm.cli.common import (
     Analyser,
     add_analysis_argument,
     add_games_dir_argument,
     add_prompt_arguments,
+    add_rules_arguments,
     add_thinking_argument,
     default_evaluator,
     default_move_model,
@@ -29,7 +29,7 @@ from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.core.config import SAMPLING_FILE
-from chessllm.core.types import COLORS, Color, RulesKey
+from chessllm.core.types import COLORS, Color
 from chessllm.exceptions import InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
@@ -69,7 +69,7 @@ def parser() -> argparse.ArgumentParser:
         "qwen3.8:latest=3072",
     )
     add_prompt_arguments(parser)
-    parser.add_argument("--rules", choices=get_args(RulesKey), default=Settings.rules)
+    add_rules_arguments(parser)
     parser.add_argument(
         "--max-attempts",
         type=int,
@@ -128,6 +128,7 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
         side(black),
         sampling=load_sampling(sampling_file),
         rules=args.rules,
+        legal_counterpart=not args.no_legal_counterpart,
         max_attempts=args.max_attempts,
     )
     settings.check(LLM_MODELS)

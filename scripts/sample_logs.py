@@ -167,17 +167,22 @@ def play_llm_standard(samples: Samples) -> None:
 def llm_faceoff_chaos(samples: Samples) -> None:
     """An LLM faceoff under Chaos rules, White Listed with the position described: a chaos move, a Spawn, a Retry
     after badly formed notation (never a chaos move), and King capture. Each ply is judged by material alone, a
-    stand-in for Stockfish, to show the Evaluations."""
+    stand-in for Stockfish, to show the Evaluations. Each chaos move is followed by its Legal counterpart: a legal
+    move twice, and once a timeout, which the game goes on without."""
     game = "llm-faceoff-chaos"
     white = samples.timed(ScriptedPlayer(["e4", "Nf3", "Nxh4", "banana", "d3"]), 1.5, 2.0, 2.5, 1.25, 3.0)
+    # The counterparts take their time too, none of it Black's Time used.
     black = samples.timed(
         ScriptedPlayer([
             "Qh4",  # a chaos move: the queen goes through its own e7 pawn
+            "e5",  # its Legal counterpart
             "a6",
             "Qd5",  # a Spawn: the queen was taken on h4
+            "Nc6",  # its Legal counterpart
             "Qe1",  # King capture
+            LlmTimeout(300.0),  # its Legal counterpart, which times out
         ]),
-        4.0, 1.75, 6.5, 2.25,
+        4.0, 3.5, 1.75, 6.5, 5.0, 2.25, 300.0,
     )
     client = samples.client(game, {"white": white, "black": black}, MaterialEvaluator())
     new_game = {
