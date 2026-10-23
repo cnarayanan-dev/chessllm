@@ -5,6 +5,7 @@ import {
   chooseHumanColor,
   chooseMaxAttempts,
   chooseRules,
+  chooseTurnMemory,
   chooseMode,
   chooseModel,
   everyLlmEnforced,
@@ -14,6 +15,7 @@ import {
   swapSides,
   toggleCustomize,
   toggleThinking,
+  value,
 } from '@/settings/next-game'
 
 const qwen: ModelInfo = { name: 'qwen3.5:9b', thinking: true, sampling: { temperature: 0.6 } }
@@ -71,6 +73,31 @@ describe('the sheet opens with the last game\'s settings, which start the same g
     const shared: GameSettings = { ...faceoff, white: llm('qwen3.5:9b'), black: llm('gemma3:4b') }
 
     expect(nextGameFrom(shared).custom).toBe(false)
+  })
+
+  test('with each side\'s Turn memory, fresh when the API leaves it out', () => {
+    const chatting: GameSettings = { ...faceoff, white: llm('qwen3.5:9b', { turn_memory: 'chat_moves' }), black: llm('gemma3:4b') }
+    const next = nextGameFrom(chatting)
+
+    expect([next.custom, next.sides.white.turn_memory, next.sides.black.turn_memory]).toEqual([true, 'chat_moves', 'fresh'])
+    expect(newGameRequest(next, models)).toMatchObject({ white: { turn_memory: 'chat_moves' } })
+    expect(newGameRequest(next, models).black).not.toHaveProperty('turn_memory')
+  })
+})
+
+describe('choosing a Turn memory before the Prompt library is listed', () => {
+  const described = nextGameFrom({ ...playLlm, black: { ...llm('qwen3.5:9b'), prompt_template_id: 'described@1' } })
+
+  test('a new one takes the side back to its Default, as whether its template fits it is unknown', () => {
+    const next = chooseTurnMemory(described, null, 'black', 'chat_moves')
+
+    expect(value(next, 'black', 'turn_memory')).toBe('chat_moves')
+    expect(value(next, 'black', 'prompt_template_id')).toBeNull()
+    expect(newGameRequest(next, models).black).not.toHaveProperty('prompt_template_id')
+  })
+
+  test('the same one keeps the template chosen', () => {
+    expect(value(chooseTurnMemory(described, null, 'black', 'fresh'), 'black', 'prompt_template_id')).toBe('described@1')
   })
 })
 

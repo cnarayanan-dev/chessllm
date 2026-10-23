@@ -73,3 +73,20 @@ test('the tooltip says which colour you will play, or that the LLMs swap', () =>
     'Same settings, the LLMs swap colours',
   )
 })
+
+test('each LLM keeps its Turn memory, with Prompt lab on or off; fresh, left out by the API, stays left out', () => {
+  const game = aGame({
+    settings: {
+      ...aGame().settings,
+      mode: 'llm_faceoff',
+      white: { ...llm, turn_memory: 'chat_moves' },
+      black: { ...llm, turn_memory: 'chat_position', prompt_template_id: 'described@1' },
+    },
+  })
+
+  for (const promptLab of [true, false]) {
+    const rematch = rematchOf(game.settings, promptLab)
+    expect(rematch).toMatchObject({ white: { turn_memory: 'chat_position' }, black: { turn_memory: 'chat_moves' } })
+  }
+  expect(rematchOf(aGame().settings, false).black).not.toHaveProperty('turn_memory')
+})

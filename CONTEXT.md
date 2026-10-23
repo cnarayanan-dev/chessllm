@@ -165,7 +165,7 @@ The text, written by the human for each LLM side, that becomes the message of ev
 _Avoid_: User message, position message
 
 **Prompt template**:
-A **System prompt** and a **Turn template** written for each other and kept together in the **Prompt library**, which an LLM side plays with. It fits the **LLM constraints** that show the **Legal-move list** only if its Turn template places it.
+A **System prompt** and a **Turn template** written for each other and kept together in the **Prompt library**, which an LLM side plays with. It fits the **LLM constraints** that show the **Legal-move list** only if its Turn template places it. It fits *chat with moves* **Turn memory** only if its Turn template places the opponent's last move and never the position, and the other Turn memories only if it doesn't.
 _Avoid_: Preset, saved prompt, prompt pair
 
 **Prompt library**:

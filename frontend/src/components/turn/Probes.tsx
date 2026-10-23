@@ -13,12 +13,14 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { fittingTemplates } from '@/settings/next-game'
+import { fittingTemplates, isDefaultFor } from '@/settings/next-game'
 
 const TRY = "Ask the LLM again about the position before this turn, with the Prompt picked. The game doesn't change."
 // Try in a running game no human plays: it pauses first, so a probe never runs alongside a real turn.
 const TRY_PAUSING = `Pauses the game after the turn running, then asks the LLM again about the position before this turn, with the Prompt picked. The game doesn't change; resume it on the Game card.`
 const PICKER = 'The Prompt template to Try. Listed: those that fit what the LLM is given.'
+// The fresh Default while the library isn't listed: no template's ID, so a probe asks with no ID.
+const FRESH_DEFAULT = 'fresh-default'
 const EDIT = 'Open the Prompt in the editor under the board, to change it, try it and save it as a new version.'
 
 type ProbesProps = {
@@ -65,14 +67,24 @@ export function Probes({ game, turn, tryBlocked, pauseFirst, picked, onPick, onE
   const probes = useQuery(probesQuery(game.game_id))
   const { ask, last, waiting } = useProbeTurn(game, turn, pauseFirst)
   if (side.player !== 'llm') return null
-  // The template the game recorded for the side, by its versioned ID; offered first when the library no longer lists
-  // it (an older version, or a hidden one), and asked for by no ID, so the backend uses the recorded text.
+  // The template a probe asks with when it names none, by the backend's choice: the one the game recorded for the
+  // side, by its versioned ID, offered first when the library no longer lists it (an older version, or a hidden one).
+  // A probe is always a fresh prompt, so it is offered the templates that fit fresh Turn memory; under chat with moves
+  // the game's own gives only the opponent's move, and the backend asks with the fresh Default of the side's LLM
+  // constraints instead, listed by its ID, or named Default while the library isn't.
   const inGame = game.prompt_template_ids[turn.color]
-  const fitting = fittingTemplates(library.data ?? [], side.llm_constraints)
-  const templates: { id: string; name: string | null }[] = fitting.some((entry) => entry.id === inGame)
-    ? fitting
-    : [...(inGame ? [{ id: inGame, name: null }] : []), ...fitting]
-  const chosen = templates.find((entry) => entry.id === picked) ?? templates.find((entry) => entry.id === inGame)
+  const fitting = fittingTemplates(library.data ?? [], side.llm_constraints, 'fresh')
+  const ownFits = side.turn_memory !== 'chat_moves'
+  const freshDefault = fitting.find((entry) => isDefaultFor(entry, side.llm_constraints, 'fresh'))
+  const own = ownFits
+    ? inGame
+      ? { id: inGame, name: null }
+      : undefined
+    : (freshDefault ?? { id: FRESH_DEFAULT, name: 'Default' })
+  const templates: { id: string; name: string | null }[] =
+    !own || fitting.some((entry) => entry.id === own.id) ? fitting : [own, ...fitting]
+  const chosen =
+    templates.find((entry) => entry.id === picked) ?? (own ? templates.find((entry) => entry.id === own.id) : undefined)
   const blocked =
     tryBlocked ??
     (waiting ??
@@ -86,7 +98,7 @@ export function Probes({ game, turn, tryBlocked, pauseFirst, picked, onPick, onE
     ask({
       ply: turn.ply,
       color: turn.color,
-      prompt_template_id: chosen.id === inGame ? null : chosen.id,
+      prompt_template_id: chosen.id === own?.id ? null : chosen.id,
     })
   const meaning = pauseFirst ? TRY_PAUSING : TRY
   const shown = probesOf(probes.data ?? [], turn)
@@ -103,7 +115,7 @@ export function Probes({ game, turn, tryBlocked, pauseFirst, picked, onPick, onE
                 variant="ghost"
                 className="max-w-full rounded-r-none pr-1.5"
                 aria-description={EDIT}
-                disabled={!onEdit || chosen === undefined}
+                disabled={!onEdit || chosen === undefined || chosen.id === FRESH_DEFAULT}
                 onClick={(event) => chosen && onEdit?.(chosen.id, event.currentTarget)}
               >
                 <span className="truncate">{chosen ? templateName(chosen) : '…'}</span>
@@ -124,7 +136,7 @@ export function Probes({ game, turn, tryBlocked, pauseFirst, picked, onPick, onE
               {templates.map((entry) => (
                 <SelectItem key={entry.id} value={entry.id}>
                   {templateName(entry)}
-                  {entry.id === inGame && <span className="text-muted-foreground"> (in the game)</span>}
+                  {ownFits && entry.id === inGame && <span className="text-muted-foreground"> (in the game)</span>}
                 </SelectItem>
               ))}
             </SelectContent>

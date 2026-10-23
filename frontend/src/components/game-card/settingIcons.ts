@@ -9,7 +9,10 @@ import {
   Lock,
   MessageSquare,
   MessageSquareText,
+  MessagesSquare,
+  RefreshCw,
   Repeat,
+  Route,
   ShieldCheck,
   Zap,
   type LucideProps,
@@ -24,6 +27,7 @@ const ICONS: { [setting in GameSetting['setting']]: Record<string, IconOf> } = {
   llm_constraints: { free: Eye, listed: ListChecks, blind_enforced: Lock, listed_enforced: ShieldCheck },
   rules: { standard: ChessKnight, chaos: Zap },
   retry_feedback: { explained: MessageSquareText, bare: MessageSquare, hinted: Lightbulb, repeat: Repeat },
+  turn_memory: { fresh: RefreshCw, chat_position: MessagesSquare, chat_moves: Route },
   thinking: { on: Brain, off: BrainOff },
   max_attempts: {},
 }

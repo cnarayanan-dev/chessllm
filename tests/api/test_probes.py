@@ -356,3 +356,16 @@ def test_a_side_keeping_a_conversation_is_probed_with_a_fresh_prompt(tmp_path):
     assert white.prompts[-1] == fresh_prompt(side_template(side), "white", TurnPosition(after_e4_e5, ["e4", "e5"]))
     assert [message.role for message in white.prompts[1]] == ["system", "user", "assistant", "user"]  # the game's turn
     assert probed.attempt.move == "d4"
+
+
+def test_a_side_chatting_with_moves_is_probed_by_default_with_the_fresh_default_of_its_constraints(scripted):
+    client, player = scripted(["e5", "Nc6"])
+    client.post("/api/games", json=play_llm(turn_memory="chat_moves", llm_constraints="listed"))
+    play_move(client, "e2e4")
+
+    # Its own Moves template gives only the opponent's move, which a fresh prompt can't play.
+    response = client.post("/api/games/current/probes", json={"ply": 2, "color": "black", "prompt_template_id": None})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["template"]["id"] == side_template(LlmSide(llm_constraints="listed")).id
+    assert player.prompts[-1][1].content.startswith("PGN: 1. e4\nFEN: ")

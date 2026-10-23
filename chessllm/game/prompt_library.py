@@ -16,22 +16,27 @@ from chessllm.game.llm_turn.prompt import (
     DefaultTemplate,
     check_prompt_template,
     default_template,
+    side_template,
     template_version,
     tools_template,
 )
-from chessllm.game.sides import LISTED, LlmConstraints, PromptTemplate
+from chessllm.game.sides import LISTED, LlmConstraints, LlmSide, PromptTemplate, TurnMemory
 
 LLM_CONSTRAINTS: tuple[LlmConstraints, ...] = get_args(LlmConstraints)
+TURN_MEMORIES: tuple[TurnMemory, ...] = get_args(TurnMemory)
 
 
 @dataclass(frozen=True)
 class LibraryEntry:
-    """A Prompt template of the library, with the LLM constraints it fits (check_prompt_template), and those it is
-    the Default of: what a side under them plays when it asks for no template."""
+    """A Prompt template of the library, with the LLM constraints and the Turn memories it fits
+    (check_prompt_template), and each pair of them it is the Default of: what a side under them plays when it asks
+    for no template. A template fits every pair of the two: what the Turn memory asks of it and what the LLM
+    constraints do are checked apart."""
 
     template: PromptTemplate
     fits: list[LlmConstraints]
-    default_for: list[LlmConstraints]
+    turn_memories: list[TurnMemory]
+    default_for: list[tuple[LlmConstraints, TurnMemory]]
     hidden: bool = False
     path: Path | None = None  # the file of a saved one; None for a default one
 
@@ -91,7 +96,7 @@ class PromptLibrary:
                 return replace(existing, hidden=False)
             path = self._folder / f"{new.id}.json"
             if existing is None and self._write(new, False, path, new_file=True):
-                return LibraryEntry(new, fits(new), default_for=[], path=path)
+                return library_entry(new, default_for=[], path=path)
         raise AssertionError("unreachable: count() never ends")
 
     def hide(self, template_id: str) -> LibraryEntry:
@@ -130,36 +135,49 @@ class PromptLibrary:
 
 def default_entries() -> list[LibraryEntry]:
     """The default Prompt templates as their files say now: Default, Described and Moves without the Legal-move list,
-    then with it, then the Tools template. Moves fits no LLM constraints here, where fits is for fresh Turn memory, the
-    only one the app plays: it is played under chat_moves, as that Turn memory's default (side_template)."""
+    then with it, then the Tools template. Each is the Default of the LLM constraints and Turn memories side_template
+    plays it under: Default under fresh and chat_position, Moves under chat_moves."""
     templates: dict[str | None, PromptTemplate] = {}
-    default_for: dict[str | None, list[LlmConstraints]] = {}
+    default_for: dict[str | None, list[tuple[LlmConstraints, TurnMemory]]] = {}
     for llm_constraints in sorted(LLM_CONSTRAINTS, key=lambda constraints: constraints in LISTED):
         for kind in get_args(DefaultTemplate):
             template = default_template(llm_constraints, kind)
             templates.setdefault(template.id, template)
             default_for.setdefault(template.id, [])
-            if kind == "default":
-                default_for[template.id].append(llm_constraints)
-    defaults = [
-        LibraryEntry(template, fits(template), default_for[template_id]) for template_id, template in templates.items()
-    ]
+        for turn_memory in TURN_MEMORIES:
+            default = side_template(LlmSide(llm_constraints=llm_constraints, turn_memory=turn_memory)).id
+            default_for[default].append((llm_constraints, turn_memory))
+    defaults = [library_entry(template, default_for[template_id]) for template_id, template in templates.items()]
     # The Tools template, the default of a side with Tools: hidden, as the app can't give a side tools to call
     # (ADR 0011), yet it resolves for a game that played it.
-    tools = tools_template()
-    return defaults + [LibraryEntry(tools, fits(tools), default_for=[], hidden=True)]
+    return defaults + [library_entry(tools_template(), default_for=[], hidden=True)]
 
 
-def fits(template: PromptTemplate) -> list[LlmConstraints]:
-    """The LLM constraints a side can play the template under."""
-    fitting = []
-    for llm_constraints in LLM_CONSTRAINTS:
-        try:
-            check_prompt_template(template, llm_constraints)
-        except InvalidSettings:
-            continue
-        fitting.append(llm_constraints)
-    return fitting
+def library_entry(
+    template: PromptTemplate,
+    default_for: list[tuple[LlmConstraints, TurnMemory]],
+    hidden: bool = False,
+    path: Path | None = None,
+) -> LibraryEntry:
+    """The template's entry, with the LLM constraints and the Turn memories a side can play it under."""
+    pairs = [
+        (llm_constraints, turn_memory)
+        for llm_constraints in LLM_CONSTRAINTS
+        for turn_memory in TURN_MEMORIES
+        if fits(template, llm_constraints, turn_memory)
+    ]
+    fitting = [llm_constraints for llm_constraints in LLM_CONSTRAINTS if llm_constraints in dict(pairs)]
+    memories = [turn_memory for turn_memory in TURN_MEMORIES if turn_memory in {memory for _, memory in pairs}]
+    return LibraryEntry(template, fitting, memories, default_for, hidden, path)
+
+
+def fits(template: PromptTemplate, llm_constraints: LlmConstraints, turn_memory: TurnMemory) -> bool:
+    """Whether a side can play the template under the LLM constraints and Turn memory."""
+    try:
+        check_prompt_template(template, llm_constraints, turn_memory)
+    except InvalidSettings:
+        return False
+    return True
 
 
 def saved(path: Path) -> LibraryEntry:
@@ -172,4 +190,4 @@ def saved(path: Path) -> LibraryEntry:
         system_prompt=shape["system_prompt"],
         turn_template=shape["turn_template"],
     )
-    return LibraryEntry(template, fits(template), default_for=[], hidden=shape.get("hidden", False), path=path)
+    return library_entry(template, default_for=[], hidden=shape.get("hidden", False), path=path)

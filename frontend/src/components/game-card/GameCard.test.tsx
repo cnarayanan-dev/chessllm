@@ -187,3 +187,25 @@ test("Rematch's tooltip and aria-description say which colour you will play, or 
     'Same settings, the LLMs swap colours',
   )
 })
+
+test("a Turn memory but fresh is on its LLM's row, even when the LLMs share it, its meaning in aria-description", () => {
+  renderCard(faceoffOf({ turn_memory: 'chat_moves' }, { turn_memory: 'chat_moves', retry_feedback: 'bare' }))
+
+  expect(line("White's settings")).toEqual(['Explained feedback', 'Chat with moves'])
+  expect(line("Black's settings")).toEqual(['Bare feedback', 'Chat with moves'])
+  expect(within(gameCard()).getAllByText('Chat with moves')[0]).toHaveAttribute(
+    'aria-description',
+    expect.stringMatching(/only the opponent's last move/),
+  )
+})
+
+test("in Play LLM the LLM's row shows its Turn memory; fresh is not shown", () => {
+  const playing = (more: Partial<typeof llm>) => aGame({ settings: { ...aGame().settings, black: { ...llm, ...more } } })
+
+  const { unmount } = renderCard(playing({ turn_memory: 'chat_position' }))
+  expect(line("Black's settings")).toEqual(['Chat with position'])
+
+  unmount()
+  renderCard(playing({ turn_memory: 'fresh' }))
+  expect(within(gameCard()).queryByRole('list', { name: "Black's settings" })).not.toBeInTheDocument()
+})

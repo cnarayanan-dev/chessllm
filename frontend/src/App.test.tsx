@@ -306,7 +306,15 @@ describe('with Prompt lab on', () => {
     const turn = later()
     const afterNf3 = afterE5({ fen: AFTER_NF3, pgn: '1. e4 e5 2. Nf3', turn: 'black', plies: plies(E4, E5, NF3), running_s: null })
     const library = [
-      { id: 'default@1', name: 'Default', system_prompt: '', turn_template: '$moves', fits: ['free'], default_for: ['free'] },
+      {
+        id: 'default@1',
+        name: 'Default',
+        system_prompt: '',
+        turn_template: '$moves',
+        fits: ['free'],
+        turn_memories: ['fresh', 'chat_position'],
+        default_for: [{ llm_constraints: 'free', turn_memory: 'fresh' }],
+      },
     ]
     fakeBackend()
       .on('GET /api/games/current', Response.json(afterE5()))
@@ -334,7 +342,15 @@ describe('with Prompt lab on', () => {
 
   test("the prompt's name opens the dock under the board, the rest of the page set aside until it closes", async () => {
     const library = [
-      { id: 'default@1', name: 'Default', system_prompt: '', turn_template: '$moves', fits: ['free'], default_for: ['free'] },
+      {
+        id: 'default@1',
+        name: 'Default',
+        system_prompt: '',
+        turn_template: '$moves',
+        fits: ['free'],
+        turn_memories: ['fresh', 'chat_position'],
+        default_for: [{ llm_constraints: 'free', turn_memory: 'fresh' }],
+      },
     ]
     fakeBackend()
       .on('GET /api/games/current', Response.json(afterE5()))
@@ -374,7 +390,15 @@ describe('with Prompt lab on', () => {
 
   describe('Pause', () => {
     const library = [
-      { id: 'default@1', name: 'Default', system_prompt: '', turn_template: '$moves', fits: ['free'], default_for: ['free'] },
+      {
+        id: 'default@1',
+        name: 'Default',
+        system_prompt: '',
+        turn_template: '$moves',
+        fits: ['free'],
+        turn_memories: ['fresh', 'chat_position'],
+        default_for: [{ llm_constraints: 'free', turn_memory: 'fresh' }],
+      },
     ]
     const llm = afterE4().settings.black
     const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }

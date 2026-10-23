@@ -7,24 +7,31 @@ import { TurnPanel } from '@/components/turn/TurnPanel'
 import { setPromptLabOn } from '@/settings/promptLab'
 import { fakeBackend, later } from '@/test/fakeBackend'
 import { AFTER_E4, aTurn, afterE5, E4, E5, NC6, NF3, plies } from '@/test/games'
+import { defaultsOf, FREE, LISTED, POSITION } from '@/test/promptLibrary'
 
 beforeEach(() => localStorage.clear())
 
-const FREE: PromptTemplateInfo['fits'] = ['free', 'blind_enforced']
-const LISTED: PromptTemplateInfo['fits'] = ['listed', 'listed_enforced']
-const template = (id: string, name: string | null, fits: PromptTemplateInfo['fits'], isDefault = false) => ({
+const template = (
+  id: string,
+  name: string | null,
+  fits: PromptTemplateInfo['fits'],
+  isDefault = false,
+  turn_memories = POSITION,
+) => ({
   id,
   name,
   system_prompt: 'You play $color.',
   turn_template: fits === LISTED ? '$moves $legal_moves' : '$moves',
   fits,
-  default_for: isDefault ? fits : [],
+  turn_memories,
+  default_for: isDefault ? defaultsOf(fits, turn_memories) : [],
   saved: false,
   hidden: false,
 })
 const library: PromptTemplateInfo[] = [
   template('default@1', 'Default', FREE, true),
   template('described@1', 'Described', FREE),
+  template('moves@1', 'Moves', FREE, true, ['chat_moves']),
   template('default-listed@1', 'Default listed', LISTED, true),
 ]
 
@@ -106,6 +113,26 @@ describe('with Prompt lab on', () => {
     await user.click(picker())
     const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
     expect(options).toEqual(['Default (in the game)', 'Described'])
+  })
+
+  test('a Probe is a fresh prompt: for a side under chat with moves, its Moves template is not offered', async () => {
+    const game = afterE5()
+    const side = { ...(game.settings.black as Probe['side']), turn_memory: 'chat_moves' as const }
+    const chatting = { ...game, settings: { ...game.settings, black: side }, prompt_template_ids: { black: 'moves@1' } }
+    const { backend } = renderPanel(undefined, [], { game: chatting })
+    const user = userEvent.setup()
+    await user.click(tab('Prompt'))
+
+    await waitFor(() => expect(picker()).toHaveTextContent('Default'))
+    await user.click(picker())
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['Default', 'Described'])
+    await user.keyboard('{Escape}')
+    backend.on('POST /api/games/current/probes', Response.json(aProbe('default@1', 'e5', 'legal')))
+    await user.click(tryButton())
+    // By no ID, as the game's own: the backend asks with the fresh Default, the one picked.
+    expect(backend.sentTo('POST /api/games/current/probes')).toMatchObject([
+      { body: { ply: 2, color: 'black', prompt_template_id: null } },
+    ])
   })
 
   test("Try probes the turn shown with the template picked, and shows the probe's result under the row", async () => {
@@ -219,6 +246,26 @@ describe('with Prompt lab on', () => {
     expect(await within(panel()).findByText(/the library is broken/)).toBeVisible()
     expect(picker()).toHaveTextContent('default@1')
     expect(tryButton()).toBeEnabled()
+  })
+
+  test("when the library can't be loaded, a side under chat with moves is still probed, with the fresh Default", async () => {
+    const game = afterE5()
+    const side = { ...(game.settings.black as Probe['side']), turn_memory: 'chat_moves' as const }
+    const chatting = { ...game, settings: { ...game.settings, black: side }, prompt_template_ids: { black: 'moves@1' } }
+    const listed = Response.json({ detail: 'the library is broken', code: 'error' }, { status: 500 })
+    const { backend } = renderPanel(undefined, [], { game: chatting, listed })
+    const user = userEvent.setup()
+    await user.click(tab('Prompt'))
+
+    expect(await within(panel()).findByText(/the library is broken/)).toBeVisible()
+    expect(picker()).toHaveTextContent('Default')
+    expect(picker()).not.toHaveTextContent('moves@1')
+    backend.on('POST /api/games/current/probes', Response.json(aProbe('default@1', 'e5', 'legal')))
+    await user.click(tryButton())
+    // No ID: the backend asks with the fresh Default of the side's LLM constraints.
+    expect(backend.sentTo('POST /api/games/current/probes')).toMatchObject([
+      { body: { ply: 2, color: 'black', prompt_template_id: null } },
+    ])
   })
 
   test("a probe's error and its wait belong to the turn asked, not to the turn stepped to", async () => {

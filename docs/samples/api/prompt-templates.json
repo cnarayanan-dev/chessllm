@@ -8,9 +8,27 @@
       "free",
       "blind_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": [
-      "free",
-      "blind_enforced"
+      {
+        "llm_constraints": "free",
+        "turn_memory": "fresh"
+      },
+      {
+        "llm_constraints": "free",
+        "turn_memory": "chat_position"
+      },
+      {
+        "llm_constraints": "blind_enforced",
+        "turn_memory": "fresh"
+      },
+      {
+        "llm_constraints": "blind_enforced",
+        "turn_memory": "chat_position"
+      }
     ],
     "saved": false,
     "hidden": false
@@ -24,6 +42,10 @@
       "free",
       "blind_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": [],
     "saved": false,
     "hidden": false
@@ -33,8 +55,23 @@
     "name": "Moves",
     "system_prompt": "You are playing chess as $color against a human playing $opponent.\nThe game starts from the standard starting position. Each turn you get only your opponent's last move in SAN; as White, your first turn asks you for the first move.\nKeep track of the board yourself: no turn shows you the position.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\n$example_message\nAnswer: {\"move\": \"$example_move\"}\n$example_next_message\nAnswer: {\"move\": \"$example_next_move\"}\n",
     "turn_template": "$opponent_played",
-    "fits": [],
-    "default_for": [],
+    "fits": [
+      "free",
+      "blind_enforced"
+    ],
+    "turn_memories": [
+      "chat_moves"
+    ],
+    "default_for": [
+      {
+        "llm_constraints": "free",
+        "turn_memory": "chat_moves"
+      },
+      {
+        "llm_constraints": "blind_enforced",
+        "turn_memory": "chat_moves"
+      }
+    ],
     "saved": false,
     "hidden": false
   },
@@ -47,9 +84,27 @@
       "listed",
       "listed_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": [
-      "listed",
-      "listed_enforced"
+      {
+        "llm_constraints": "listed",
+        "turn_memory": "fresh"
+      },
+      {
+        "llm_constraints": "listed",
+        "turn_memory": "chat_position"
+      },
+      {
+        "llm_constraints": "listed_enforced",
+        "turn_memory": "fresh"
+      },
+      {
+        "llm_constraints": "listed_enforced",
+        "turn_memory": "chat_position"
+      }
     ],
     "saved": false,
     "hidden": false
@@ -63,6 +118,10 @@
       "listed",
       "listed_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": [],
     "saved": false,
     "hidden": false
@@ -72,8 +131,23 @@
     "name": "Moves listed",
     "system_prompt": "You are playing chess as $color against a human playing $opponent.\nThe game starts from the standard starting position. Each turn you get only your opponent's last move in SAN, and the list of legal moves in SAN; as White, your first turn asks you for the first move.\nKeep track of the board yourself: no turn shows you the position.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\n$example_message\nLegal moves: $example_legal_moves\nAnswer: {\"move\": \"$example_move\"}\n$example_next_message\nLegal moves: $example_next_legal_moves\nAnswer: {\"move\": \"$example_next_move\"}\n",
     "turn_template": "$opponent_played\nLegal moves: $legal_moves",
-    "fits": [],
-    "default_for": [],
+    "fits": [
+      "listed",
+      "listed_enforced"
+    ],
+    "turn_memories": [
+      "chat_moves"
+    ],
+    "default_for": [
+      {
+        "llm_constraints": "listed",
+        "turn_memory": "chat_moves"
+      },
+      {
+        "llm_constraints": "listed_enforced",
+        "turn_memory": "chat_moves"
+      }
+    ],
     "saved": false,
     "hidden": false
   }

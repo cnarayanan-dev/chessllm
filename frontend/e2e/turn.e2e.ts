@@ -89,6 +89,31 @@ test('with Prompt lab on, a side picked to play Described gets the piece list in
   await expect(panel(page)).toContainText('Your pieces (Black): King e8')
 })
 
+test('a side chosen to chat with moves shows its Turn memory, and its whole conversation in the Prompt tab', async ({ page }) => {
+  await playLlm(page, ['e5', 'Nc6']) // a game on the page, so the New game sheet doesn't open by itself
+
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await sheet.getByRole('button', { name: 'Advanced settings' }).click()
+  await sheet.getByRole('radio', { name: 'Chat with moves' }).click()
+  await sheet.getByRole('button', { name: 'Play as White' }).click()
+
+  await expect(page.getByRole('list', { name: "Black's settings" })).toHaveText('Chat with moves')
+  await clickMove(page, 'e2e4')
+  await expect(badge(page)).toHaveText('1… e5')
+  await clickMove(page, 'g1f3')
+  await expect(badge(page)).toHaveText('2… Nc6')
+  await tab(page, 'Prompt').click()
+
+  // The earlier turn folded under its number, then this turn's message: only the opponent's last move.
+  await expect(panel(page)).toContainText('Opponent played Nf3.')
+  await expect(panel(page)).not.toContainText('Opponent played e4.')
+  await panel(page).getByRole('button', { name: 'Turn 1' }).click()
+  await expect(panel(page)).toContainText('Opponent played e4.')
+  await expect(panel(page)).toContainText('"move": "e5"')
+  await expect(panel(page)).not.toContainText('PGN:')
+})
+
 test('with Prompt lab on, Try probes the turn shown with the Prompt picked; the probes and their tally survive a reload', async ({
   page,
 }) => {

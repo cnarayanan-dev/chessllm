@@ -13,8 +13,8 @@ router = APIRouter()
 
 @router.get("/api/prompt-templates")
 def list_prompt_templates(library: PromptLibraryDep) -> list[PromptTemplateInfo]:
-    """Every Prompt template that isn't hidden, the defaults first, each with the LLM constraints it fits. The New
-    game sheet's Prompt picker offers a side those that fit its LLM constraints."""
+    """Every Prompt template that isn't hidden, the defaults first, each with the LLM constraints and Turn memories it
+    fits. The New game sheet's Prompt picker offers a side those that fit its LLM constraints and Turn memory."""
     return [PromptTemplateInfo.of(entry) for entry in library.entries()]
 
 

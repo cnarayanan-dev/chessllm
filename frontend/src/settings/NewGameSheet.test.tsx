@@ -8,6 +8,7 @@ import type { GameSettings, ModelInfo, NextGame, SideValues } from '@/settings/n
 import { newGameRequest, nextGameFrom } from '@/settings/next-game'
 import { NewGameSheet } from '@/settings/NewGameSheet'
 import { setPromptLabOn } from '@/settings/promptLab'
+import { defaultsOf, FREE, LISTED, POSITION } from '@/test/promptLibrary'
 
 const qwen: ModelInfo = { name: 'qwen3.5:9b', thinking: true, sampling: { temperature: 0.6, top_k: 40 } }
 const gemma: ModelInfo = { name: 'gemma3:4b', thinking: false, sampling: {} }
@@ -54,15 +55,20 @@ function Page({ last, onStart }: { last: GameSettings; onStart: (next: NextGame)
   )
 }
 
-const FREE: PromptTemplateInfo['fits'] = ['free', 'blind_enforced']
-const LISTED: PromptTemplateInfo['fits'] = ['listed', 'listed_enforced']
-const template = (id: string, name: string | null, fits: PromptTemplateInfo['fits'], isDefault = false) => ({
+const template = (
+  id: string,
+  name: string | null,
+  fits: PromptTemplateInfo['fits'],
+  isDefault = false,
+  turn_memories = POSITION,
+) => ({
   id,
   name,
   system_prompt: 'You play $color.',
-  turn_template: fits === LISTED ? '$moves $legal_moves' : '$moves',
+  turn_template: (turn_memories === POSITION ? '$moves' : '$opponent_played') + (fits === LISTED ? ' $legal_moves' : ''),
   fits,
-  default_for: isDefault ? fits : [],
+  turn_memories,
+  default_for: isDefault ? defaultsOf(fits, turn_memories) : [],
   saved: false,
   hidden: false,
 })
@@ -70,8 +76,10 @@ const template = (id: string, name: string | null, fits: PromptTemplateInfo['fit
 const library: PromptTemplateInfo[] = [
   template('default@1', 'Default', FREE, true),
   template('described@1', 'Described', FREE),
+  template('moves@1', 'Moves', FREE, true, ['chat_moves']),
   template('default-listed@1', 'Default listed', LISTED, true),
   template('described-listed@1', 'Described listed', LISTED),
+  template('moves-listed@1', 'Moves listed', LISTED, true, ['chat_moves']),
   template('terse@1', null, FREE),
 ]
 
@@ -410,11 +418,11 @@ describe('Advanced settings', () => {
     const { user, sheet } = await openSheet()
     const advanced = screen.getByRole('button', { name: 'Advanced settings' })
 
-    expect(advanced).toHaveAttribute('aria-description', 'What the LLM sees, retries, forfeit')
+    expect(advanced).toHaveAttribute('aria-description', 'What the LLM sees, retries, memory, forfeit')
     expect(advanced.querySelector('svg')).toHaveClass('lucide-chevron-down')
     expect(sheet).not.toHaveTextContent('What the LLM sees')
     await user.hover(advanced)
-    expect(await tooltip()).toHaveTextContent(/^What the LLM sees, retries, forfeit$/)
+    expect(await tooltip()).toHaveTextContent(/^What the LLM sees, retries, memory, forfeit$/)
   })
 
   test('What the LLM is given: the four LLM constraints, the plain name over the glossary term', async () => {
@@ -530,6 +538,78 @@ describe('Advanced settings', () => {
       white: llm('qwen3.5:9b', { thinking: true, retry_feedback: 'bare' }),
       black: llm('gemma3:4b', { llm_constraints: 'listed_enforced' }),
     })
+  })
+})
+
+describe('Turn memory', () => {
+  const memory = (name = 'Turn memory') => screen.getByRole('radiogroup', { name })
+
+  test('Fresh, Chat with position or Chat with moves, Fresh by default, each meaning in its tooltip', async () => {
+    const { user, started } = await openSheet()
+    await openAdvanced(user)
+
+    expect(radiosIn('Turn memory')).toEqual(['Fresh', 'Chat with position', 'Chat with moves'])
+    expect(radio('Fresh')).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Chat with moves')).toHaveAttribute('aria-description', expect.stringMatching(/only the opponent's last move/))
+    await user.hover(radio('Chat with position'))
+    expect(await tooltip()).toHaveTextContent(radio('Chat with position').getAttribute('aria-description')!)
+    await user.click(radio('Chat with moves'))
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+    expect(started().black).toEqual({ ...llm('qwen3.5:9b', { thinking: true }), turn_memory: 'chat_moves' })
+  })
+
+  test('fresh is left out of the request, which the API takes as fresh', async () => {
+    const { user, started } = await openSheet()
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+    expect(started().black).not.toHaveProperty('turn_memory')
+  })
+
+  test("the sheet keeps the last game's Turn memory, also under an enforced constraint, which hides Retry feedback", async () => {
+    const { user, started } = await openSheet({
+      ...playLlm,
+      black: { ...llm('qwen3.5:9b', { llm_constraints: 'blind_enforced' }), turn_memory: 'chat_position' },
+    })
+    await openAdvanced(user)
+
+    expect(within(memory()).getByRole('radio', { name: 'Chat with position' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started().black).toMatchObject({ turn_memory: 'chat_position' })
+  })
+
+  test('Customize per LLM: a Turn memory per side', async () => {
+    const { user, started } = await openSheet(faceoff)
+    await openAdvanced(user)
+
+    await user.click(screen.getByRole('switch', { name: 'Customize per LLM' }))
+    await user.click(within(memory('Black: turn memory')).getByRole('radio', { name: 'Chat with moves' }))
+    await user.click(screen.getByRole('button', { name: 'Start faceoff' }))
+
+    expect(started().white).not.toHaveProperty('turn_memory')
+    expect(started().black).toMatchObject({ turn_memory: 'chat_moves' })
+  })
+
+  test('with Prompt lab on, the picker offers the templates that fit the Turn memory too, the Moves default under chat with moves', async () => {
+    setPromptLabOn(true)
+    const { user, started } = await openSheet({
+      ...playLlm,
+      black: { ...llm('qwen3.5:9b'), prompt_template_id: 'described@1' },
+    })
+    await openAdvanced(user)
+    const picker = () => screen.getByRole('combobox', { name: 'Prompt' })
+    await waitFor(() => expect(picker()).toHaveTextContent('Described'))
+
+    await user.click(radio('Chat with moves'))
+
+    expect(picker()).toHaveTextContent('Moves')
+    await user.click(picker())
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(['Moves'])
+    await user.keyboard('{Escape}')
+    await user.click(radio('Chat with position'))
+    expect(picker()).toHaveTextContent('Default')
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started().black).toEqual({ ...llm('qwen3.5:9b'), turn_memory: 'chat_position' })
   })
 })
 

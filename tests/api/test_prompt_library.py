@@ -11,6 +11,12 @@ from chessllm.game.llm_turn.prompt import MOVES_SYSTEM_PROMPT_FILES, SYSTEM_PROM
 
 FREE = ["free", "blind_enforced"]
 LISTED = ["listed", "listed_enforced"]
+POSITION = ["fresh", "chat_position"]  # the Turn memories whose turns show the position
+
+
+def defaults(constraints: list[str], memories: list[str]) -> list[dict[str, str]]:
+    """What a template is the Default of: each pair of the LLM constraints and Turn memories."""
+    return [{"llm_constraints": each, "turn_memory": memory} for each in constraints for memory in memories]
 
 
 def library(client) -> dict[str, dict]:
@@ -34,18 +40,18 @@ def game_start(games_dir: Path) -> dict:
     return json.loads(log.read_text(encoding="utf-8").splitlines()[0])
 
 
-def test_the_library_lists_the_default_templates_with_the_llm_constraints_each_fits(scripted):
+def test_the_library_lists_the_default_templates_with_the_llm_constraints_and_turn_memories_each_fits(scripted):
     client, _ = scripted([])
 
     entries = list(library(client).values())
 
-    assert [(entry["name"], entry["fits"], entry["default_for"]) for entry in entries] == [
-        ("Default", FREE, FREE),
-        ("Described", FREE, []),
-        ("Moves", [], []),  # played only under Turn memory chat_moves, which the app doesn't play yet (#108)
-        ("Default listed", LISTED, LISTED),
-        ("Described listed", LISTED, []),
-        ("Moves listed", [], []),
+    assert [(entry["name"], entry["fits"], entry["turn_memories"], entry["default_for"]) for entry in entries] == [
+        ("Default", FREE, POSITION, defaults(FREE, POSITION)),
+        ("Described", FREE, POSITION, []),
+        ("Moves", FREE, ["chat_moves"], defaults(FREE, ["chat_moves"])),  # the Default under chat_moves
+        ("Default listed", LISTED, POSITION, defaults(LISTED, POSITION)),
+        ("Described listed", LISTED, POSITION, []),
+        ("Moves listed", LISTED, ["chat_moves"], defaults(LISTED, ["chat_moves"])),
     ]
     assert re.fullmatch("described-listed@[0-9a-f]{8}", entries[4]["id"])
     assert entries[4]["system_prompt"] == SYSTEM_PROMPT_FILES["listed"].read_text(encoding="utf-8")
@@ -135,6 +141,7 @@ def test_a_saved_template_is_listed_from_its_file_and_can_be_played(scripted, tm
     assert (entries["terse@1"]["name"], entries["terse@1"]["fits"], entries["terse@1"]["default_for"]) == (
         "Terse", FREE, []
     )
+    assert entries["terse@1"]["turn_memories"] == POSITION
     assert (entries["nameless@1"]["name"], entries["nameless@1"]["fits"]) == (None, LISTED)
     assert [message.content for message in player.prompts[0]] == ["You are Black.", "1. e4"]
 
@@ -333,3 +340,15 @@ def test_a_template_is_fetched_by_its_id_hidden_or_not(scripted):
     assert hidden.status_code == 200 and hidden.json() == saved | {"hidden": True}
     assert default.json() == library(client)[described] and default.json()["saved"] is False
     assert (unknown.status_code, unknown.json()["code"]) == (400, "unknown_prompt_template")
+
+
+def test_a_saved_template_that_places_the_opponents_move_fits_chat_moves_alone(scripted, tmp_path):
+    folder = tmp_path / "prompt_library"
+    save(folder, "told.json", id="told@1", hidden=False, system_prompt="$color", turn_template="$opponent_played")
+    save(folder, "broken.json", id="broken@1", hidden=False, system_prompt="$colour", turn_template="$moves")
+    client, _ = scripted([], prompt_library_dir=folder)
+
+    entries = library(client)
+
+    assert (entries["told@1"]["fits"], entries["told@1"]["turn_memories"]) == (FREE, ["chat_moves"])
+    assert (entries["broken@1"]["fits"], entries["broken@1"]["turn_memories"]) == ([], [])

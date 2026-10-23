@@ -1,20 +1,29 @@
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from chessllm.game.prompt_library import LibraryEntry
-from chessllm.game.sides import LlmConstraints, PromptTemplate
+from chessllm.game.sides import LlmConstraints, PromptTemplate, TurnMemory
+
+
+class DefaultFor(BaseModel):
+    """LLM constraints and a Turn memory a Prompt template is the Default of."""
+
+    llm_constraints: LlmConstraints
+    turn_memory: TurnMemory
 
 
 class PromptTemplateInfo(BaseModel):
-    """A Prompt template of the Prompt library, with the LLM constraints a side can play it under, and those it is
-    the Default of: what a side under them plays when its new game asks for no template. Saved if the human saved it
-    (only a saved one can be hidden), and hidden if it is left out of the list."""
+    """A Prompt template of the Prompt library, with the LLM constraints and the Turn memories a side can play it
+    under, any of the one with any of the other, and each pair of them it is the Default of: what a side under them
+    plays when its new game asks for no template. Saved if the human saved it (only a saved one can be hidden), and
+    hidden if it is left out of the list."""
 
     id: str
     name: str | None
     system_prompt: str
     turn_template: str
     fits: list[LlmConstraints]
-    default_for: list[LlmConstraints]
+    turn_memories: list[TurnMemory]
+    default_for: list[DefaultFor]
     saved: bool
     hidden: bool
 
@@ -28,7 +37,11 @@ class PromptTemplateInfo(BaseModel):
             system_prompt=template.system_prompt,
             turn_template=template.turn_template,
             fits=entry.fits,
-            default_for=entry.default_for,
+            turn_memories=entry.turn_memories,
+            default_for=[
+                DefaultFor(llm_constraints=llm_constraints, turn_memory=turn_memory)
+                for llm_constraints, turn_memory in entry.default_for
+            ],
             saved=entry.path is not None,
             hidden=entry.hidden,
         )

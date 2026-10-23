@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -293,7 +294,8 @@ class GameSession:
 
     def probe(self, ply: int, color: Color, template: PromptTemplate | None = None) -> Probe:
         """Ask a Probe of the game's LLM turn of ply and color, with template, or else the Prompt template the side
-        plays the game with: the side's LLM asked once more, by
+        plays the game with (under chat_moves, which a fresh prompt can't play, the fresh Default of its LLM
+        constraints): the side's LLM asked once more, by
         its own model and settings, for a move in the position before that ply, and the answer judged as an attempt.
         The probe is appended to the game's probe log and returned; the game, its state and its log are unchanged.
 
@@ -307,6 +309,10 @@ class GameSession:
             # A turn's ply is played, or else it was the forfeited last turn, in the position as it stands.
             fen = self._plies[ply - 1].fen_before if ply <= len(self._plies) else self._board.fen()
         side = self._llm_sides[color]
+        # A probe is a fresh prompt: a side whose own template can't be played fresh, under chat_moves, is asked by
+        # default with the fresh side's default instead.
+        if template is None and side.turn_memory == "chat_moves":
+            template = side_template(replace(side, turn_memory="fresh", prompt_template=None))
         template = template or self._templates[color]
         check_prompt_template(template, side.llm_constraints)
         with self._probe_running:

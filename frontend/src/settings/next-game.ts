@@ -1,10 +1,9 @@
 import type { components } from '@/api/schema'
-import type { GameSettings, ModelInfo, NewGame, PromptTemplateInfo } from '@/api/types'
+import type { GameSettings, LlmSide, ModelInfo, NewGame, PromptTemplateInfo, TurnMemory } from '@/api/types'
 
-export type { GameSettings, ModelInfo, NewGame }
+export type { GameSettings, ModelInfo, NewGame, TurnMemory }
 
 type Schemas = components['schemas']
-type LlmSide = Schemas['LlmSide']
 type Side = Schemas['HumanSide'] | LlmSide
 
 export type Mode = NewGame['mode']
@@ -14,9 +13,10 @@ export type LlmConstraints = LlmSide['llm_constraints']
 export type RetryFeedback = LlmSide['retry_feedback']
 /**
  * The settings an LLM side plays under, besides its model. Its Prompt template is given by its ID in the Prompt
- * library, null for the Default of its LLM constraints; one is chosen only with Prompt lab on.
+ * library, null for the Default of its LLM constraints and Turn memory; one is chosen only with Prompt lab on.
  */
 export type SideValues = Pick<LlmSide, 'thinking' | 'llm_constraints' | 'retry_feedback'> & {
+  turn_memory: TurnMemory
   prompt_template_id: string | null
 }
 /** The Prompt library, or null until it has loaded. */
@@ -57,6 +57,7 @@ const sideValues = (side: LlmSide): SideValues => ({
   thinking: side.thinking,
   llm_constraints: side.llm_constraints,
   retry_feedback: side.retry_feedback,
+  turn_memory: side.turn_memory ?? 'fresh', // the API leaves out fresh
   prompt_template_id: side.prompt_template_id ?? null,
 })
 const sameSide = (a: object, b: object) => {
@@ -174,35 +175,60 @@ export const swapSides = (next: NextGame): NextGame => ({
   sides: { white: next.sides.black, black: next.sides.white },
 })
 
-/** The Prompt templates of the library a side can play under these LLM constraints, in the library's order. */
-export const fittingTemplates = (library: PromptTemplateInfo[], constraints: LlmConstraints) =>
-  library.filter((template) => template.fits.includes(constraints))
+/** Whether a side can play the template under these LLM constraints and Turn memory. */
+const fitsSide = (template: PromptTemplateInfo, constraints: LlmConstraints, memory: TurnMemory) =>
+  template.fits.includes(constraints) && template.turn_memories.includes(memory)
 
-/** The template a side plays: the one chosen, or else the Default of its LLM constraints; undefined until listed. */
+/** The Prompt templates of the library a side can play under these LLM constraints and Turn memory, in its order. */
+export const fittingTemplates = (library: PromptTemplateInfo[], constraints: LlmConstraints, memory: TurnMemory) =>
+  library.filter((template) => fitsSide(template, constraints, memory))
+
+/** Whether the template is the Default of these LLM constraints under this Turn memory, as the library says. */
+export const isDefaultFor = (template: PromptTemplateInfo, constraints: LlmConstraints, memory: TurnMemory) =>
+  template.default_for.some((pair) => pair.llm_constraints === constraints && pair.turn_memory === memory)
+
+/**
+ * The template a side plays: the one chosen, or else the Default of its LLM constraints and Turn memory; undefined
+ * until listed.
+ */
 export function chosenTemplate(next: NextGame, library: PromptTemplateInfo[], color: Color) {
   const id = value(next, color, 'prompt_template_id')
-  const constraints = value(next, color, 'llm_constraints')
-  return library.find((template) => (id === null ? template.default_for.includes(constraints) : template.id === id))
+  const [constraints, memory] = [value(next, color, 'llm_constraints'), value(next, color, 'turn_memory')]
+  return library.find((template) => (id === null ? isDefaultFor(template, constraints, memory) : template.id === id))
 }
 
-/** Picks a side's Prompt template; the Default of its LLM constraints is kept as null, as the API takes it. */
+/** Picks a side's Prompt template; the Default of its LLM constraints and Turn memory is kept as null, as the API takes it. */
 export function choosePromptTemplate(next: NextGame, library: PromptTemplateInfo[], color: Color, id: string): NextGame {
-  const isDefault = library.some(
-    (template) => template.id === id && template.default_for.includes(value(next, color, 'llm_constraints')),
-  )
+  const [constraints, memory] = [value(next, color, 'llm_constraints'), value(next, color, 'turn_memory')]
+  const isDefault = library.some((template) => template.id === id && isDefaultFor(template, constraints, memory))
   return setValue(next, color, 'prompt_template_id', isDefault ? null : id)
 }
 
 /**
- * Sets a side's LLM constraints. A Prompt template that doesn't fit them goes back to their Default, so the game
- * can't be refused for it; while the library isn't listed, the choice is kept.
+ * A side's Prompt template back to the Default when it doesn't fit the side's LLM constraints and Turn memory, so
+ * the game can't be refused for it; while the library isn't listed, the choice is kept.
  */
-export function chooseConstraints(next: NextGame, library: Library, color: Color, constraints: LlmConstraints): NextGame {
-  const chosen = setValue(next, color, 'llm_constraints', constraints)
-  const id = value(chosen, color, 'prompt_template_id')
+function keepFittingTemplate(next: NextGame, library: Library, color: Color): NextGame {
+  const id = value(next, color, 'prompt_template_id')
+  const [constraints, memory] = [value(next, color, 'llm_constraints'), value(next, color, 'turn_memory')]
   const fits =
-    id === null || !library || library.some((template) => template.id === id && template.fits.includes(constraints))
-  return fits ? chosen : setValue(chosen, color, 'prompt_template_id', null)
+    id === null || !library || library.some((template) => template.id === id && fitsSide(template, constraints, memory))
+  return fits ? next : setValue(next, color, 'prompt_template_id', null)
+}
+
+/** Sets a side's LLM constraints; a Prompt template that doesn't fit them goes back to the Default. */
+export const chooseConstraints = (next: NextGame, library: Library, color: Color, constraints: LlmConstraints) =>
+  keepFittingTemplate(setValue(next, color, 'llm_constraints', constraints), library, color)
+
+/**
+ * Sets a side's Turn memory; a Prompt template that doesn't fit it goes back to the Default, Moves under chat_moves.
+ * While the library isn't listed, whether it fits can't be told, and a template written for one Turn memory rarely
+ * fits another, so a new Turn memory goes back to the Default then too.
+ */
+export function chooseTurnMemory(next: NextGame, library: Library, color: Color, memory: TurnMemory): NextGame {
+  const chosen = setValue(next, color, 'turn_memory', memory)
+  if (!library && memory !== value(next, color, 'turn_memory')) return setValue(chosen, color, 'prompt_template_id', null)
+  return keepFittingTemplate(chosen, library, color)
 }
 
 /** With Prompt lab off, every side plays the Default of its LLM constraints, whatever the last game played. */
@@ -218,13 +244,15 @@ export const withDefaultTemplates = (next: NextGame): NextGame => ({
 export function newGameRequest(next: NextGame, models: Models): NewGame {
   const llm = (color: Color): LlmSide => {
     const prompt_template_id = value(next, color, 'prompt_template_id')
+    const turn_memory = value(next, color, 'turn_memory')
     return {
       player: 'llm',
       model: next.models[color],
       thinking: thinkingOn(next, models, color),
       llm_constraints: value(next, color, 'llm_constraints'),
       retry_feedback: value(next, color, 'retry_feedback'),
-      // Left out for the Default, so a request without Prompt lab is as before.
+      // Left out for fresh and the Default, so a request without them is as before.
+      ...(turn_memory !== 'fresh' && { turn_memory }),
       ...(prompt_template_id !== null && { prompt_template_id }),
     }
   }

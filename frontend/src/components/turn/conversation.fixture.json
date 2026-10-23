@@ -1,0 +1,1486 @@
+{
+  "trimmed": {
+    "llm_turns": [
+      {
+        "ply": 1,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "f3",
+            "san": "f3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"f3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play White."
+              },
+              {
+                "role": "user",
+                "content": "(no moves yet)"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 2,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "e5",
+            "san": "e5",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"e5\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 3,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "g4",
+            "san": "g4",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"g4\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "1. f3 e5"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 1,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 4,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "d6",
+            "san": "d6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"d6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 5,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "h3",
+            "san": "h3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"h3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4 d6"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 1,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 6,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "c6",
+            "san": "c6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"c6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4 d6 3. h3"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 7,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "Qxf7",
+            "san": null,
+            "notation_slip": false,
+            "result": "illegal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Qxf7\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4 d6 3. h3 c6"
+              }
+            ]
+          },
+          {
+            "move": "a3",
+            "san": "a3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": "Your move \"Qxf7\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move.",
+            "raw_reply": "{\"move\": \"a3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "Your move \"Qxf7\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+              }
+            ],
+            "remembered": 1
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 2,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 8,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "a6",
+            "san": "a6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"a6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4 d6 3. h3 c6 4. a3"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 9,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "b3",
+            "san": "b3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"b3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4 d6 3. h3 c6 4. a3 a6"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 2,
+        "thinking": null,
+        "reasoning": null
+      }
+    ],
+    "prompts": [
+      {
+        "ply": 1,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          }
+        ]
+      },
+      {
+        "ply": 2,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3"
+          }
+        ]
+      },
+      {
+        "ply": 3,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"f3\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5"
+          }
+        ]
+      },
+      {
+        "ply": 4,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4"
+          }
+        ]
+      },
+      {
+        "ply": 5,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"g4\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6"
+          }
+        ]
+      },
+      {
+        "ply": 6,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6 3. h3"
+          }
+        ]
+      },
+      {
+        "ply": 7,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"g4\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"h3\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6 3. h3 c6"
+          }
+        ]
+      },
+      {
+        "ply": 7,
+        "attempt": 2,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"h3\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6 3. h3 c6"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"Qxf7\"}"
+          },
+          {
+            "role": "user",
+            "content": "Your move \"Qxf7\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+          }
+        ]
+      },
+      {
+        "ply": 8,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6 3. h3 c6 4. a3"
+          }
+        ]
+      },
+      {
+        "ply": 9,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"h3\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6 3. h3 c6"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"Qxf7\"}"
+          },
+          {
+            "role": "user",
+            "content": "Your move \"Qxf7\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"a3\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4 d6 3. h3 c6 4. a3 a6"
+          }
+        ]
+      }
+    ],
+    "counterparts": []
+  },
+  "chaos": {
+    "llm_turns": [
+      {
+        "ply": 1,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "Bd3",
+            "san": null,
+            "notation_slip": false,
+            "result": "illegal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Bd3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play White."
+              },
+              {
+                "role": "user",
+                "content": "(no moves yet)"
+              }
+            ],
+            "resolution": {
+              "kind": "chaos",
+              "from": "f1",
+              "to": "d3",
+              "piece": "B",
+              "rook": null,
+              "reason": "the bishop on f1 moves"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "legal_counterpart": {
+          "move": "e2e4",
+          "san": "e4",
+          "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+          "attempt": {
+            "move": "e4",
+            "san": "e4",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"e4\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "That move breaks the rules of chess. Reply with a legal move for the same position instead.\nLegal moves: Na3 d4 Nf3 g3 a3 h4 Nh3 f4 b3 b4 h3 d3 e4 f3 e3 a4 g4 c4 Nc3 c3"
+              }
+            ]
+          }
+        },
+        "remembered": 0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 2,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "Bc5",
+            "san": null,
+            "notation_slip": false,
+            "result": "illegal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Bc5\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. Bd3"
+              }
+            ],
+            "resolution": {
+              "kind": "chaos",
+              "from": "f8",
+              "to": "c5",
+              "piece": "b",
+              "rook": null,
+              "reason": "the bishop on f8 moves"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "legal_counterpart": {
+          "move": "e7e5",
+          "san": "e5",
+          "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/8/3B4/PPPPPPPP/RNBQK1NR w KQkq - 0 2",
+          "attempt": {
+            "move": "e5",
+            "san": "e5",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"e5\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+              },
+              {
+                "role": "user",
+                "content": "PGN: 1. Bd3\nFEN: rnbqkbnr/pppppppp/8/8/8/3B4/PPPPPPPP/RNBQK1NR b KQkq - 1 1\nLegal moves: d5 d6 b6 Nf6 f6 b5 e6 a5 Nc6 e5 c5 h6 a6 h5 g6 g5 Nh6 Na6 f5 c6"
+              }
+            ]
+          }
+        },
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 3,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "Nf3",
+            "san": "Nf3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Nf3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "Your Bd3 was played as: bishop f1\u2192d3 (the bishop on f1 moves).\nOpponent played Bc5 as: bishop f8\u2192c5 (the bishop on f8 moves).\n1. Bd3 Bc5"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "g1",
+              "to": "f3",
+              "piece": "N",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 1,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 4,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "Nf6",
+            "san": "Nf6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Nf6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. Bd3 Bc5 2. Nf3"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "g8",
+              "to": "f6",
+              "piece": "n",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      }
+    ],
+    "prompts": [
+      {
+        "ply": 1,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          }
+        ]
+      },
+      {
+        "ply": 2,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. Bd3"
+          }
+        ]
+      },
+      {
+        "ply": 3,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"Bd3\"}"
+          },
+          {
+            "role": "user",
+            "content": "Your Bd3 was played as: bishop f1\u2192d3 (the bishop on f1 moves).\nOpponent played Bc5 as: bishop f8\u2192c5 (the bishop on f8 moves).\n1. Bd3 Bc5"
+          }
+        ]
+      },
+      {
+        "ply": 4,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. Bd3 Bc5 2. Nf3"
+          }
+        ]
+      }
+    ],
+    "counterparts": [
+      {
+        "ply": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"Bd3\"}"
+          },
+          {
+            "role": "user",
+            "content": "That move breaks the rules of chess. Reply with a legal move for the same position instead.\nLegal moves: Na3 d4 Nf3 g3 a3 h4 Nh3 f4 b3 b4 h3 d3 e4 f3 e3 a4 g4 c4 Nc3 c3"
+          }
+        ]
+      },
+      {
+        "ply": 2,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+          },
+          {
+            "role": "user",
+            "content": "PGN: 1. Bd3\nFEN: rnbqkbnr/pppppppp/8/8/8/3B4/PPPPPPPP/RNBQK1NR b KQkq - 1 1\nLegal moves: d5 d6 b6 Nf6 f6 b5 e6 a5 Nc6 e5 c5 h6 a6 h5 g6 g5 Nh6 Na6 f5 c6"
+          }
+        ]
+      }
+    ]
+  },
+  "moves": {
+    "llm_turns": [
+      {
+        "ply": 1,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "f3",
+            "san": "f3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"f3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play White."
+              },
+              {
+                "role": "user",
+                "content": "You play White. Make the first move."
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 2,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "e5",
+            "san": "e5",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"e5\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 3,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "Qxf7",
+            "san": null,
+            "notation_slip": false,
+            "result": "illegal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Qxf7\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "Opponent played e5."
+              }
+            ]
+          },
+          {
+            "move": "g4",
+            "san": "g4",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"g4\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": []
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 1,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 4,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "d6",
+            "san": "d6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"d6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. g4"
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 5,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "h3",
+            "san": "h3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"h3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "Opponent played d6."
+              }
+            ]
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 2,
+        "thinking": null,
+        "reasoning": null
+      }
+    ],
+    "prompts": [
+      {
+        "ply": 1,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "You play White. Make the first move."
+          }
+        ]
+      },
+      {
+        "ply": 2,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3"
+          }
+        ]
+      },
+      {
+        "ply": 3,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "You play White. Make the first move."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"f3\"}"
+          },
+          {
+            "role": "user",
+            "content": "Opponent played e5."
+          }
+        ]
+      },
+      {
+        "ply": 3,
+        "attempt": 2,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "You play White. Make the first move."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"f3\"}"
+          },
+          {
+            "role": "user",
+            "content": "Opponent played e5."
+          }
+        ]
+      },
+      {
+        "ply": 4,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. g4"
+          }
+        ]
+      },
+      {
+        "ply": 5,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "You play White. Make the first move."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"f3\"}"
+          },
+          {
+            "role": "user",
+            "content": "Opponent played e5."
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"g4\"}"
+          },
+          {
+            "role": "user",
+            "content": "Opponent played d6."
+          }
+        ]
+      }
+    ],
+    "counterparts": []
+  },
+  "aside": {
+    "llm_turns": [
+      {
+        "ply": 1,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "f3",
+            "san": "f3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"f3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play White."
+              },
+              {
+                "role": "user",
+                "content": "(no moves yet)"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "f2",
+              "to": "f3",
+              "piece": "P",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 2,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "e5",
+            "san": "e5",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"e5\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "e7",
+              "to": "e5",
+              "piece": "p",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 3,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "Bd3",
+            "san": null,
+            "notation_slip": false,
+            "result": "illegal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Bd3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "1. f3 e5"
+              }
+            ],
+            "resolution": {
+              "kind": "chaos",
+              "from": "f1",
+              "to": "d3",
+              "piece": "B",
+              "rook": null,
+              "reason": "the bishop on f1 moves"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "legal_counterpart": {
+          "move": "g1h3",
+          "san": "Nh3",
+          "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/8/5P1N/PPPPP1PP/RNBQKB1R b KQkq - 1 2",
+          "attempt": {
+            "move": "Nh3",
+            "san": "Nh3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Nh3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "That move breaks the rules of chess. Reply with a legal move for the same position instead.\nLegal moves: a3 g4 c3 d4 b3 d3 Kf2 Nc3 Na3 c4 e3 Nh3 g3 h4 h3 e4 a4 f4 b4"
+              }
+            ],
+            "remembered": 0
+          }
+        },
+        "remembered": 1,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 4,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "d6",
+            "san": "d6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"d6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. Bd3"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "d7",
+              "to": "d6",
+              "piece": "p",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 5,
+        "color": "white",
+        "attempts": [
+          {
+            "move": "Nh3",
+            "san": "Nh3",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"Nh3\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "user",
+                "content": "Your Bd3 was played as: bishop f1\u2192d3 (the bishop on f1 moves).\n1. f3 e5 2. Bd3 d6"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "g1",
+              "to": "h3",
+              "piece": "N",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "remembered": 1,
+        "thinking": null,
+        "reasoning": null
+      },
+      {
+        "ply": 6,
+        "color": "black",
+        "attempts": [
+          {
+            "move": "c6",
+            "san": "c6",
+            "notation_slip": false,
+            "result": "legal",
+            "feedback_sent": null,
+            "raw_reply": "{\"move\": \"c6\"}",
+            "thinking": null,
+            "reasoning": null,
+            "error": null,
+            "latency_s": 0.0,
+            "prompt": [
+              {
+                "role": "system",
+                "content": "You play Black."
+              },
+              {
+                "role": "user",
+                "content": "1. f3 e5 2. Bd3 d6 3. Nh3"
+              }
+            ],
+            "resolution": {
+              "kind": "legal",
+              "from": "c7",
+              "to": "c6",
+              "piece": "p",
+              "rook": null,
+              "reason": "a legal move"
+            }
+          }
+        ],
+        "time_s": 0.0,
+        "thinking": null,
+        "reasoning": null
+      }
+    ],
+    "prompts": [
+      {
+        "ply": 1,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          }
+        ]
+      },
+      {
+        "ply": 2,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3"
+          }
+        ]
+      },
+      {
+        "ply": 3,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "(no moves yet)"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"f3\"}"
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5"
+          }
+        ]
+      },
+      {
+        "ply": 4,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. Bd3"
+          }
+        ]
+      },
+      {
+        "ply": 5,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"Bd3\"}"
+          },
+          {
+            "role": "user",
+            "content": "Your Bd3 was played as: bishop f1\u2192d3 (the bishop on f1 moves).\n1. f3 e5 2. Bd3 d6"
+          }
+        ]
+      },
+      {
+        "ply": 6,
+        "attempt": 1,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play Black."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5 2. Bd3 d6 3. Nh3"
+          }
+        ]
+      }
+    ],
+    "counterparts": [
+      {
+        "ply": 3,
+        "prompt": [
+          {
+            "role": "system",
+            "content": "You play White."
+          },
+          {
+            "role": "user",
+            "content": "1. f3 e5"
+          },
+          {
+            "role": "assistant",
+            "content": "{\"move\": \"Bd3\"}"
+          },
+          {
+            "role": "user",
+            "content": "That move breaks the rules of chess. Reply with a legal move for the same position instead.\nLegal moves: a3 g4 c3 d4 b3 d3 Kf2 Nc3 Na3 c4 e3 Nh3 g3 h4 h3 e4 a4 f4 b4"
+          }
+        ]
+      }
+    ]
+  }
+}

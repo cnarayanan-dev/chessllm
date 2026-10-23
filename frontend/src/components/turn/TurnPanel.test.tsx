@@ -2,8 +2,9 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Attempt, LlmTurn } from '@/api/types'
+import fixture from '@/components/turn/conversation.fixture.json'
 import { TurnPanel } from '@/components/turn/TurnPanel'
-import { aTurn, afterE4, afterE5, chaosGame, E4, E5, NF3, NC6, plies } from '@/test/games'
+import { aFaceoff, aTurn, afterE4, afterE5, chaosGame, E4, E5, NF3, NC6, plies, START } from '@/test/games'
 
 beforeEach(() => localStorage.clear())
 
@@ -348,4 +349,79 @@ test('the tab chosen stays chosen on the next turn and after a reload', async ()
   render(<TurnPanel game={twoMovesIn()} ply={4} live />)
 
   expect(tab('Answer')).toHaveAttribute('aria-selected', 'true')
+})
+
+describe('a conversation kept by Turn memory', () => {
+  // The fixture's game, 1. f3 e5 2. g4 d6 3. h3 c6 4. Qxf7?? a3 a6 5. b3: White keeps a conversation, trimmed to the
+  // context at its 3rd turn and again within its 4th, after its illegal Qxf7.
+  const MOVES = ['f3', 'e5', 'g4', 'd6', 'h3', 'c6', 'a3', 'a6', 'b3']
+  const conversation = () =>
+    aFaceoff(
+      MOVES.map((san): [string, string, string] => ['a1a1', san, START]),
+      [],
+      { llm_turns: fixture.trimmed.llm_turns as LlmTurn[], llm_turn: fixture.trimmed.llm_turns.at(-1) as LlmTurn },
+    )
+  const marker = () => within(panel()).queryByRole('note', { name: /trimmed/ })
+
+  test("the Prompt tab shows the attempt's whole Prompt, with a marker where turns were trimmed", async () => {
+    render(<TurnPanel game={conversation()} ply={7} live={false} />)
+    await userEvent.click(tab('Prompt'))
+
+    // Its last attempt: the conversation was trimmed again before it.
+    expect(within(panel()).getByText('Attempt 2 of 2')).toBeVisible()
+    expect(marker()).toHaveTextContent('Turns 1–2 trimmed')
+    expect(within(panel()).getByText('1. f3 e5 2. g4 d6 3. h3 c6')).toBeVisible()
+    expect(within(panel()).getByText('{"move": "Qxf7"}')).toBeVisible()
+    expect(within(panel()).getByText(/^Your move "Qxf7" is illegal/)).toBeVisible()
+    // The earlier turn it remembered, folded under its number.
+    expect(within(panel()).queryByText('1. f3 e5 2. g4 d6')).not.toBeInTheDocument()
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Turn 3' }))
+    expect(within(panel()).getByText('1. f3 e5 2. g4 d6')).toBeVisible()
+    expect(within(panel()).getByText('{"move": "h3"}')).toBeVisible()
+
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Earlier attempt' }))
+
+    expect(marker()).toHaveTextContent('Turn 1 trimmed')
+    expect(within(panel()).getByRole('button', { name: 'Turn 2' })).toBeVisible()
+  })
+
+  test("the marker's meaning is in its tooltip and aria-description", async () => {
+    render(<TurnPanel game={conversation()} ply={9} live={false} />)
+    await userEvent.click(tab('Prompt'))
+
+    expect(marker()).toHaveTextContent('Turns 1–2 trimmed')
+    expect(marker()).toHaveAttribute('aria-description', expect.stringMatching(/to fit the model's context/))
+    marker()!.focus()
+    const tooltip = await screen.findByText(/to fit the model's context/)
+    expect(tooltip.closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
+  test("a Legal counterpart's Prompt, folded under it: in a conversation the chaos move's turn, then the request", async () => {
+    // fixture.chaos: 1. Bd3 (chaos, its counterpart e4) Bc5 (chaos, its counterpart e5) 2. Nf3 Nf6, White chatting.
+    const chaos = aFaceoff(
+      ['Bd3', 'Bc5', 'Nf3', 'Nf6'].map((san): [string, string, string] => ['a1a1', san, START]),
+      [],
+      { llm_turns: fixture.chaos.llm_turns as LlmTurn[], llm_turn: fixture.chaos.llm_turns.at(-1) as LlmTurn },
+    )
+    render(<TurnPanel game={chaos} ply={1} live={false} />)
+    const counterpart = within(panel()).getByRole('group', { name: 'Legal counterpart' })
+
+    expect(within(counterpart).queryByText(/^That move breaks the rules of chess/)).not.toBeInTheDocument()
+    await userEvent.click(within(counterpart).getByRole('button', { name: 'Its Prompt' }))
+
+    expect(within(counterpart).getByRole('button', { name: /System prompt/ })).toBeVisible()
+    expect(within(counterpart).getByText('Turn 1')).toBeVisible()
+    expect(within(counterpart).getByText('{"move": "Bd3"}')).toBeVisible()
+    expect(within(counterpart).getByText(/^That move breaks the rules of chess/)).toBeVisible()
+  })
+
+  test('with no turn trimmed there is no marker, and the System prompt is folded first', async () => {
+    render(<TurnPanel game={conversation()} ply={3} live={false} />)
+    await userEvent.click(tab('Prompt'))
+
+    expect(marker()).not.toBeInTheDocument()
+    expect(within(panel()).getByRole('button', { name: /System prompt/ })).toBeVisible()
+    expect(within(panel()).getByRole('button', { name: 'Turn 1' })).toBeVisible()
+    expect(within(panel()).getByText('1. f3 e5')).toBeVisible()
+  })
 })

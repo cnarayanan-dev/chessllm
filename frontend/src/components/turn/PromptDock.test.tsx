@@ -7,20 +7,21 @@ import { TurnPanel } from '@/components/turn/TurnPanel'
 import { setPromptLabOn } from '@/settings/promptLab'
 import { fakeBackend } from '@/test/fakeBackend'
 import { AFTER_E4, aTurn, afterE5 } from '@/test/games'
+import { defaultsOf, FREE, POSITION } from '@/test/promptLibrary'
 
 beforeEach(() => {
   localStorage.clear()
   setPromptLabOn(true)
 })
 
-const FREE: PromptTemplateInfo['fits'] = ['free', 'blind_enforced']
 const DEFAULT: PromptTemplateInfo = {
   id: 'default@1',
   name: 'Default',
   system_prompt: 'You play $color.',
   turn_template: 'PGN: $moves\nFEN: $fen',
   fits: FREE,
-  default_for: FREE,
+  turn_memories: POSITION,
+  default_for: defaultsOf(FREE, POSITION),
   saved: false,
   hidden: false,
 }

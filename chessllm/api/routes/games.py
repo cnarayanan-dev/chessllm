@@ -45,15 +45,6 @@ def start_game(
     new_game: NewGame | None = None,
 ) -> GameState:
     new_game = new_game or NewGame()
-    for color, side in (("white", new_game.white), ("black", new_game.black)):
-        # Hidden from the schema until the page shows a conversation's whole Prompt (#108): it would show only what
-        # each attempt added (ADR 0009).
-        if isinstance(side, LlmSide) and side.turn_memory != "fresh":
-            refused = (
-                f"A new game takes no Turn memory but fresh yet: the LLM side ({color}) can't play "
-                f"{side.turn_memory} from the app, only from the batch commands"
-            )
-            raise InvalidSettings(refused, code="turn_memory_not_accepted")
     settings = Settings(
         new_game.mode,
         with_template(new_game.white, "white", library),

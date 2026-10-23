@@ -1,16 +1,18 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
 import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, Eye, MessageSquareText, Scale, Undo2 } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import type { Attempt, Color, GameState, LlmTurn } from '@/api/types'
 import { decisionOf, mono, prose, quiet, RESULT_NAMES, type Decision } from '@/components/turn/attempt'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Probes } from '@/components/turn/Probes'
+import { conversationPrompt, counterpartPrompt } from '@/components/turn/conversation'
 import { PromptDock } from '@/components/turn/PromptDock'
-import { PromptMessages } from '@/components/turn/PromptMessages'
+import { ConversationMessages, PromptMessages } from '@/components/turn/PromptMessages'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { shownGain } from '@/game/chaosGain'
@@ -141,6 +143,7 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
             // A new turn, or a new attempt of the live one, opens on its last attempt.
             key={`${turn.color}-${turn.ply}-${turn.attempts.length}`}
             turn={turn}
+            turns={game.llm_turns}
             kind={thinks(game, turn) ? 'Thinking' : 'Reasoning'}
             tab={tab}
             onTab={choose}
@@ -167,6 +170,8 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
         {turn?.legal_counterpart && turn.ply === ply && (
           <Counterpart
             counterpart={turn.legal_counterpart}
+            turns={game.llm_turns}
+            turn={turn}
             number={moveNumber(turn)}
             chaosMove={move!}
             previewing={previewing}
@@ -204,6 +209,9 @@ const COUNTERPART_MEANING =
 
 type CounterpartProps = {
   counterpart: LegalCounterpart
+  /** The game's LLM turns and the chaos move's, which its whole Prompt is rebuilt from in a conversation. */
+  turns: LlmTurn[]
+  turn: LlmTurn
   number: string
   /** The Chaos move as the move list numbers it, e.g. "1… Bb4". */
   chaosMove: string
@@ -213,10 +221,12 @@ type CounterpartProps = {
 
 /**
  * The Chaos move's Legal counterpart, at the bottom of the panel: its name, then its move on a line of its own, a
- * toggle that shows the position it would have left on the board, or "none" when it failed, why in its tooltip. No
- * time is shown: it is none of the turn's.
+ * toggle that shows the position it would have left on the board, or "none" when it failed, why in its tooltip, and
+ * its Prompt, folded. No time is shown: it is none of the turn's.
  */
-function Counterpart({ counterpart, number, chaosMove, previewing, onPreview }: CounterpartProps) {
+function Counterpart({ counterpart, turns, turn, number, chaosMove, previewing, onPreview }: CounterpartProps) {
+  // Rebuilt only when the game's turns change, not at every render the page polls.
+  const prompt = useMemo(() => counterpartPrompt(turns, turn), [turns, turn])
   const why = counterpart.attempt.error ?? 'Its answer was no legal move.'
   return (
     <div role="group" aria-label="Legal counterpart" className="mt-4 flex flex-col gap-1 border-t pt-3">
@@ -244,6 +254,17 @@ function Counterpart({ counterpart, number, chaosMove, previewing, onPreview }: 
           previewing={previewing}
           onPreview={onPreview}
         />
+      )}
+      {(prompt.system || prompt.current.length > 0) && (
+        <Collapsible className="mt-1">
+          <CollapsibleTrigger className="group flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <ChevronRight aria-hidden="true" className="size-3 transition-transform group-data-[panel-open]:rotate-90" />
+            Its Prompt
+          </CollapsibleTrigger>
+          <CollapsibleContent className={`${pane} mt-1`}>
+            <ConversationMessages prompt={prompt} />
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   )
@@ -281,6 +302,8 @@ function CounterpartButton({ name, chaosMove, previewing, onPreview }: Counterpa
 
 type TurnTabsProps = {
   turn: LlmTurn
+  /** The game's LLM turns, which a conversation's whole Prompt is rebuilt from (ADR 0009). */
+  turns: LlmTurn[]
   kind: Decision
   tab: Tab
   onTab: (tab: Tab) => void
@@ -288,7 +311,7 @@ type TurnTabsProps = {
   probes?: ReactNode
 }
 
-function TurnTabs({ turn, kind, tab, onTab, probes }: TurnTabsProps) {
+function TurnTabs({ turn, turns, kind, tab, onTab, probes }: TurnTabsProps) {
   const count = turn.attempts.length
   const [number, setNumber] = useState(count) // the attempt shown, from 1
   const attempt = turn.attempts[number - 1]
@@ -340,7 +363,11 @@ function TurnTabs({ turn, kind, tab, onTab, probes }: TurnTabsProps) {
       </TabsContent>
       <TabsContent className={pane} value="prompt">
         {probes}
-        <PromptMessages messages={attempt?.prompt ?? null} />
+        {attempt?.prompt == null ? (
+          <PromptMessages messages={null} />
+        ) : (
+          <ConversationMessages prompt={conversationPrompt(turns, turn, number)} />
+        )}
       </TabsContent>
       <TabsContent className={pane} value="answer">{attempt && <Answer attempt={attempt} />}</TabsContent>
     </Tabs>
