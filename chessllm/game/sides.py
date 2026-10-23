@@ -14,7 +14,7 @@ RetryFeedback = Literal["explained", "bare", "hinted", "repeat"]
 LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
 # Whether an LLM side's Turns share one conversation, fixed for the game: fresh (every turn starts a new conversation,
 # the default), chat_position (one conversation, each turn adding its message as a fresh turn has it) or chat_moves
-# (one conversation, each turn adding only the opponent's last move; not playable until #105).
+# (one conversation, each turn adding only the opponent's last move, from its own default Prompt templates).
 TurnMemory = Literal["fresh", "chat_position", "chat_moves"]
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}

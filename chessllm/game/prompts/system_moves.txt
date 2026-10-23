@@ -1,0 +1,11 @@
+You are playing chess as $color against a human playing $opponent.
+The game starts from the standard starting position.
+Each turn you get only your opponent's last move, in SAN. Keep track of the board yourself.
+Reply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).
+The move must be legal in the current position.
+
+Example:
+$example_opponent_move
+Answer: {"move": "$example_move"}
+$example_next_opponent_move
+Answer: {"move": "$example_next_move"}

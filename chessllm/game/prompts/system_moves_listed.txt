@@ -1,0 +1,13 @@
+You are playing chess as $color against a human playing $opponent.
+The game starts from the standard starting position.
+Each turn you get only your opponent's last move, in SAN, and the list of legal moves in SAN. Keep track of the board yourself.
+The list contains every legal move in the current position. Its order is random and means nothing.
+Choose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).
+
+Example:
+$example_opponent_move
+Legal moves: $example_legal_moves
+Answer: {"move": "$example_move"}
+$example_next_opponent_move
+Legal moves: $example_next_legal_moves
+Answer: {"move": "$example_next_move"}

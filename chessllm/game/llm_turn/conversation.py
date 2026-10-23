@@ -1,5 +1,5 @@
 """The Conversation of one LLM side: what its turns send, under its Turn memory. A fresh side's conversation starts
-over every turn; under chat_position it lasts the whole game, each turn adding its message.
+over every turn; under chat_position and chat_moves it lasts the whole game, each turn adding its message.
 
 A conversation keeps every attempt's answer as the LLM sent it and the Retry feedback after it, illegal attempts
 included, but never the Thinking. Under Retry feedback repeat a rejected attempt is left out of it, so the next

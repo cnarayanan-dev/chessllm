@@ -37,6 +37,10 @@ from chessllm.llm.models import CONTEXT_TOKENS, LLM_MODELS, load_sampling
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
 
+# The default Prompt templates --prompt-template offers: Moves is not one, as it is the Default under chat_moves and
+# fits no other Turn memory.
+PROMPT_TEMPLATE_CHOICES: tuple[DefaultTemplate, ...] = ("default", "described")
+
 
 def add_thinking_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=LlmSide().thinking)
@@ -49,17 +53,18 @@ def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
     parser.add_argument(
         "--prompt-template",
-        choices=get_args(DefaultTemplate),
+        choices=PROMPT_TEMPLATE_CHOICES,
         default="default",
-        help="the default Prompt template: default (the PGN and FEN), or described (also the last move, every "
-        "piece's square and check)",
+        help="the default Prompt template: default (the PGN and FEN, or under chat_moves only the opponent's last "
+        "move), or described (also the last move, every piece's square and check)",
     )
     parser.add_argument(
         "--turn-memory",
         choices=get_args(TurnMemory),
         default=defaults.turn_memory,
-        help="whether the LLM's turns share one conversation: fresh (the default: each turn starts anew), or "
-        "chat_position (one conversation for the game, each turn adding its message)",
+        help="whether the LLM's turns share one conversation: fresh (the default: each turn starts anew), "
+        "chat_position (one conversation for the game, each turn adding its message), or chat_moves (one "
+        "conversation, each turn adding only the opponent's last move)",
     )
 
 

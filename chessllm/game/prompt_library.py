@@ -1,6 +1,7 @@
 """The Prompt library (ADR 0010): the default Prompt templates, as their files say now, and the saved ones, each a
 JSON file in the library's folder, so saved prompts show up in git. A saved Prompt template never changes, and an
-old one is only hidden: left out of the list, it still resolves for the games that play it."""
+old one is only hidden: left out of the list, it still resolves for the games that play it. A default can be hidden
+too, until the app can play it: the Moves templates, until it plays Turn memory chat_moves (#108)."""
 
 import json
 from dataclasses import dataclass
@@ -55,9 +56,11 @@ class PromptLibrary:
 
 def default_entries() -> list[LibraryEntry]:
     """The default Prompt templates as their files say now: Default and Described without the Legal-move list, then
-    with it."""
+    with it, each followed by Moves, the Default under Turn memory chat_moves. Moves is hidden until the app plays
+    a conversation (#108): under fresh Turn memory its turns would show the LLM only the last move."""
     templates: dict[str, PromptTemplate] = {}
     default_for: dict[str, list[LlmConstraints]] = {}
+    hidden: set[str] = set()
     for llm_constraints in sorted(LLM_CONSTRAINTS, key=lambda constraints: constraints in LISTED):
         for kind in get_args(DefaultTemplate):
             template = default_template(llm_constraints, kind)
@@ -65,7 +68,12 @@ def default_entries() -> list[LibraryEntry]:
             default_for.setdefault(template.id, [])
             if kind == "default":
                 default_for[template.id].append(llm_constraints)
-    return [LibraryEntry(template, fits(template), default_for[template_id]) for template_id, template in templates.items()]
+            if kind == "moves":
+                hidden.add(template.id)
+    return [
+        LibraryEntry(template, fits(template), default_for[template_id], hidden=template_id in hidden)
+        for template_id, template in templates.items()
+    ]
 
 
 def fits(template: PromptTemplate) -> list[LlmConstraints]:

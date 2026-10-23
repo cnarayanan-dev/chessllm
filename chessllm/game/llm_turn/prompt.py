@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
-from typing import Literal
+from typing import Literal, get_args
 
 import chess
 
@@ -29,26 +29,48 @@ SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {
     "blind_enforced": SYSTEM_PROMPT_FILE,
     "listed_enforced": LISTED_SYSTEM_PROMPT_FILE,
 }
+# The System prompt file of the Moves templates, the Default under Turn memory chat_moves: the LLM is told only the
+# moves, and keeps track of the board itself.
+MOVES_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_moves.txt"
+LISTED_MOVES_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_moves_listed.txt"
+MOVES_SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {
+    "free": MOVES_SYSTEM_PROMPT_FILE,
+    "listed": LISTED_MOVES_SYSTEM_PROMPT_FILE,
+    "blind_enforced": MOVES_SYSTEM_PROMPT_FILE,
+    "listed_enforced": LISTED_MOVES_SYSTEM_PROMPT_FILE,
+}
 
-# The example move shown in the system prompt for each colour the LLM can play: the first move of each side.
+# The example move shown in the system prompt for each colour the LLM can play: the first move of each side. A
+# conversation's example goes on to the side's second move, after its opponent's reply.
 EXAMPLE_MOVES = {"white": [], "black": ["e4"]}
 EXAMPLE_ANSWERS = {"white": "e4", "black": "e5"}
+EXAMPLE_NEXT_MOVES = {"white": ["e4", "e5"], "black": ["e4", "e5", "Nf3"]}
+EXAMPLE_NEXT_ANSWERS = {"white": "Nf3", "black": "Nc6"}
 NO_MOVES_YET = "(no moves yet)"
 RECENT_PLIES = 10  # how many plies $recent_moves holds
 
-# The placeholders of a System prompt: the two colours, and a worked example of a first move for the LLM's colour.
-SYSTEM_PLACEHOLDERS = ("color", "opponent", "example_pgn", "example_fen", "example_legal_moves", "example_move")
+# The placeholders of a System prompt: the two colours, and a worked example of a first move for the LLM's colour,
+# then for a conversation the opponent's move at each of its first two turns, as $opponent_move gives it, and its
+# second move with the Legal-move list before it.
+SYSTEM_PLACEHOLDERS = (
+    "color", "opponent", "example_pgn", "example_fen", "example_legal_moves", "example_move",
+    "example_opponent_move", "example_next_opponent_move", "example_next_legal_moves", "example_next_move",
+)
 # The placeholders of a Turn template: the Move record, its last ten plies, the FEN, the position in words (the last
-# move, where every piece stands and whether the LLM is in check), the last move, and the Legal-move list.
-TURN_PLACEHOLDERS = ("moves", "recent_moves", "fen", "description", "last_move", "legal_moves")
+# move, where every piece stands and whether the LLM is in check), the last move, the opponent's last move as a
+# sentence, and the Legal-move list.
+TURN_PLACEHOLDERS = ("moves", "recent_moves", "fen", "description", "last_move", "opponent_move", "legal_moves")
 
 # The parts of the default Turn templates, which send the messages sent before Prompt templates, byte for byte.
 PGN_AND_FEN = "PGN: $moves\nFEN: $fen"
 DESCRIPTION = "\n$description"
 LEGAL_MOVES = "\nLegal moves: $legal_moves"
+# The Moves templates' turn: only the opponent's last move.
+OPPONENT_MOVE = "$opponent_move"
 
-# The default Prompt templates: Default, the PGN and FEN, and Described, which adds where every piece stands.
-DefaultTemplate = Literal["default", "described"]
+# The default Prompt templates: Default, the PGN and FEN, Described, which adds where every piece stands, and Moves,
+# only the opponent's last move, the Default under Turn memory chat_moves.
+DefaultTemplate = Literal["default", "described", "moves"]
 
 
 def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "default") -> PromptTemplate:
@@ -58,8 +80,9 @@ def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "d
     Its ID is its kind, with "-listed" under Listed, and a version from its text after an @, e.g.
     "described-listed@1f0c2a9e": the files can be edited, and an ID always means one text (ADR 0010)."""
     listed = llm_constraints in LISTED
-    system_prompt = SYSTEM_PROMPT_FILES[llm_constraints].read_text(encoding="utf-8")
-    turn_template = PGN_AND_FEN + (DESCRIPTION if kind == "described" else "") + (LEGAL_MOVES if listed else "")
+    system_prompt = system_prompt_files(kind)[llm_constraints].read_text(encoding="utf-8")
+    position = OPPONENT_MOVE if kind == "moves" else PGN_AND_FEN + (DESCRIPTION if kind == "described" else "")
+    turn_template = position + (LEGAL_MOVES if listed else "")
     version = hashlib.sha256(f"{system_prompt}\0{turn_template}".encode("utf-8")).hexdigest()[:8]
     return PromptTemplate(
         id=f"{kind}{'-listed' * listed}@{version}",
@@ -69,16 +92,49 @@ def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "d
     )
 
 
+def system_prompt_files(kind: DefaultTemplate) -> dict[LlmConstraints, Path]:
+    """The System prompt file of a kind of default template, for each kind of LLM constraints."""
+    return MOVES_SYSTEM_PROMPT_FILES if kind == "moves" else SYSTEM_PROMPT_FILES
+
+
 def side_template(side: LlmSide) -> PromptTemplate:
-    """The Prompt template the side plays with: its own, or else the Default for its LLM constraints."""
-    return side.prompt_template or default_template(side.llm_constraints)
+    """The Prompt template the side plays with: its own, or else the Default for its LLM constraints, the Moves
+    template under Turn memory chat_moves."""
+    kind: DefaultTemplate = "moves" if side.turn_memory == "chat_moves" else "default"
+    return side.prompt_template or default_template(side.llm_constraints, kind)
 
 
 def prompt_file(template: PromptTemplate, llm_constraints: LlmConstraints) -> Path | None:
     """The System prompt file of a default template as its files say now, as prompt_file logs it; None for any other
     template, whose System prompt no file holds."""
-    defaults = [default_template(llm_constraints, kind) for kind in ("default", "described")]
-    return SYSTEM_PROMPT_FILES[llm_constraints] if template in defaults else None
+    kind = default_kind(template, llm_constraints)
+    return system_prompt_files(kind)[llm_constraints] if kind is not None else None
+
+
+def default_kind(template: PromptTemplate, llm_constraints: LlmConstraints) -> DefaultTemplate | None:
+    """Which default template for the LLM constraints the template is, as its files say now; None for any other."""
+    kinds: tuple[DefaultTemplate, ...] = get_args(DefaultTemplate)
+    return next((kind for kind in kinds if template == default_template(llm_constraints, kind)), None)
+
+
+def check_turn_memory(template: PromptTemplate, side: LlmSide) -> None:
+    """Raises InvalidSettings if the side's default template doesn't fit its Turn memory: under chat_moves a turn
+    adds only the opponent's last move, so only Moves fits it, and Moves fits no other Turn memory. A template the
+    human saved is theirs to fit."""
+    kind = default_kind(template, side.llm_constraints)
+    if kind is None or (kind == "moves") == (side.turn_memory == "chat_moves"):
+        return
+    if kind == "moves":
+        reason = (
+            f"the Moves template gives only the opponent's last move, so it needs Turn memory chat_moves, "
+            f"not {side.turn_memory}"
+        )
+    else:
+        reason = (
+            f"under Turn memory chat_moves a turn adds only the opponent's last move, so it plays the Moves template, "
+            f"not {kind.capitalize()}"
+        )
+    raise InvalidSettings(reason, code="invalid_prompt_template")
 
 
 def check_prompt_template(template: PromptTemplate, llm_constraints: LlmConstraints) -> None:
@@ -118,20 +174,44 @@ def system_prompt(llm_color: Color, system_prompt_file: Path = SYSTEM_PROMPT_FIL
 def fill_system_prompt(text: str, llm_color: Color) -> str:
     """A System prompt filled in for the LLM playing llm_color ("white" or "black"): $color and $opponent are the two
     colours, and $example_pgn, $example_fen, $example_legal_moves and $example_move make up a worked example of a
-    first move for that colour."""
-    board = chess.Board()
-    for san in EXAMPLE_MOVES[llm_color]:
-        board.push_san(san)
-    legal_moves = [board.san(move) for move in board.legal_moves]
-    random.Random(0).shuffle(legal_moves)  # the prompt says the order is random; a fixed seed keeps it stable
+    first move for that colour; a conversation's example goes on to its second move, with $example_opponent_move,
+    $example_next_opponent_move, $example_next_legal_moves and $example_next_move."""
+    first, second = EXAMPLE_MOVES[llm_color], EXAMPLE_NEXT_MOVES[llm_color]
+    board = example_board(first)
     return Template(text).substitute(
         color=llm_color.capitalize(),
         opponent=opponent(llm_color).capitalize(),
         example_pgn=chess.Board().variation_san(board.move_stack) or NO_MOVES_YET,
         example_fen=board.fen(),
-        example_legal_moves=" ".join(legal_moves),
+        example_legal_moves=example_legal_moves(first),
         example_move=EXAMPLE_ANSWERS[llm_color],
+        example_opponent_move=opponent_move(first),
+        example_next_opponent_move=opponent_move(second),
+        example_next_legal_moves=example_legal_moves(second),
+        example_next_move=EXAMPLE_NEXT_ANSWERS[llm_color],
     )
+
+
+def example_board(moves: Sequence[str]) -> chess.Board:
+    """The example's position after moves (SAN) from the start."""
+    board = chess.Board()
+    for san in moves:
+        board.push_san(san)
+    return board
+
+
+def example_legal_moves(moves: Sequence[str]) -> str:
+    """The Legal-move list of the example's position after moves from the start."""
+    board = example_board(moves)
+    legal_moves = [board.san(move) for move in board.legal_moves]
+    random.Random(0).shuffle(legal_moves)  # the prompt says the order is random; a fixed seed keeps it stable
+    return " ".join(legal_moves)
+
+
+def opponent_move(moves: Sequence[str]) -> str:
+    """The opponent's last move as a turn of a conversation tells it, e.g. "Opponent played Nf6.": before any move,
+    White is told to make the first."""
+    return f"Opponent played {moves[-1]}." if moves else "You play White. Make the first move."
 
 
 def move_record(moves: Sequence[str], first_ply: int = 1) -> str:
@@ -169,6 +249,7 @@ def turn_message(template: PromptTemplate, position: TurnPosition) -> str:
         "fen": board.fen,
         "description": lambda: describe_position(board, last_move),
         "last_move": lambda: last_move or NO_MOVES_YET,
+        "opponent_move": lambda: opponent_move(moves),
         "legal_moves": lambda: position.legal_moves,
     }
     parsed = Template(template.turn_template)
