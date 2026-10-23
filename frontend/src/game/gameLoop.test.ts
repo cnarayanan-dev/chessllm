@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import type { GameState, NewGame } from '@/api/types'
+import type { Color, GameState, NewGame } from '@/api/types'
 import {
   boardInput,
   gameLoop,
@@ -10,6 +10,7 @@ import {
   type GameLoop,
   type GameLoopAction,
 } from '@/game/gameLoop'
+import { liveTotal } from '@/game/timeUsed'
 import {
   AFTER_E4,
   AFTER_E5,
@@ -33,7 +34,7 @@ function run(...actions: GameLoopAction[]): GameLoop {
 
 /** Answers the request now in flight. */
 function received(state: GameLoop, game: ReturnType<typeof aGame>): GameLoopAction {
-  return { type: 'received', requestId: state.request!.id, game }
+  return { type: 'received', requestId: state.request!.id, game, at: 0 }
 }
 
 describe('opening the page', () => {
@@ -110,7 +111,7 @@ describe('the human moves', () => {
 
   test('a rejected move shows the error and gives the position again, to snap the piece back', () => {
     const sent = gameLoop(humanToMove, { type: 'human-move', uci: 'e2e4' })
-    const state = gameLoop(sent, { type: 'failed', requestId: sent.request!.id, message: 'illegal move: e2e5' })
+    const state = gameLoop(sent, { type: 'failed', requestId: sent.request!.id, message: 'illegal move: e2e5', at: 0 })
 
     expect(state.error).toBe('illegal move: e2e5')
     expect(state.request).toBeNull()
@@ -122,7 +123,7 @@ describe('the human moves', () => {
 
   test('the next move clears the error', () => {
     const sent = gameLoop(humanToMove, { type: 'human-move', uci: 'e2e5' })
-    const rejected = gameLoop(sent, { type: 'failed', requestId: sent.request!.id, message: 'illegal move: e2e5' })
+    const rejected = gameLoop(sent, { type: 'failed', requestId: sent.request!.id, message: 'illegal move: e2e5', at: 0 })
 
     expect(gameLoop(rejected, { type: 'human-move', uci: 'e2e4' }).error).toBeNull()
   })
@@ -181,7 +182,7 @@ describe('waiting for the LLM', () => {
   })
 
   test('a failed turn shows the error and starts no other', () => {
-    const state = gameLoop(waiting, { type: 'failed', requestId: waiting.request!.id, message: 'Failed to fetch' })
+    const state = gameLoop(waiting, { type: 'failed', requestId: waiting.request!.id, message: 'Failed to fetch', at: 0 })
 
     expect(state.error).toBe('Failed to fetch')
     expect(state.request).toBeNull()
@@ -199,7 +200,7 @@ describe('new game', () => {
   const waiting = run(received(initialGameLoop, afterE4()))
 
   test('asks the backend for a game with the settings given, and clears the error', () => {
-    const failed = gameLoop(waiting, { type: 'failed', requestId: waiting.request!.id, message: 'Failed to fetch' })
+    const failed = gameLoop(waiting, { type: 'failed', requestId: waiting.request!.id, message: 'Failed to fetch', at: 0 })
 
     const state = gameLoop(failed, { type: 'new-game', newGame: settings })
 
@@ -237,8 +238,8 @@ describe('new game', () => {
     const started = gameLoop(starting, received(starting, aGame({ game_id: 'game-2' })))
 
     // llm-turn returns the state of the game it was played in, after the new game has started or before.
-    const lateAfterStart = gameLoop(started, { type: 'received', requestId: abandonedTurn, game: afterE5() })
-    const lateBeforeStart = gameLoop(starting, { type: 'received', requestId: abandonedTurn, game: afterE5() })
+    const lateAfterStart = gameLoop(started, { type: 'received', requestId: abandonedTurn, game: afterE5(), at: 0 })
+    const lateBeforeStart = gameLoop(starting, { type: 'received', requestId: abandonedTurn, game: afterE5(), at: 0 })
 
     expect(lateAfterStart).toBe(started)
     expect(lateBeforeStart).toBe(starting)
@@ -248,13 +249,13 @@ describe('new game', () => {
     const abandonedTurn = waiting.request!.id
     const starting = gameLoop(waiting, { type: 'new-game', newGame: settings })
 
-    expect(gameLoop(starting, { type: 'failed', requestId: abandonedTurn, message: 'aborted' })).toBe(starting)
+    expect(gameLoop(starting, { type: 'failed', requestId: abandonedTurn, message: 'aborted', at: 0 })).toBe(starting)
   })
 
   test('when the game cannot start, shows why and the running game goes on, its LLM turn included', () => {
     const starting = gameLoop(waiting, { type: 'new-game', newGame: settings })
 
-    const state = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'unknown model' })
+    const state = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'unknown model', at: 0 })
 
     expect(state.error).toBe('unknown model')
     expect(state.game).toEqual(afterE4())
@@ -265,7 +266,7 @@ describe('new game', () => {
     const humanToMove = run(received(initialGameLoop, aGame()))
     const starting = gameLoop(humanToMove, { type: 'new-game', newGame: settings })
 
-    const state = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'unknown model' })
+    const state = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'unknown model', at: 0 })
 
     expect(state.error).toBe('unknown model')
     expect(phase(state)).toBe('human')
@@ -277,7 +278,7 @@ describe('new game', () => {
     const faceoff = afterE4({ settings: { ...afterE4().settings, mode: 'llm_faceoff', white: black } })
     const playing = run(received(initialGameLoop, faceoff))
     const starting = gameLoop(playing, { type: 'new-game', newGame: settings })
-    const refused = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'unknown model' })
+    const refused = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'unknown model', at: 0 })
 
     const landed = afterE5({ turn: 'black', settings: faceoff.settings })
     const state = gameLoop(refused, received(refused, landed))
@@ -291,7 +292,7 @@ describe('new game', () => {
     const sent = gameLoop(humanToMove, { type: 'human-move', uci: 'e2e4' })
     const starting = gameLoop(sent, { type: 'new-game', newGame: settings })
 
-    expect(gameLoop(starting, { type: 'received', requestId: sent.request!.id, game: afterE4() })).toBe(starting)
+    expect(gameLoop(starting, { type: 'received', requestId: sent.request!.id, game: afterE4(), at: 0 })).toBe(starting)
   })
 
   test('with no settings, asks for the default game', () => {
@@ -347,8 +348,8 @@ describe('an LLM faceoff', () => {
     const humanGame = aGame({ game_id: 'game-2' })
     const state = gameLoop(starting, received(starting, humanGame))
 
-    expect(gameLoop(starting, { type: 'received', requestId: abandoned, game: after(2) })).toBe(starting)
-    expect(gameLoop(state, { type: 'received', requestId: abandoned, game: after(2) })).toBe(state)
+    expect(gameLoop(starting, { type: 'received', requestId: abandoned, game: after(2), at: 0 })).toBe(starting)
+    expect(gameLoop(state, { type: 'received', requestId: abandoned, game: after(2), at: 0 })).toBe(state)
     expect(state.game).toBe(humanGame)
     expect(state.request).toBeNull()
   })
@@ -377,7 +378,7 @@ describe('an LLM faceoff', () => {
 
 describe('when no game can be loaded or started', () => {
   test('stays idle with the error', () => {
-    const state = gameLoop(initialGameLoop, { type: 'failed', requestId: 1, message: 'Internal Server Error' })
+    const state = gameLoop(initialGameLoop, { type: 'failed', requestId: 1, message: 'Internal Server Error', at: 0 })
 
     expect(phase(state)).toBe('idle')
     expect(state.error).toBe('Internal Server Error')
@@ -385,7 +386,7 @@ describe('when no game can be loaded or started', () => {
   })
 
   test('New game tries again', () => {
-    const failed = gameLoop(initialGameLoop, { type: 'failed', requestId: 1, message: 'Internal Server Error' })
+    const failed = gameLoop(initialGameLoop, { type: 'failed', requestId: 1, message: 'Internal Server Error', at: 0 })
     const starting = gameLoop(failed, { type: 'new-game', newGame: null })
     const state = gameLoop(starting, received(starting, aGame()))
 
@@ -558,6 +559,83 @@ describe('the move history', () => {
 
     expect(gameLoop(viewing, { type: 'new-game', newGame: null }).history).toBeNull()
     expect(gameLoop(viewing, received(viewing, afterE4({ game_id: 'game-2' }))).history).toBeNull()
+  })
+})
+
+type Polled = Extract<GameLoopAction, { type: 'polled' }>
+
+describe('Time used', () => {
+  /** A side's Time used `ms` after the clock's epoch (0), as the strip shows it. */
+  const at = (state: GameLoop, color: Color, ms: number) => liveTotal(state.clock!, color, ms)
+  /** The LLM's turn asked for at 0, as the human's move e4 landed: White 4 s, the LLM's Turn not started. */
+  const asked = (game = afterE4({ time_used: { white: 4, black: 10 }, running_s: null })) => {
+    const sent = gameLoop(run(received(initialGameLoop, aGame())), { type: 'human-move', uci: 'e2e4' })
+    return gameLoop(sent, { type: 'received', requestId: sent.request!.id, game, at: 0 })
+  }
+  /** The game as the page polls it while the LLM's turn is pending, `at` ms after the clock's epoch. */
+  const polled = (state: GameLoop, at: number, overrides: Partial<GameState>): Polled => ({
+    type: 'polled',
+    requestId: state.request!.id,
+    game: afterE4({ time_used: { white: 4, black: 10 }, ...overrides }),
+    at,
+  })
+
+  test('the side to move ticks from when the state arrived; the other stands still', () => {
+    const state = asked()
+
+    expect(at(state, 'black', 2500)).toBe(12.5)
+    expect(at(state, 'white', 2500)).toBe(4)
+  })
+
+  test("a poll during the LLM's turn sets its total to the backend's, ticking on from the poll", () => {
+    const state = gameLoop(asked(), polled(asked(), 1500, { running_s: 1.2 }))
+
+    expect(at(state, 'black', 1500)).toBe(11.2)
+    expect(at(state, 'black', 2500)).toBe(12.2)
+  })
+
+  test('once running_s stops advancing between polls (the Legal counterpart), the LLM stands at the Turn time', () => {
+    const first = gameLoop(asked(), polled(asked(), 1000, { running_s: 1.4 }))
+    const second = gameLoop(first, polled(first, 2000, { running_s: 1.4 }))
+
+    expect(at(second, 'black', 5000)).toBe(11.4)
+    expect(second.clock!.ticking).toBeNull()
+  })
+
+  test('a poll that shows the move landed (the evaluation still running) stands the LLM at its move time', () => {
+    const state = gameLoop(
+      asked(),
+      polled(asked(), 3000, { ...afterE5(), time_used: { white: 4, black: 11.6 }, running_s: 0.4 }),
+    )
+
+    expect(at(state, 'black', 9000)).toBe(11.6)
+    expect(at(state, 'white', 9000)).toBe(4)
+  })
+
+  test("polls of another game, or of a request that isn't in flight, are ignored", () => {
+    const state = asked()
+
+    expect(gameLoop(state, polled(state, 1000, { game_id: 'game-2', running_s: 50 }))).toBe(state)
+    expect(gameLoop(state, { ...polled(state, 1000, { running_s: 50 }), requestId: 99 })).toBe(state)
+  })
+
+  test("after a failed request nobody ticks: the LLM's total stands where it was", () => {
+    // A reload mid-turn: the backend says the Turn has run 42.5 s; the page waits for it, and the waiting fails.
+    const reloaded = run({ type: 'received', requestId: 1, game: afterE4({ running_s: 42.5 }), at: 0 })
+    const failed = gameLoop(reloaded, { type: 'failed', requestId: reloaded.request!.id, message: 'Failed to fetch', at: 3000 })
+
+    expect(failed.clock!.ticking).toBeNull()
+    expect(at(failed, 'black', 60_000)).toBe(45.5)
+  })
+
+  test('a New game asked for during the turn keeps the clock; if it fails to start, the turn goes on without a jump', () => {
+    const starting = gameLoop(asked(), { type: 'new-game', newGame: null })
+    expect(at(starting, 'black', 2000)).toBe(12)
+
+    const failed = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'no', at: 2000 })
+
+    expect(failed.request).toMatchObject({ kind: 'llm-turn' })
+    expect(at(failed, 'black', 3000)).toBe(13)
   })
 })
 

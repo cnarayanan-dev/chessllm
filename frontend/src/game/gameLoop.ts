@@ -14,6 +14,7 @@
 */
 import type { Color, GameState, LlmTurn, NewGame, Ply } from '@/api/types'
 import { played } from '@/game/chaos'
+import { clockAt, resynced, stopped, type Clock } from '@/game/timeUsed'
 
 /** The one request to the backend in flight. */
 export type Request =
@@ -27,6 +28,8 @@ type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> :
 export type GameLoop = {
   /** The game shown: the last state the backend sent, or null before the first. */
   game: GameState | null
+  /** Each side's Time used in `game`, the side to move's ticking on (`@/game/timeUsed`); null before the first game. */
+  clock: Clock | null
   /** The backend has no current game (a first visit, or after it restarted): none is shown until one is started. */
   noGame: boolean
   request: Request | null
@@ -53,9 +56,11 @@ export type History = { ply: number }
 export type GameLoopAction =
   | { type: 'new-game'; newGame: NewGame | null }
   | { type: 'human-move'; uci: string }
-  | { type: 'received'; requestId: number; game: GameState }
+  | { type: 'received'; requestId: number; game: GameState; at: number } // at: when it arrived (Date.now())
   | { type: 'no-game'; requestId: number } // the load's answer when the backend has no current game
-  | { type: 'failed'; requestId: number; message: string }
+  // The game as the page polls it while an LLM turn request is pending: it sets the clock again, nothing else.
+  | { type: 'polled'; requestId: number; game: GameState; at: number }
+  | { type: 'failed'; requestId: number; message: string; at: number }
   // The move history: view the position after a ply (0: the start; the last ply: live), or step back or forward a ply.
   | { type: 'view'; ply: number }
   | { type: 'step'; by: -1 | 1 }
@@ -65,6 +70,7 @@ export type Phase = 'idle' | 'human' | 'llm' | 'over'
 
 export const initialGameLoop: GameLoop = {
   game: null,
+  clock: null,
   noGame: false,
   request: { id: 1, kind: 'load' },
   error: null,
@@ -174,7 +180,15 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       // The view stays where it is in the same game; another game is shown live.
       const history = state.game?.game_id === action.game.game_id ? state.history : null
       const moveSounds = state.moveSounds + (sound ? 1 : 0)
-      return show({ ...state, noGame: false, moveSounds, flash, history }, action.game)
+      // The page asks for the LLM's turn as the state arrives (show), so the LLM ticks from then.
+      const clock = clockAt(action.game, action.at, llmToMove(action.game))
+      return show({ ...state, clock, noGame: false, moveSounds, flash, history }, action.game)
+    }
+    case 'polled': {
+      const { request, game, clock } = state
+      if (request?.id !== action.requestId || request.kind !== 'llm-turn' || !game || !clock) return state
+      if (action.game.game_id !== game.game_id) return state
+      return { ...state, clock: resynced(clock, game, action.game, action.at) }
     }
     case 'no-game':
       if (state.request?.id !== action.requestId) return state
@@ -182,7 +196,10 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
     case 'failed': {
       const request = state.request
       if (request?.id !== action.requestId) return state
-      const failed = { ...state, request: null, error: action.message }
+      // Nobody drives the game after its LLM turn failed: the clock stands where it was. A new game that could not
+      // start leaves the running game's clock as it was, its turn asked for again.
+      const clock = request.kind === 'llm-turn' && state.clock ? stopped(state.clock, action.at) : state.clock
+      const failed = { ...state, request: null, error: action.message, clock }
       // The running game goes on, its LLM turn included.
       if (request.kind === 'start' && state.game) return show(failed, state.game, true)
       // The same position again, as a new object, so the board snaps a rejected move's piece back.

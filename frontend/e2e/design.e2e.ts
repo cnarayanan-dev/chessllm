@@ -2,11 +2,12 @@
 /// <reference lib="dom" />
 import { expect, test, type Page } from '@playwright/test'
 
-/** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */
+/** Waits for the human's move as White, live: their strip ringed, only their Time used ticking, no past position. */
 async function yourMove(page: Page) {
   await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
   await expect(page.getByTestId('strip-white')).toContainText('You')
-  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.locator('[role=timer][data-ticking]')).toHaveCount(1)
+  await expect(page.getByTestId('strip-white').getByRole('timer')).toHaveAttribute('data-ticking')
   await expect(page.locator('[data-testid="moves"] [aria-current=step]')).toHaveCount(0)
 }
 

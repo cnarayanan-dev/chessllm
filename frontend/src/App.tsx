@@ -10,14 +10,14 @@ import { GameCard } from '@/components/game-card/GameCard'
 import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
 import { Captures } from '@/components/player-strip/Captures'
-import { MoveTimer, PlayerStrip } from '@/components/player-strip/PlayerStrip'
+import { PlayerStrip, TimeUsed } from '@/components/player-strip/PlayerStrip'
 import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown } from '@/game/chaos'
 import { evaluationBar } from '@/game/evaluation'
-import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
+import { boardInput, orientation, shownPosition } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
@@ -40,7 +40,7 @@ const keyTakenElsewhere = (event: KeyboardEvent) =>
 
 export default function App() {
   const { state, newGame, humanMove, viewPly, step } = useGameLoop()
-  const { game, error, request, history } = state
+  const { game, error, history } = state
   const shown = shownPosition(state)
   const [sheetOpen, setSheetOpen] = useState(false)
   const openSheet = useCallback(() => setSheetOpen(true), [])
@@ -57,21 +57,17 @@ export default function App() {
   const initial = game ? nextGameFrom(game.settings) : defaults.data ? nextGameFrom(defaults.data) : null
   // Without the defaults the sheet can't open, so no game can be started.
   const startError = error ?? defaults.error?.message ?? null
-  const running = waitingForLlm(state)
   // A new array with every state, so the same position given again snaps a rejected move's piece back.
   const legalMoves = useMemo(() => (game ? [...game.human_legal_moves] : NO_MOVES), [game])
   // The chaos move or spawn shown, from the ply's own resolution: the same live and in the history. Kept while
   // the ply is, so the board doesn't draw its arrows again at every render.
   const shownPly = shown?.move ?? null
   const chaos = useMemo(() => chaosShown(shownPly), [shownPly])
-  // The player strips, by the live game, with the captures, spawns and +N of the position shown; the LLM's move
-  // timer, in the strip of the side to move, restarts each turn.
+  // The player strips, by the live game, with the captures, spawns and +N of the position shown, and each side's Time
+  // used, of the live game too.
+  const clock = state.clock
   const strip = (live: GameState, color: Color) => (
-    <PlayerStrip
-      game={live}
-      color={color}
-      timer={running && live.turn === color ? <MoveTimer key={request!.id} /> : null}
-    >
+    <PlayerStrip game={live} color={color} timer={clock && <TimeUsed clock={clock} color={color} />}>
       {shown && <Captures material={material(live.plies.slice(0, shown.ply), shown.fen, color)} color={color} />}
     </PlayerStrip>
   )

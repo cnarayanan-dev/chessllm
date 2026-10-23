@@ -72,7 +72,7 @@ export function aGame(overrides: Partial<GameState> = {}): GameState {
   }
 }
 
-/** The same game after the human played e2e4: Black (the LLM) to move. */
+/** The same game after the human played e2e4: Black (the LLM) to move, its Turn not asked for yet. */
 export function afterE4(overrides: Partial<GameState> = {}): GameState {
   return aGame({
     fen: AFTER_E4,
@@ -81,6 +81,7 @@ export function afterE4(overrides: Partial<GameState> = {}): GameState {
     human_legal_moves: [],
     last_move: 'e2e4',
     plies: plies(E4),
+    running_s: null,
     ...overrides,
   })
 }

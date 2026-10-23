@@ -32,7 +32,11 @@ const strips = () =>
     .map((element) => element.dataset.testid!.replace('strip-', ''))
 /** The sides whose strip has the turn ring. */
 const ringed = () => (['white', 'black'] as const).filter((color) => screen.queryByTestId(`strip-${color}`)?.hasAttribute('data-to-move'))
-const timer = () => screen.queryByRole('timer')
+/** The sides whose Time used ticks, each strip showing one (also under the New game sheet). */
+const ticking = () => {
+  const timers = (['white', 'black'] as const).map((color) => [color, within(strip(color)).getByRole('timer', { hidden: true })] as const)
+  return timers.filter(([, timer]) => timer.hasAttribute('data-ticking')).map(([color]) => color)
+}
 /** What a strip shows after the name: the pieces its side took, those it spawned, and +N, or null for none. */
 const pieces = (color: 'white' | 'black', which: 'Took' | 'Spawned') =>
   within(strip(color))
@@ -40,17 +44,17 @@ const pieces = (color: 'white' | 'black', which: 'Took' | 'Spawned') =>
     ?.getAttribute('aria-label') ?? null
 const ahead = (color: 'white' | 'black') => within(strip(color)).queryByTestId('ahead')?.textContent ?? null
 
-/** Waits for the human's move: the ring on their strip, and no timer running. */
+/** Waits for the human's move: the ring on their strip, and only their Time used ticking. */
 async function yourMove(color: 'white' | 'black' = 'white') {
   await waitFor(() => expect(ringed()).toEqual([color]))
-  expect(timer()).not.toBeInTheDocument()
+  expect(ticking()).toEqual([color])
 }
 
-/** Waits for an LLM's move to run: the ring and the timer, from 0m 00s, in its strip. */
+/** Waits for an LLM's move to run: the ring in its strip, and only its Time used ticking, from 0m 00s. */
 async function llmMoving(color: 'white' | 'black') {
-  await waitFor(() => expect(within(strip(color)).getByRole('timer')).toHaveTextContent('0m 00s'))
+  await waitFor(() => expect(ticking()).toEqual([color]))
+  expect(within(strip(color)).getByRole('timer')).toHaveTextContent('0m 00s')
   expect(ringed()).toEqual([color])
-  expect(screen.getAllByRole('timer')).toHaveLength(1)
 }
 const topBar = () => screen.getByRole('banner')
 const models = [{ name: 'qwen3.5:9b', thinking: true, sampling: {} }]
@@ -331,7 +335,7 @@ test('a rejected move shows the error and snaps the piece back', async () => {
   expect(playMoveSound).not.toHaveBeenCalled()
 })
 
-test('an LLM turn that fails shows the error, and the ring stays on the LLM with no timer running', async () => {
+test('an LLM turn that fails shows the error, and the ring stays on the LLM with no Time used ticking', async () => {
   fakeBackend()
     .on('GET /api/games/current', Response.json(afterE4()))
     .on('POST /api/games/current/llm-turn', new TypeError('Failed to fetch'))
@@ -340,7 +344,7 @@ test('an LLM turn that fails shows the error, and the ring stays on the LLM with
   const card = await screen.findByRole('region', { name: 'Game' })
   expect(await within(card).findByRole('alert')).toHaveTextContent('Failed to fetch')
   expect(ringed()).toEqual(['black'])
-  expect(timer()).not.toBeInTheDocument()
+  expect(ticking()).toEqual([])
 })
 
 test('at the end of the game the Game card shows the result line and a Rematch button', async () => {
@@ -354,7 +358,7 @@ test('at the end of the game the Game card shows the result line and a Rematch b
   expect(within(gameCard()).getByRole('button', { name: 'Rematch' })).toBeInTheDocument()
   expect(screen.queryByTestId('banner')).not.toBeInTheDocument()
   expect(ringed()).toEqual([])
-  expect(timer()).not.toBeInTheDocument()
+  expect(ticking()).toEqual([])
   await waitFor(() => expect(theBoard().position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
   expect(theBoard().input).toBeNull()
 })

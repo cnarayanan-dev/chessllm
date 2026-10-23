@@ -14,7 +14,7 @@ The frontend's design system as shipped by the restyle (#52), recorded from the 
 - **Pill controls.** Buttons are `rounded-4xl`; Badges `rounded-3xl`; Switches are wide pills with a pill thumb.
 - **Large-radius cards with a soft shadow, no border.** `Card` is `rounded-4xl bg-card shadow-md ring-1 ring-foreground/5`, on a page that is a shade darker than the card, so a card is set off by its fill and shadow rather than a line. `size="sm"` tightens its padding.
 - **Filled, borderless surfaces** inside a card: lists, table headers and footers sit on `bg-muted` with a large radius instead of in a box with a border.
-- **A near-black primary**: the default Button, the move timer and the turn ring.
+- **A near-black primary**: the default Button, the ticking Time used and the turn ring.
 
 The radius scale comes from `--radius: 0.625rem` (`--radius-sm` to `--radius-4xl` in `@theme inline`).
 
@@ -47,7 +47,7 @@ The game page's own tokens, available as Tailwind colours (`ring-turn`, `bg-time
 | variable | value | use |
 | --- | --- | --- |
 | `--turn` | = primary | the ring around the side to move |
-| `--timer` / `--timer-foreground` | = primary / primary-foreground | the move timer pill |
+| `--timer` / `--timer-foreground` | = primary / primary-foreground | the ticking Time used pill |
 | `--slip` | `oklch(0.54 0.12 65)` (amber) | notation slips |
 | `--spawn` | `oklch(0.5 0.19 305)` (purple) | Spawns |
 | `--move-olive` | `oklch(0.69 0.13 110)` | the board's last-move olive; the pulse of a new move |
@@ -150,11 +150,11 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 1. **The turn pill**: a `card` pill (`h-11`, `shadow-xs ring-1 ring-foreground/5`) with the side's icon and name (16px, semibold, truncated). The side to move gets `shadow-md ring-2 ring-turn`. The ring follows the live game, also while a past position is viewed, and is gone once the game is over.
 2. **The icon** (`Avatar`): the model family's logo on a card-coloured disc (`frontend/src/assets/logos/`, LobeHub Icons, MIT: Qwen, Meta for llama, Gemma, Mistral for mistral/ministral, DeepSeek), matched on the Ollama name without its registry path and before its version or first separator (`qwen3.5:9b` → qwen; `logos.ts`). Any other family gets a white monogram on one of eight colours, fixed per family by a hash of its name. The human has a Lucide `User` and the name "You".
 3. **What the side has on the board** (`Captures.tsx`): the pieces it took as small Merida pieces of the other colour (smallest first, the same kind overlapping), then the pieces it spawned, in its own colour, in a `spawn`-tinted pill with `Sparkles`, then **+N** as a `secondary` Badge on the side ahead only.
-4. **The move timer**, right-aligned (`MoveTimer`): a `bg-timer` pill, 20px tabular figures, counting whole seconds, only during an LLM's move, in every Mode, in the strip of the LLM to move. On the human's move there is only the ring.
+4. **Time used**, right-aligned (`TimeUsed`, `frontend/src/game/timeUsed.ts`): always, in both strips, in every Mode; ticking only for the side to move. A pill with a Lucide `Timer` and the side's total, 20px tabular figures, counting whole seconds, `Xm SSs` up to `59m 59s`, then `Xh MMm SSs`; wide enough for `1h 13m 05s` (it doesn't shrink; the name truncates first). The ticking side's pill is `bg-timer`, the other side's a `card` pill like the turn pill. What it is shows in its tooltip and `aria-description`. Both start at `0m 00s`; once the game is over both stand still at their totals. The total is the backend's (`time_used`, finished moves only), plus for the side to move `running_s` and the time since that state arrived; during an LLM's Turn, which the page asks for as the state arrives, the LLM ticks from then. Since the turn request's answer only comes after the Legal counterpart and the evaluation, which are not Time used, the page checks the game every second meanwhile and takes the LLM's total from it, standing it still once the move has landed or `running_s` stops advancing; when the answer lands, the total moves back by at most that second. After a failed request nobody ticks.
 
-All of 3 is of the position on the board, so stepping through the move history changes it. It is counted ply by ply from each ply's `fen_before` / `fen_after` piece letters (`frontend/src/game/material.ts`; no chess logic, ADR 0001): a capture is a piece of the other side that disappeared on the side's ply; a spawn is a piece of its own that appeared beyond what its promotions explain (on a Spawn ply every new piece counts as spawned), so a Spawn never hides a capture. A piece a chaos move takes of its own side shows only in +N. +N is the material difference on the board shown (1/3/3/5/9), so it adds up from what the strips show; under Standard rules it is the usual lichess display.
+All of 3 is of the position on the board, so stepping through the move history changes it; the Time used, like the ring, follows the live game. It is counted ply by ply from each ply's `fen_before` / `fen_after` piece letters (`frontend/src/game/material.ts`; no chess logic, ADR 0001): a capture is a piece of the other side that disappeared on the side's ply; a spawn is a piece of its own that appeared beyond what its promotions explain (on a Spawn ply every new piece counts as spawned), so a Spawn never hides a capture. A piece a chaos move takes of its own side shows only in +N. +N is the material difference on the board shown (1/3/3/5/9), so it adds up from what the strips show; under Standard rules it is the usual lichess display.
 
-There is no sentence saying whose move it is: the ring and the timer say it.
+There is no sentence saying whose move it is: the ring and the ticking Time used say it.
 
 ## Game card
 
@@ -258,7 +258,7 @@ The React port (#29) carried the old page's generic look. These are gone; don't 
 | The Settings modal, its sections, description lines, sampling table and "changes apply to the next game" note | The New game sheet, which starts the game it sets up |
 | A row of setting chips in the top bar | The settings in the Game card: the Rules as an icon, the rest as text, each explained in its tooltip |
 | Uppercase micro-labels | Sentence-case `CardTitle`s and muted text |
-| Status sentences ("Black · qwen3.5:9b is thinking… 12s", "Your move", "Waiting for…") | The turn ring and the move timer in the player strips |
+| Status sentences ("Black · qwen3.5:9b is thinking… 12s", "Your move", "Waiting for…") | The turn ring and the ticking Time used in the player strips |
 | The result banner | The result line and Rematch in the Game card |
 | Players shown only as chips | Player strips with logo, name, captures, spawns and +N |
 | A move list that grows with the game, and Back to live | A fixed-height list of 8 rows that scrolls itself, and the pulse on a new move |

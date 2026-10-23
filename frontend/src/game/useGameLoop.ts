@@ -7,6 +7,7 @@ import { playMoveSound } from '@/components/board/moveSound'
 import { gameLoop, initialGameLoop, llmToMove, type Request } from '@/game/gameLoop'
 
 const POLL_MS = 2000
+const CLOCK_POLL_MS = 1000
 
 function wait(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -18,22 +19,47 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
+/** Hands `onPoll` the game every second until aborted; a check that fails is skipped. */
+async function pollEverySecond(signal: AbortSignal, onPoll: (game: GameState) => void): Promise<void> {
+  while (!signal.aborted) {
+    try {
+      await wait(CLOCK_POLL_MS, signal)
+      onPoll(await getGame(signal))
+    } catch {
+      // Aborted, or this check failed: the next one may not.
+    }
+  }
+}
+
 /**
- * Asks for the LLM's turn in `game`. A 409 means the backend won't start the turn, most often because one is already
- * running (another tab, or this page before a reload). The page can't attach to that turn, so it checks the game every
- * 2 s until the turn has landed. A stale state also gets a 409, and the first check settles it.
+ * Asks for the LLM's turn in `game`. Its answer only comes once the turn and what follows it are over, so meanwhile
+ * the game is checked every second and handed to `onPoll`, for the LLM's Time used. A 409 means the backend won't
+ * start the turn, most often because one is already running (another tab, or this page before a reload). The page
+ * can't attach to that turn, so it checks the game every 2 s until the turn has landed, each check handed to `onPoll`
+ * too. A stale state also gets a 409, and the first check settles it.
  */
-export async function requestLlmTurn(game: GameState, signal: AbortSignal): Promise<GameState> {
+export async function requestLlmTurn(
+  game: GameState,
+  signal: AbortSignal,
+  onPoll: (game: GameState) => void = () => {},
+): Promise<GameState> {
+  const polling = new AbortController()
+  signal.addEventListener('abort', () => polling.abort())
+  void pollEverySecond(polling.signal, onPoll)
   try {
     return await playLlmTurn(signal)
   } catch (error) {
     if (!(error instanceof ApiError) || error.status !== 409) throw error
+    polling.abort() // the checks below take over
     for (;;) {
       await wait(POLL_MS, signal)
       const current = await getGame(signal)
+      onPoll(current)
       const moved = current.llm_turns.length > game.llm_turns.length
       if (current.game_id !== game.game_id || moved || !llmToMove(current)) return current
     }
+  } finally {
+    polling.abort()
   }
 }
 
@@ -48,7 +74,7 @@ async function load(signal: AbortSignal): Promise<GameState | null> {
   }
 }
 
-function perform(request: Request, signal: AbortSignal): Promise<GameState | null> {
+function perform(request: Request, signal: AbortSignal, onPoll: (game: GameState) => void): Promise<GameState | null> {
   switch (request.kind) {
     case 'load':
       return load(signal)
@@ -57,7 +83,7 @@ function perform(request: Request, signal: AbortSignal): Promise<GameState | nul
     case 'move':
       return playMove(request.uci, signal)
     case 'llm-turn':
-      return requestLlmTurn(request.game, signal)
+      return requestLlmTurn(request.game, signal, onPoll)
   }
 }
 
@@ -67,18 +93,23 @@ export function useGameLoop() {
   useEffect(() => {
     if (!request) return
     const controller = new AbortController()
-    perform(request, controller.signal).then(
+    // The game as polled during an LLM turn request: it only sets the clock.
+    const onPoll = (game: GameState) => {
+      if (!controller.signal.aborted) dispatch({ type: 'polled', requestId: request.id, game, at: Date.now() })
+    }
+    perform(request, controller.signal, onPoll).then(
       (received) => {
         if (controller.signal.aborted) return
         dispatch(
           received
-            ? { type: 'received', requestId: request.id, game: received }
+            ? { type: 'received', requestId: request.id, game: received, at: Date.now() }
             : { type: 'no-game', requestId: request.id },
         )
       },
       (error: unknown) => {
         if (controller.signal.aborted) return
-        dispatch({ type: 'failed', requestId: request.id, message: error instanceof Error ? error.message : String(error) })
+        const message = error instanceof Error ? error.message : String(error)
+        dispatch({ type: 'failed', requestId: request.id, message, at: Date.now() })
       },
     )
     return () => controller.abort()

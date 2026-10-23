@@ -2,18 +2,20 @@
 // (tests/e2e/server.py). Each sets the LLMs' replies, as SAN, before its game starts.
 import { expect, test, type Page } from '@playwright/test'
 
-/** Waits for the human's move as White, live: the turn ring on their strip, no move timer, no past position viewed. */
+/** Waits for the human's move as White, live: their strip ringed, only their Time used ticking, no past position. */
 async function yourMove(page: Page) {
   await expect(page.getByTestId('strip-white')).toHaveAttribute('data-to-move')
   await expect(page.getByTestId('strip-white')).toContainText('You')
-  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.locator('[role=timer][data-ticking]')).toHaveCount(1)
+  await expect(page.getByTestId('strip-white').getByRole('timer')).toHaveAttribute('data-ticking')
   await expect(viewedMove(page)).toHaveCount(0)
 }
 
-/** Expects the game over at the live position: no side has the turn ring, and no move timer runs. */
+/** Expects the game over at the live position: no side has the turn ring, and both Time used pills stand still. */
 async function expectOver(page: Page) {
   await expect(page.locator('[data-to-move]')).toHaveCount(0)
-  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByRole('timer')).toHaveCount(2)
+  await expect(page.locator('[role=timer][data-ticking]')).toHaveCount(0)
   await expect(viewedMove(page)).toHaveCount(0)
 }
 
@@ -301,12 +303,13 @@ test("an LLM move arriving while a past position is viewed leaves the board ther
   await expect(lastMove(page)).toHaveText('Nf3')
   await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('e5')
-  // The LLM's move runs on its strip meanwhile.
-  await expect(page.getByTestId('strip-black').getByRole('timer')).toBeVisible()
+  // The LLM's move runs on its strip meanwhile: its Time used ticks.
+  await expect(page.getByTestId('strip-black').getByRole('timer')).toHaveAttribute('data-ticking')
   release()
 
   await expect(lastMove(page)).toHaveText('Nc6')
-  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByTestId('strip-black').getByRole('timer')).not.toHaveAttribute('data-ticking')
+  await expect(page.getByTestId('strip-white').getByRole('timer')).toHaveAttribute('data-ticking')
   await expect(lastMove(page)).toHaveClass(/arrived/)
   await expect(viewedMove(page)).toHaveText('e5')
   await expect(page.locator('.chessboard g[data-piece][data-square="c6"]')).toHaveCount(0)
@@ -456,7 +459,7 @@ async function holdLlmTurns(page: Page) {
   }
 }
 
-test('the player strips: the LLM above the board with its logo, the ring and the timer during its move', async ({ page }) => {
+test("the player strips: the LLM above the board with its logo, the ring, and each side's Time used", async ({ page }) => {
   await playLlm(page, { black: ['e5'] })
   const white = page.getByTestId('strip-white')
   const black = page.getByTestId('strip-black')
@@ -466,6 +469,9 @@ test('the player strips: the LLM above the board with its logo, the ring and the
   await expect(black.getByRole('img', { name: 'Meta' })).toBeVisible()
   await expect(white).toContainText('You')
   await expect(black).not.toHaveAttribute('data-to-move')
+  // Both strips show a Time used from the start; the human's ticks on their move.
+  await expect(black.getByRole('timer')).toHaveText('0m 00s')
+  await expect(white.getByRole('timer')).toHaveAttribute('data-ticking')
 
   const letGo = await holdLlmTurns(page)
   await clickMove(page, 'e2e4')
@@ -474,14 +480,20 @@ test('the player strips: the LLM above the board with its logo, the ring and the
   const timer = black.getByRole('timer')
   await expect(timer).toHaveText('0m 00s')
   await expect(timer).toHaveText('0m 02s', { timeout: 5000 })
-  await expect(page.getByRole('timer')).toHaveCount(1)
+  await expect(white.getByRole('timer')).not.toHaveAttribute('data-ticking')
+  const yours = await white.getByRole('timer').textContent()
+  await expect(white.getByRole('timer')).toHaveText(yours!)
 
   await letGo()
   await expect(lastMove(page)).toHaveText('e5')
   await yourMove(page)
+  // Once its move lands the LLM's total is the backend's, and stays still. The turn was held here, before it reached
+  // the backend, whose scripted LLM answers at once, so the backend counted next to nothing.
+  await expect(timer).not.toHaveAttribute('data-ticking')
+  await expect(timer).toHaveText('0m 00s')
 })
 
-test('in an LLM faceoff White is at the bottom and the timer moves between the strips turn by turn', async ({ page }) => {
+test('in an LLM faceoff White is at the bottom and only the side to move ticks, turn by turn', async ({ page }) => {
   await page.request.post('/e2e/script', { data: { white: ['f3', 'g4'], black: ['e5', 'Qh4#'] } })
   const letGo = await holdLlmTurns(page)
   await page.request.post('/api/games', {
@@ -489,17 +501,19 @@ test('in an LLM faceoff White is at the bottom and the timer moves between the s
   })
   await page.goto('/')
   const timerOf = (color: string) => page.getByTestId(`strip-${color}`).getByRole('timer')
+  const ticking = page.locator('[role=timer][data-ticking]')
 
-  await expect(timerOf('white')).toBeVisible()
+  await expect(timerOf('white')).toHaveAttribute('data-ticking')
   expect(await stripsAroundBoard(page)).toEqual(['black', 'white'])
-  await expect(timerOf('black')).toHaveCount(0)
+  await expect(timerOf('black')).toHaveText('0m 00s')
+  await expect(ticking).toHaveCount(1)
   await letGo()
-  await expect(timerOf('black')).toBeVisible()
-  await expect(timerOf('white')).toHaveCount(0)
+  await expect(timerOf('black')).toHaveAttribute('data-ticking')
+  await expect(ticking).toHaveCount(1)
   await expect(page.getByTestId('strip-black')).toHaveAttribute('data-to-move')
   await letGo()
-  await expect(timerOf('white')).toBeVisible()
-  await expect(timerOf('black')).toHaveCount(0)
+  await expect(timerOf('white')).toHaveAttribute('data-ticking')
+  await expect(ticking).toHaveCount(1)
   await letGo()
   await letGo()
   await expect(page.getByTestId('result')).toContainText('by checkmate')
