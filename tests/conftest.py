@@ -8,7 +8,7 @@ from chessllm.api.app import create_app
 from chessllm.core.types import Color
 from chessllm.game.settings import Settings
 from chessllm.llm.players import LlmReply, Message
-from tests.fakes import Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
+from tests.fakes import FakeClock, Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
 
 
 def play_llm(human_color: Color = "white", **llm) -> dict:
@@ -49,7 +49,8 @@ class BlockingPlayer(ScriptedPlayer):
 @pytest.fixture
 def scripted(tmp_path):
     """Makes an app playing against a ScriptedPlayer. Game logs go to tmp_path / "games" unless games_dir is given,
-    and there is no sampling config unless sampling_file is given."""
+    and there is no sampling config unless sampling_file is given. Its moves are timed by a FakeClock that stands
+    still, unless a clock is given, so every time is 0 and a state is the same however long the test takes."""
 
     def make(
         replies: list[str | Exception], thinking: list[str] | None = None, **options
@@ -57,6 +58,7 @@ def scripted(tmp_path):
         player = ScriptedPlayer(replies, thinking)
         options.setdefault("games_dir", tmp_path / "games")
         options.setdefault("sampling_file", tmp_path / "no-sampling.toml")
+        options.setdefault("clock", FakeClock())
         return TestClient(create_app(player.for_settings, **options)), player
 
     return make
@@ -65,7 +67,7 @@ def scripted(tmp_path):
 @pytest.fixture
 def faceoff(tmp_path):
     """Makes an app with a separate ScriptedPlayer per side, and starts an LLM faceoff between them with the given
-    settings per side. Returns the client, the start state and the two players."""
+    settings per side, timed like scripted's. Returns the client, the start state and the two players."""
 
     def make(
         white: list[str | Exception], black: list[str | Exception], white_settings=None, black_settings=None, **options
@@ -73,6 +75,7 @@ def faceoff(tmp_path):
         players = {"white": ScriptedPlayer(white), "black": ScriptedPlayer(black)}
         options.setdefault("games_dir", tmp_path / "games")
         options.setdefault("sampling_file", tmp_path / "no-sampling.toml")
+        options.setdefault("clock", FakeClock())
         client = TestClient(create_app(lambda settings, color: players[color].for_settings(settings, color), **options))
         response = client.post("/api/games", json=llm_faceoff(white_settings, black_settings))
         assert response.status_code == 200, response.text

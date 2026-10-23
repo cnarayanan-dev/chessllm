@@ -62,7 +62,7 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
         "max_retries": 4,
     }
     assert start["prompt_file"].endswith("system.txt")
-    assert human == {"type": "human_move", "color": "white", "ply": 1, "move": "e4", "fen_after": E4_FEN}
+    assert human == {"type": "human_move", "color": "white", "ply": 1, "move": "e4", "fen_after": E4_FEN, "time_s": 0.0}
     assert without(attempt_1, "latency_s", "prompt") == {
         "type": "llm_attempt",
         "color": "black",
@@ -88,6 +88,7 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
     assert attempt_2["feedback_sent"].startswith('Your move "Qh4" is illegal')
     assert (attempt_2["move"], attempt_2["result"]) == ("e5", "legal")
     assert attempt_2["latency_s"] == 0.0
+    assert attempt_2["turn_time_s"] == 0.0  # only the turn's last attempt has it
 
 
 def test_each_attempt_logs_its_prompt_as_sent_to_the_llm(scripted, tmp_path):
@@ -123,7 +124,7 @@ def test_an_attempt_keeps_its_fields_in_the_order_the_log_and_the_api_always_had
     assert list(logged) == [
         "type", "color", "ply", "attempt", "pgn", "fen", "move", "san", "notation_slip", "result", "feedback_sent",
         "raw_reply", "thinking", "error", "latency_s", "prompt", "thinking_tokens", "answer_tokens", "prompt_tokens",
-        "stop_reason", "token_split_estimated",
+        "stop_reason", "token_split_estimated", "turn_time_s",
     ]
     assert list(state["llm_turn"]["attempts"][0]) == [
         "move", "san", "notation_slip", "result", "feedback_sent", "raw_reply", "thinking", "reasoning", "error",
@@ -152,6 +153,7 @@ def test_a_finished_game_ends_its_log_with_the_summary_and_writes_a_pgn(scripted
                 "notation_slips": 0,
             },
         },
+        "time_used": {"white": 0.0, "black": 0.0},
     }
     [pgn_file] = logs(tmp_path / "games", ".pgn")
     assert pgn_file.stem == log.stem

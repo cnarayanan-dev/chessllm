@@ -13,7 +13,8 @@
       "written": "f3",
       "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       "fen_after": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
-      "check": false
+      "check": false,
+      "time_s": 5.5
     }
   ],
   "check": false,
@@ -52,5 +53,10 @@
       "recovered_turns": 0,
       "notation_slips": 0
     }
-  }
+  },
+  "time_used": {
+    "white": 5.5,
+    "black": 0.0
+  },
+  "running_s": null
 }

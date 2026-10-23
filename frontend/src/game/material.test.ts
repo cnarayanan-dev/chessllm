@@ -13,6 +13,7 @@ const ply = (color: Color, before: string, after: string, resolution?: Resolutio
   fen_before: `${before} ${color[0]} - - 0 1`,
   fen_after: `${after} ${color === 'white' ? 'b' : 'w'} - - 0 1`,
   check: false,
+  time_s: 0,
   ...(resolution ? { resolution } : {}),
 })
 const NONE = { p: 0, n: 0, b: 0, r: 0, q: 0, k: 0 }

@@ -121,6 +121,12 @@ class LlmTurnSummary(BaseModel):
     ply: int
     color: Color
     attempts: Sequence[AttemptSummary]
+    # The Turn's Time used: from when it started on the server to its last attempt, so a forfeited Turn has one too.
+    time_s: float
+
+    def log_shape(self) -> dict[str, Any]:
+        """What the turn's last llm_attempt logs of the turn itself: its time."""
+        return {"turn_time_s": self.time_s}
 
 
 class LlmTurn(LlmTurnSummary):
@@ -140,8 +146,19 @@ class Ply(BaseModel):
     fen_before: str
     fen_after: str
     check: bool  # whether the side to move after the ply is in check
+    time_s: float  # the Time used on the move that made the ply
     # Only for a chaos move or spawn: its resolution, as its attempt has it, so a replay never resolves it again.
     resolution: Resolution | None = Field(default=None, exclude_if=is_none)
+
+    def log_shape(self) -> dict[str, Any]:
+        """A human's or an Anchor's ply as human_move or anchor_move logs it, its move in SAN (ADR 0004)."""
+        return {
+            "color": self.color,
+            "ply": self.ply,
+            "move": self.written,
+            "fen_after": self.fen_after,
+            "time_s": self.time_s,
+        }
 
 
 class IllegalMoves(BaseModel):
@@ -173,6 +190,17 @@ class Stats(BaseModel):
         return self.model_dump(mode="json")
 
 
+class TimeUsed(BaseModel):
+    """Each side's Time used: its finished moves, a forfeited Turn's included, to the millisecond."""
+
+    white: float
+    black: float
+
+    def log_shape(self) -> dict[str, Any]:
+        """Each side's Time used as game_end logs it, the same as the API has it."""
+        return self.model_dump(mode="json")
+
+
 class GameSettings(BaseModel):
     mode: ModeKey
     white: SideOut
@@ -201,3 +229,7 @@ class GameState(BaseModel):
     result: GameResult | None
     end_reason: EndReason | None
     stats: Stats
+    time_used: TimeUsed
+    # How long the side to move had been on its move when the state was built. None once the game is over, and
+    # while an LLM's Turn or an Anchor's move hasn't been asked for: their time only runs once it has.
+    running_s: float | None

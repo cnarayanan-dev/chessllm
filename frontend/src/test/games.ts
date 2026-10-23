@@ -24,6 +24,7 @@ export function plies(...moves: PlyGiven[]): Ply[] {
     fen_before: index === 0 ? START : moves[index - 1][2],
     fen_after: fenAfter,
     check: false,
+    time_s: 0,
     ...(resolution ? { resolution } : {}),
   }))
 }
@@ -65,6 +66,8 @@ export function aGame(overrides: Partial<GameState> = {}): GameState {
         notation_slips: 0,
       },
     },
+    time_used: { white: 0, black: 0 },
+    running_s: 0,
     ...overrides,
   }
 }
@@ -107,6 +110,7 @@ export function aTurn(move: string, overrides: Partial<LlmTurn> = {}): LlmTurn {
         latency_s: 1.2,
       },
     ],
+    time_s: 1.2,
     thinking: null,
     reasoning: reasoningFor(move),
     ...overrides,
@@ -185,6 +189,7 @@ export function chaosGame(count: number, overrides: Partial<GameState> = {}): Ga
                 ply: index + 1,
                 color: 'black' as const,
                 attempts: [chaosAttempt(written, resolution)],
+                time_s: 1.2,
                 thinking: null,
                 reasoning: reasoningFor(written),
               }

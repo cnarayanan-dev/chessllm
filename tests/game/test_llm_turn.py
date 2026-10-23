@@ -82,6 +82,7 @@ def test_a_legal_reply_is_applied_and_its_thinking_shown_in_the_state(scripted):
                 "latency_s": 0.0,
             }
         ],
+        "time_s": 0.0,
         "thinking": "Defend e5.",
         "reasoning": None,
     }

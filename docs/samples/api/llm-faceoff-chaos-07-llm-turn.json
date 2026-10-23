@@ -13,7 +13,8 @@
       "written": "e4",
       "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
-      "check": false
+      "check": false,
+      "time_s": 1.5
     },
     {
       "ply": 2,
@@ -23,6 +24,7 @@
       "fen_before": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
       "fen_after": "rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
       "check": false,
+      "time_s": 4.0,
       "resolution": {
         "kind": "chaos",
         "from": "d8",
@@ -39,7 +41,8 @@
       "written": "Nf3",
       "fen_before": "rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
       "fen_after": "rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2",
-      "check": false
+      "check": false,
+      "time_s": 2.0
     },
     {
       "ply": 4,
@@ -48,7 +51,8 @@
       "written": "a6",
       "fen_before": "rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2",
       "fen_after": "rnb1kbnr/1ppppppp/p7/8/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
-      "check": false
+      "check": false,
+      "time_s": 1.75
     },
     {
       "ply": 5,
@@ -57,7 +61,8 @@
       "written": "Nxh4",
       "fen_before": "rnb1kbnr/1ppppppp/p7/8/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
       "fen_after": "rnb1kbnr/1ppppppp/p7/8/4P2N/8/PPPP1PPP/RNBQKB1R b KQkq - 0 3",
-      "check": false
+      "check": false,
+      "time_s": 2.5
     },
     {
       "ply": 6,
@@ -67,6 +72,7 @@
       "fen_before": "rnb1kbnr/1ppppppp/p7/8/4P2N/8/PPPP1PPP/RNBQKB1R b KQkq - 0 3",
       "fen_after": "rnb1kbnr/1ppppppp/p7/3q4/4P2N/8/PPPP1PPP/RNBQKB1R w KQkq - 1 4",
       "check": false,
+      "time_s": 6.5,
       "resolution": {
         "kind": "spawn",
         "from": null,
@@ -113,6 +119,7 @@
         }
       }
     ],
+    "time_s": 6.5,
     "thinking": null,
     "reasoning": null
   },
@@ -152,6 +159,7 @@
           }
         }
       ],
+      "time_s": 1.5,
       "thinking": null,
       "reasoning": null
     },
@@ -190,6 +198,7 @@
           }
         }
       ],
+      "time_s": 4.0,
       "thinking": null,
       "reasoning": null
     },
@@ -228,6 +237,7 @@
           }
         }
       ],
+      "time_s": 2.0,
       "thinking": null,
       "reasoning": null
     },
@@ -266,6 +276,7 @@
           }
         }
       ],
+      "time_s": 1.75,
       "thinking": null,
       "reasoning": null
     },
@@ -304,6 +315,7 @@
           }
         }
       ],
+      "time_s": 2.5,
       "thinking": null,
       "reasoning": null
     },
@@ -342,6 +354,7 @@
           }
         }
       ],
+      "time_s": 6.5,
       "thinking": null,
       "reasoning": null
     }
@@ -398,5 +411,10 @@
       "chaos_moves": 2,
       "spawns": 1
     }
-  }
+  },
+  "time_used": {
+    "white": 6.0,
+    "black": 12.25
+  },
+  "running_s": null
 }

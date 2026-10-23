@@ -101,6 +101,7 @@ def test_the_llms_retries_and_forfeit_are_logged_as_in_a_faceoff_and_the_anchor_
         ("llm_attempt", 3, "Ke4"),
         ("llm_attempt", 4, "Ke5"),
     ]
+    assert moves[1].pop("time_s") >= 0.0  # timed by the real clock
     assert moves[1] == {
         "type": "anchor_move", "color": "black", "ply": 2, "move": "e5",
         "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 0 2",

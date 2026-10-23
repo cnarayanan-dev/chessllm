@@ -13,7 +13,8 @@
       "written": "e4",
       "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
-      "check": false
+      "check": false,
+      "time_s": 1.5
     },
     {
       "ply": 2,
@@ -23,6 +24,7 @@
       "fen_before": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
       "fen_after": "rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
       "check": false,
+      "time_s": 4.0,
       "resolution": {
         "kind": "chaos",
         "from": "d8",
@@ -69,6 +71,7 @@
         }
       }
     ],
+    "time_s": 4.0,
     "thinking": null,
     "reasoning": null
   },
@@ -108,6 +111,7 @@
           }
         }
       ],
+      "time_s": 1.5,
       "thinking": null,
       "reasoning": null
     },
@@ -146,6 +150,7 @@
           }
         }
       ],
+      "time_s": 4.0,
       "thinking": null,
       "reasoning": null
     }
@@ -202,5 +207,10 @@
       "chaos_moves": 1,
       "spawns": 0
     }
-  }
+  },
+  "time_used": {
+    "white": 1.5,
+    "black": 4.0
+  },
+  "running_s": null
 }

@@ -3,6 +3,7 @@ move is played or it forfeits. The game plays the move the turn ends with (GameS
 
 import random
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -106,8 +107,10 @@ class LlmTurns:
         max_attempts: int,
         log: GameLog,
         abandoned: threading.Event,
+        clock: Callable[[], float],
     ) -> None:
-        """abandoned is the game's: once it is set, a running turn makes no further attempts."""
+        """abandoned is the game's: once it is set, a running turn makes no further attempts. clock is the game's,
+        which times each turn."""
         self._color = color
         self._side = side
         self._player = player
@@ -115,14 +118,16 @@ class LlmTurns:
         self._max_attempts = max_attempts
         self._log = log
         self._abandoned = abandoned
+        self._clock = clock
         self.stats = SideStats(side.llm_constraints, rules)
 
-    def play(self, board: chess.Board, pgn: str, last_move: str | None, ply: int) -> TurnOutcome:
+    def play(self, board: chess.Board, pgn: str, last_move: str | None, ply: int, started: float) -> TurnOutcome:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
         illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on.
 
         board is the position to move in, pgn the Move record so far, last_move the last ply as written there, and
-        ply the number of the ply the turn plays. The board is left as it is: the game plays the move."""
+        ply the number of the ply the turn plays, and started when the turn started, by the game's clock. The board
+        is left as it is: the game plays the move."""
         color, side, player, stats = self._color, self._side, self._player, self.stats
         model = side.model
         fen = board.fen()
@@ -138,7 +143,7 @@ class LlmTurns:
         prompt_file = SYSTEM_PROMPT_FILES[side.llm_constraints]
         description = describe_position(board, last_move) if side.position == "described" else None
         messages = turn_messages(pgn, fen, color, prompt_file, listed_moves, description)
-        turn = LlmTurn(ply=ply, color=color, attempts=[], thinking=None, reasoning=None)
+        turn = LlmTurn(ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None)
         feedback = None
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._max_attempts
@@ -164,7 +169,7 @@ class LlmTurns:
                 turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
-                    **self._rules.attempt_log_shape(attempt.log_shape()),
+                    **self._rules.attempt_log_shape(attempt.log_shape()), **self._ended(turn, started),
                 )
                 turn.reasoning = None  # the turn's Reasoning is its last attempt's: none without an answer
                 break
@@ -184,9 +189,12 @@ class LlmTurns:
                 resolution=resolution.record() if resolution is not None else None,
             )
             turn.attempts.append(attempt)
+            chaos = move is None and resolution is not None and resolution.kind in ("chaos", "spawn")
+            last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits
             self._log.write(
                 "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
                 **self._rules.attempt_log_shape(attempt.log_shape()), **token_accounting(reply),
+                **(self._ended(turn, started) if last else {}),
             )
             turn.thinking, turn.reasoning = thinking, reasoned
             if move is not None:
@@ -204,10 +212,16 @@ class LlmTurns:
             illegal_in_turn = True
             stats.illegal_moves[result] += 1
             stats.streak_broken = True
-            if resolution is not None and resolution.kind in ("chaos", "spawn"):  # played at once, with no retry
+            if chaos and resolution is not None:  # played at once, with no retry
                 stats.chaos_moves += 1
                 stats.spawns += resolution.kind == "spawn"
                 return TurnOutcome(turn, chaos_move=resolution, written=written)
             feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
             messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
         return TurnOutcome(turn, forfeit=True)
+
+    def _ended(self, turn: LlmTurn, started: float) -> dict[str, Any]:
+        """Time the turn, as its last attempt ends it, and return what that attempt logs of it. Only the turn's own
+        attempts are timed: anything asked after them is not its Time used."""
+        turn.time_s = round(self._clock() - started, 3)
+        return turn.log_shape()

@@ -63,5 +63,10 @@
       "recovered_turns": 0,
       "notation_slips": 0
     }
-  }
+  },
+  "time_used": {
+    "white": 0.0,
+    "black": 0.0
+  },
+  "running_s": 0.0
 }

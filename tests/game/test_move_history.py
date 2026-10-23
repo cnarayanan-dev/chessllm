@@ -73,7 +73,7 @@ def test_each_ply_has_its_move_and_the_positions_before_and_after_it(scripted):
 
     e4 = {"ply": 1, "color": "white", "move": "e2e4", "written": "e4", "fen_before": START, "fen_after": AFTER_E4}
     e5 = {"ply": 2, "color": "black", "move": "e7e5", "written": "e5", "fen_before": AFTER_E4, "fen_after": AFTER_E5}
-    assert state["plies"] == [e4 | {"check": False}, e5 | {"check": False}]
+    assert state["plies"] == [e4 | {"check": False, "time_s": 0.0}, e5 | {"check": False, "time_s": 0.0}]
     assert state["plies"][-1]["fen_after"] == state["fen"]
 
 

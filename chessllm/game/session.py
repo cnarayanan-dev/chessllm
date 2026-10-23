@@ -2,6 +2,8 @@
 order of turns, and the human's and the Anchor's moves. An LLM's turn is played by llm_turn, under the game's Rules."""
 
 import threading
+import time
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -14,7 +16,7 @@ from chessllm.exceptions import AnchorUnavailable, RefusedAnchorTurn, RefusedLlm
 from chessllm.game.ending import GameEnd, check_end, position_key
 from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
 from chessllm.game.llm_turn.turn import LlmTurns
-from chessllm.game.records import GameSettings, GameState, LlmTurn, Ply, Stats
+from chessllm.game.records import GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed
 from chessllm.game.rules.chaos import ResolvedMove, apply
 from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, side_log_shape
@@ -29,9 +31,12 @@ class GameSession:
         settings: Settings,
         log: GameLog,
         anchors: dict[Color, Anchor] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        """players holds the LLM player of each LLM side, and anchors the Anchor of each Anchor side."""
+        """players holds the LLM player of each LLM side, and anchors the Anchor of each Anchor side. clock times
+        each side's moves, its Time used."""
         self._anchors = anchors or {}
+        self._clock = clock
         self._settings = settings
         self._mode = settings.the_mode()
         self._rules = settings.the_rules()
@@ -51,6 +56,10 @@ class GameSession:
         # forfeited.
         self._llm_turns: list[LlmTurn] = []
         self._end: GameEnd | None = None
+        self._time_used: dict[Color, float] = dict.fromkeys(COLORS, 0.0)  # each side's finished moves
+        # When the move of the side to move started, while it runs: a human's once the position is ready, an LLM's
+        # once its Turn starts and an Anchor's once its move is asked for.
+        self._move_started: float | None = None
         # The settings as the state has them, fixed for the whole game.
         self._game_settings = GameSettings(
             mode=settings.mode,
@@ -66,9 +75,15 @@ class GameSession:
         self._abandoned = threading.Event()  # set by abandon(), from the request that starts a new game
         # Held while the game is abandoned and while an LLM turn ends the game, so a game is never both.
         self._ending = threading.Lock()
+        # Held while a move lands and while state() is built, so the state never shows a move without its time and
+        # the clock it starts, or the reverse. Never held while a side thinks, so a running turn doesn't hold up the
+        # state.
+        self._landing = threading.Lock()
         # The turns of each LLM side, which keep its totals.
         self._turns_of = {
-            color: LlmTurns(color, side, players[color], self._rules, settings.max_attempts, log, self._abandoned)
+            color: LlmTurns(
+                color, side, players[color], self._rules, settings.max_attempts, log, self._abandoned, clock
+            )
             for color, side in self._llm_sides.items()
         }
         prompt_files = {color: str(SYSTEM_PROMPT_FILES[side.llm_constraints]) for color, side in self._llm_sides.items()}
@@ -86,6 +101,7 @@ class GameSession:
             # To the microsecond, so games started within the same second still sort in the order they started.
             started_at=now("microseconds"),
         )
+        self._position_ready()
 
     @property
     def log_path(self) -> Path:
@@ -102,6 +118,7 @@ class GameSession:
         """Apply the human's move. The LLM's reply is a separate turn, started with play_llm_turn.
 
         Raises RejectedHumanMove and leaves the game unchanged."""
+        arrived = self._clock()
         board = self._board
         if self._end is not None:
             raise RejectedHumanMove("the game is over", code="game_over")
@@ -114,9 +131,13 @@ class GameSession:
         color = color_of(board.turn)
         if color in self._llm_sides or not board.is_legal(move):
             raise RejectedHumanMove(f"illegal move: {uci}", code="illegal_move")
-        san = self._play_legal(move)
-        self._log.write("human_move", color=color, ply=len(self._moves), move=san, fen_after=self._board.fen())
-        self._check_end()
+        with self._landing:
+            time_s = self._move_time(arrived)
+            self._play_legal(move, time_s)
+            self._charge(color, time_s)
+            self._check_end()
+            self._position_ready()
+        self._log.write("human_move", **self._plies[-1].log_shape())
         if self._end is not None:
             self._write_end(self._end)
 
@@ -132,12 +153,21 @@ class GameSession:
         anchor = self._anchors.get(color)
         if anchor is None:
             raise RefusedAnchorTurn("it is not an Anchor's turn", code="not_anchor_turn")
-        move = anchor.move(board.copy())
-        if not board.is_legal(move):
-            raise AnchorUnavailable(f"{self._pgn_name(color)} played an illegal move: {move.uci()}")
-        san = self._play_legal(move)
-        self._log.write("anchor_move", color=color, ply=len(self._moves), move=san, fen_after=self._board.fen())
-        self._check_end()
+        self._move_started = self._clock()
+        try:
+            move = anchor.move(board.copy())
+            if not board.is_legal(move):
+                raise AnchorUnavailable(f"{self._pgn_name(color)} played an illegal move: {move.uci()}")
+        except BaseException:
+            self._move_started = None  # no one is making the move now, until it is asked for again
+            raise
+        with self._landing:
+            time_s = self._move_time(self._clock())
+            self._play_legal(move, time_s)
+            self._charge(color, time_s)
+            self._check_end()
+            self._position_ready()
+        self._log.write("anchor_move", **self._plies[-1].log_shape())
         if self._end is not None:
             self._write_end(self._end)
 
@@ -158,28 +188,33 @@ class GameSession:
             if color not in self._llm_sides:
                 raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
             last_move = self._moves[-1][1] if self._moves else None
-            outcome = self._turns_of[color].play(self._board, self._pgn(), last_move, len(self._moves) + 1)
-            if outcome.move is not None:
-                self._play_legal(outcome.move)
-            elif outcome.chaos_move is not None and outcome.written is not None:
-                self._play_chaos(outcome.chaos_move, outcome.written)
+            self._move_started = started = self._clock()
+            outcome = self._turns_of[color].play(self._board, self._pgn(), last_move, len(self._moves) + 1, started)
+            time_s = outcome.turn.time_s
             with self._ending:
-                if self._abandoned.is_set():
-                    return  # the running turn, stopped early or not, is never published
-                self._publish_llm_turn(outcome.turn)
-                if outcome.forfeit:
-                    self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
-                else:
-                    self._check_end()
+                with self._landing:
+                    if outcome.move is not None:
+                        self._play_legal(outcome.move, time_s)
+                    elif outcome.chaos_move is not None and outcome.written is not None:
+                        self._play_chaos(outcome.chaos_move, outcome.written, time_s)
+                    if self._abandoned.is_set():
+                        return  # the running turn, stopped early or not, is never published, nor its time added
+                    self._publish_llm_turn(outcome.turn)
+                    self._charge(color, time_s)
+                    if outcome.forfeit:
+                        self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
+                    else:
+                        self._check_end()
+                    self._position_ready()
                 if self._end is not None:
                     self._write_end(self._end)
         finally:
             self._llm_turn_running.release()
 
     def _publish_llm_turn(self, turn: LlmTurn) -> None:
-        """Add the turn just played to the state in one step, so state(), which takes no lock, never shows a turn
-        half-built. It comes after the turn's move is on the board and before the game ends: a page waiting on a
-        running turn checks for llm_turns to grow or the game to be over, so neither may run ahead of it."""
+        """Add the turn just played to the state in one step, so state() never shows a turn half-built. It comes
+        after the turn's move is on the board and before the game ends: a page waiting on a running turn checks for
+        llm_turns to grow or the game to be over, so neither may run ahead of it."""
         self._llm_turns.append(turn)
 
     def _write_end(self, end: GameEnd) -> None:
@@ -189,6 +224,7 @@ class GameSession:
             reason=end.reason,
             plies=len(self._moves),
             stats=self._all_stats().log_shape(),
+            time_used=self._time_used_record().log_shape(),
             **self._rules.game_end_fields(len(self._moves), self._first_chaos_ply),
             ended_at=now(),
         )
@@ -219,6 +255,10 @@ class GameSession:
         self._end = self._rules.end(self._board) or check_end(self._board, self._positions, self._mode.unattended)
 
     def state(self) -> GameState:
+        with self._landing:
+            return self._state()
+
+    def _state(self) -> GameState:
         board = self._board
         return GameState(
             game_id=self._log.game_id,
@@ -236,7 +276,32 @@ class GameSession:
             result=self._end.result if self._end else None,
             end_reason=self._end.reason if self._end else None,
             stats=self._all_stats(),
+            time_used=self._time_used_record(),
+            running_s=self._time_since_move_started(self._clock()) if self._end is None else None,
         )
+
+    def _position_ready(self) -> None:
+        """Start the human's move once the position is ready for it. An LLM's or an Anchor's move starts only when
+        it is asked for, and no one's once the game is over."""
+        to_move = self._settings.side(color_of(self._board.turn))
+        self._move_started = self._clock() if self._end is None and isinstance(to_move, HumanSide) else None
+
+    def _time_since_move_started(self, now: float) -> float | None:
+        """The time the running move has taken by now, to the millisecond, or None while no move runs."""
+        return round(now - self._move_started, 3) if self._move_started is not None else None
+
+    def _move_time(self, now: float) -> float:
+        """The time of the human's or the Anchor's move just finished, to the millisecond. It always started: a
+        human's once the position was ready, an Anchor's when it was asked for."""
+        time_s = self._time_since_move_started(now)
+        return time_s if time_s is not None else 0.0
+
+    def _charge(self, color: Color, time_s: float) -> None:
+        """Add a finished move's time to its side's Time used."""
+        self._time_used[color] = round(self._time_used[color] + time_s, 3)
+
+    def _time_used_record(self) -> TimeUsed:
+        return TimeUsed(**self._time_used)
 
     def _all_stats(self) -> Stats:
         """The totals of each side; a human's side has none (ADR 0004)."""
@@ -256,24 +321,26 @@ class GameSession:
             f"{ply // 2 + 1}. {written}" if ply % 2 == 0 else written for ply, (_, written) in enumerate(self._moves)
         )
 
-    def _play_legal(self, move: chess.Move) -> str:
-        """Play a legal move, the human's, the Anchor's or the LLM's, and return its SAN."""
+    def _play_legal(self, move: chess.Move, time_s: float) -> str:
+        """Play a legal move, the human's, the Anchor's or the LLM's, which took time_s, and return its SAN."""
         san, fen_before = self._board.san(move), self._board.fen()
         self._board.push(move)
         if self._first_chaos_ply is None:
             self._standard_moves.append(move)
-        self._played(move.uci(), san, fen_before)
+        self._played(move.uci(), san, fen_before, time_s)
         return san
 
-    def _play_chaos(self, resolution: ResolvedMove, written: str) -> None:
+    def _play_chaos(self, resolution: ResolvedMove, written: str, time_s: float) -> None:
         """Play a chaos move or spawn by editing the board by hand (ADR 0006), recorded as the LLM wrote it."""
         uci, fen_before = resolution.uci(self._board), self._board.fen()
         self._board = apply(self._board, resolution)
         if self._first_chaos_ply is None:
             self._first_chaos_ply = len(self._moves) + 1
-        self._played(uci, written, fen_before, resolution)
+        self._played(uci, written, fen_before, time_s, resolution)
 
-    def _played(self, uci: str, written: str, fen_before: str, resolution: ResolvedMove | None = None) -> None:
+    def _played(
+        self, uci: str, written: str, fen_before: str, time_s: float, resolution: ResolvedMove | None = None
+    ) -> None:
         """Record the ply just played. Only a chaos move or spawn has a resolution, the same as the attempt that
         played it has, so the page can replay it without resolving it again."""
         self._moves.append((uci, written))
@@ -286,6 +353,7 @@ class GameSession:
             fen_before=fen_before,
             fen_after=self._board.fen(),
             check=self._board.is_check(),  # after the ply, as the state's check is for the live position
+            time_s=time_s,
             resolution=resolution.record() if resolution is not None else None,
         )
         self._plies.append(ply)

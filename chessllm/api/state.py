@@ -2,6 +2,7 @@
 GameStore of its one current game. create_app puts them on app.state; the routes get them from chessllm.api.deps."""
 
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -21,13 +22,15 @@ class Engines:
 
     models are the models the game can be played against, and sampling_defaults gives a model's own sampling.
     With a move_model or an evaluator, each game is analysed into its analysis file when it ends: its Move-quality
-    estimate with the move_model, and its centipawn loss and accuracy with the evaluator."""
+    estimate with the move_model, and its centipawn loss and accuracy with the evaluator. clock times each game's
+    moves, its sides' Time used."""
 
     player_for: Callable[[Settings, Color], LlmPlayer]
     models: list[LlmModel]
     sampling_defaults: Callable[[str], Sampling]
     move_model: MoveModel | None = None
     evaluator: Evaluator | None = None
+    clock: Callable[[], float] = time.monotonic
 
     def analyses_games(self) -> bool:
         return self.move_model is not None or self.evaluator is not None

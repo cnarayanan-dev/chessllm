@@ -7,7 +7,8 @@ when a change is meant to alter the log or the API, the diff shows how, and the 
 
 The LLMs and the Anchor are the scripted fakes of the tests (`tests/fakes.py`), so no Ollama or engine is needed. Every
 game is played at the sampling `temperature = 0.7` and `top_k = 40`. Game ids, timestamps, latencies and the repo's
-path are replaced with fixed values, so running the command twice changes nothing.
+path are replaced with fixed values, and the moves are timed by a fake clock, each scripted move taking a fixed time, so
+running the command twice changes nothing.
 
 | Sample game | Shows |
 |---|---|

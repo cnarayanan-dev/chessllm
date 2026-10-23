@@ -47,7 +47,8 @@ def start_game(
     )
     settings.check(engines.models)
     players = {color: engines.player_for(settings, color) for color in settings.llm_sides()}
-    session = GameSession(players, settings, GameLog(config.games_dir, *settings.side_names()))
+    log = GameLog(config.games_dir, *settings.side_names())
+    session = GameSession(players, settings, log, clock=engines.clock)
     games.start(session)
     return session.state()
 

@@ -1,5 +1,6 @@
 """HTTP API and static page."""
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def create_app(
     move_model: MoveModel | None = None,
     move_quality_validation: Path = VALIDATION_FILE,
     evaluator: Evaluator | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> FastAPI:
     """The app with its AppConfig and Engines built from the arguments, and no game yet (see Engines for what
     each engine is for). With a move_model or an evaluator, each game is analysed when it ends, after the response
@@ -40,7 +42,7 @@ def create_app(
     )
     app = FastAPI(title="ChessLLM")
     app.state.config = config
-    app.state.engines = Engines(player_for, models, sampling_defaults, move_model, evaluator)
+    app.state.engines = Engines(player_for, models, sampling_defaults, move_model, evaluator, clock)
     app.state.games = GameStore()
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
     register_error_handlers(app)

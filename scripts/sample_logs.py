@@ -3,7 +3,8 @@ are played, so `git diff` shows what a refactor step changed in either. See docs
 
 The LLMs and the Anchor are the scripted fakes of the tests (tests/fakes.py), so no Ollama or engine is needed. The
 values that differ from run to run (game ids, timestamps, latencies, the repo's own path) are replaced with fixed ones,
-so a file only changes when its content does.
+and the moves are timed by a fake clock, each scripted move taking the time given, so a file only changes when its
+content does.
 
 Run: uv run python -m scripts.sample_logs
 """
@@ -29,7 +30,7 @@ from chessllm.logs.game_log import GameLog
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.exceptions import LlmTimeout
-from tests.fakes import Raw, ScriptedAnchor, ScriptedPlayer
+from tests.fakes import FakeClock, Raw, ScriptedAnchor, ScriptedPlayer
 
 ROOT = Path(__file__).parent.parent
 SAMPLES_DIR = ROOT / "docs" / "samples"
@@ -61,6 +62,17 @@ class Samples:
         self.games: list[str] = []  # each sample game's name, in the same order
         self.api: dict[str, Any] = {}  # each API sample's file name and its JSON
         self.errors: list[dict[str, Any]] = []  # each refused request with its status and response
+        self.clock = FakeClock()  # every game's moves are timed by it
+
+    def timed(self, player: ScriptedPlayer, *reply_s: float) -> ScriptedPlayer:
+        """The player, each of its replies taking the next of reply_s by the samples' clock."""
+        player.clock, player.reply_s = self.clock, list(reply_s)
+        return player
+
+    def human_move(self, client: TestClient, uci: str, seconds: float) -> Response:
+        """The human's move, played after thinking for seconds."""
+        self.clock.advance(seconds)
+        return client.post("/api/games/current/moves", json={"uci": uci})
 
     def games_dir(self, game: str) -> Path:
         return self.work_dir / game
@@ -72,7 +84,11 @@ class Samples:
             return players[color].for_settings(settings, color)
 
         app = create_app(
-            player_for, games_dir=self.games_dir(game), sampling_defaults=model_sampling, sampling_file=self.sampling_file
+            player_for,
+            games_dir=self.games_dir(game),
+            sampling_defaults=model_sampling,
+            sampling_file=self.sampling_file,
+            clock=self.clock,
         )
         return TestClient(app)
 
@@ -123,18 +139,21 @@ def play_llm_standard(samples: Samples) -> None:
     """Play LLM under Standard rules, the human as White: a human move, a notation slip, an illegal move then a
     Retry, and the LLM's checkmate (Fool's mate)."""
     game = "play-llm-standard"
-    llm = ScriptedPlayer([
-        reasoned("e7e5 takes the centre.", "e7e5"),  # a notation slip: UCI for e5
-        reasoned("The queen takes on f2.", "Qxf2"),  # illegal: the queen can't reach f2
-        reasoned("Qh4 is mate: g4 opened the diagonal.", "Qh4#"),
-    ])
+    llm = samples.timed(
+        ScriptedPlayer([
+            reasoned("e7e5 takes the centre.", "e7e5"),  # a notation slip: UCI for e5
+            reasoned("The queen takes on f2.", "Qxf2"),  # illegal: the queen can't reach f2
+            reasoned("Qh4 is mate: g4 opened the diagonal.", "Qh4#"),
+        ]),
+        3.2, 2.75, 4.125,
+    )
     client = samples.client(game, {"black": llm})
     new_game = {"mode": "play_llm", "white": {"player": "human"}, "black": {"player": "llm"}}
     state = samples.response(f"{game}-01-start", client.post("/api/games", json=new_game))
     samples.started(game, state["game_id"])
-    samples.response(f"{game}-02-human-move", client.post("/api/games/current/moves", json={"uci": "f2f3"}))
+    samples.response(f"{game}-02-human-move", samples.human_move(client, "f2f3", 5.5))
     samples.response(f"{game}-03-llm-turn", client.post("/api/games/current/llm-turn"))
-    samples.response(f"{game}-04-human-move", client.post("/api/games/current/moves", json={"uci": "g2g4"}))
+    samples.response(f"{game}-04-human-move", samples.human_move(client, "g2g4", 12.25))
     samples.response(f"{game}-05-llm-turn", client.post("/api/games/current/llm-turn"))
     samples.response(f"{game}-06-current", client.get("/api/games/current"))
     samples.refused(client, "POST", "/api/games/current/moves", {"uci": "e2e4"})  # the game is over
@@ -145,13 +164,16 @@ def llm_faceoff_chaos(samples: Samples) -> None:
     """An LLM faceoff under Chaos rules, White Listed with the position described: a chaos move, a Spawn, a Retry
     after badly formed notation (never a chaos move), and King capture."""
     game = "llm-faceoff-chaos"
-    white = ScriptedPlayer(["e4", "Nf3", "Nxh4", "banana", "d3"])
-    black = ScriptedPlayer([
-        "Qh4",  # a chaos move: the queen goes through its own e7 pawn
-        "a6",
-        "Qd5",  # a Spawn: the queen was taken on h4
-        "Qe1",  # King capture
-    ])
+    white = samples.timed(ScriptedPlayer(["e4", "Nf3", "Nxh4", "banana", "d3"]), 1.5, 2.0, 2.5, 1.25, 3.0)
+    black = samples.timed(
+        ScriptedPlayer([
+            "Qh4",  # a chaos move: the queen goes through its own e7 pawn
+            "a6",
+            "Qd5",  # a Spawn: the queen was taken on h4
+            "Qe1",  # King capture
+        ]),
+        4.0, 1.75, 6.5, 2.25,
+    )
     client = samples.client(game, {"white": white, "black": black})
     new_game = {
         "mode": "llm_faceoff",
@@ -172,7 +194,9 @@ def anchor_match_standard(samples: Samples) -> None:
     """An Anchor match under Standard rules against a scripted Anchor, with three attempts per turn: Anchor moves,
     then an ambiguous, an illegal and a badly formed move, and the LLM's Forfeit."""
     game = "anchor-match-standard"
-    llm = ScriptedPlayer(["e4", "Nc3", "Ne2", "Ke3", Raw("I resign.")])
+    llm = samples.timed(ScriptedPlayer(["e4", "Nc3", "Ne2", "Ke3", Raw("I resign.")]), 2.0, 2.5, 3.0, 1.5, 0.75)
+    anchor = ScriptedAnchor(["e5", "Nc6"])
+    anchor.clock, anchor.move_s = samples.clock, [0.125, 0.25]
     settings = Settings(
         "anchor_match",
         LlmSide(model="llama3:8b"),
@@ -180,15 +204,18 @@ def anchor_match_standard(samples: Samples) -> None:
         sampling=load_sampling(samples.sampling_file),
         max_attempts=3,
     )
-    play(samples, game, settings, {"white": llm}, {"black": ScriptedAnchor(["e5", "Nc6"])})
+    play(samples, game, settings, {"white": llm}, {"black": anchor})
 
 
 def llm_faceoff_thinking_budget(samples: Samples) -> None:
     """An LLM faceoff of two thinking sides with a Thinking budget each, as the benchmark plays them: a forced answer
     cut off at its token cap and its Retry, token counts, and a timeout, which forfeits at once."""
     game = "llm-faceoff-thinking-budget"
-    white = ScriptedPlayer(
-        [Raw(' {"mo'), "e4", "Nf3"], thinking=["e4 or d4, both", "e4 takes the centre.", "Nf3 develops."]
+    white = samples.timed(
+        ScriptedPlayer(
+            [Raw(' {"mo'), "e4", "Nf3"], thinking=["e4 or d4, both", "e4 takes the centre.", "Nf3 develops."]
+        ),
+        41.5, 38.25, 22.0,
     )
     white.usage = [
         {"thinking_tokens": 1024, "answer_tokens": 64, "prompt_tokens": 412, "stop_reason": "length", "forced": True},
@@ -196,7 +223,7 @@ def llm_faceoff_thinking_budget(samples: Samples) -> None:
         {"thinking_tokens": 610, "answer_tokens": 8, "prompt_tokens": 420, "stop_reason": "stop",
          "token_split_estimated": True},
     ]
-    black = ScriptedPlayer(["e5", LlmTimeout(316.0)], thinking=["e5 mirrors it."])
+    black = samples.timed(ScriptedPlayer(["e5", LlmTimeout(316.0)], thinking=["e5 mirrors it."]), 9.5, 316.0)
     black.usage = [{"thinking_tokens": 300, "answer_tokens": 8, "prompt_tokens": 415, "stop_reason": "stop"}]
     settings = Settings(
         "llm_faceoff",
@@ -219,7 +246,7 @@ def play(
     log = GameLog(samples.games_dir(game), *settings.side_names())
     samples.started(game, log.game_id)
     llm_players: dict[Color, LlmPlayer] = {color: player for color, player in players.items()}
-    play_anchor_match(settings, llm_players, dict(anchors), log)
+    play_anchor_match(settings, llm_players, dict(anchors), log, samples.clock)
 
 
 def other_responses(samples: Samples) -> None:
