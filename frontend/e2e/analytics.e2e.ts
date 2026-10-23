@@ -1,6 +1,7 @@
-// The analytics page against the app with synthetic game logs (tests/e2e/server.py, POST /e2e/leaderboard-games):
-// qwen3.5:9b Listed enforced rated from Anchor matches, llama3:8b Free losing every anchored game, and
-// mistral:7b in Play LLM games only.
+// The analytics page against the app with synthetic game logs (tests/e2e/server.py, POST /e2e/ranking-games, from
+// tests/e2e/ranking.py): qwen3.5:9b rated from Anchor matches, llama3:8b losing every anchored game and 4 LLM
+// faceoffs to gemma3:12b, mistral:7b in Play LLM games only, and phi4:14b under Listed only; all but phi4 under the
+// Reference configuration.
 import { expect, test, type Page } from '@playwright/test'
 
 /** Waits for the human's move as White, live: their strip ringed, only their Time used ticking, no past position. */
@@ -19,59 +20,98 @@ async function rows(page: Page): Promise<string[][]> {
   for (const row of await body.all()) texts.push(await row.locator('td').allInnerTexts())
   return texts
 }
-const models = async (page: Page) => (await rows(page)).map((cells) => cells[1]!.split(/\s/)[0])
+const models = async (page: Page) => (await rows(page)).map((cells) => cells[1])
+const mode = (page: Page, name: string) => page.getByRole('group', { name: 'Modes' }).getByRole('button', { name })
+
+/** Clicks these Modes in the filter, and waits for the Ranking of exactly the Modes they leave chosen to be shown:
+ * each click asks for its own, and the last one shown stays (marked busy) until the next arrives. */
+async function narrow(page: Page, clicks: string[], chosen: string[]) {
+  const query = chosen.map((key) => `mode=${key}`).join('&')
+  const final = page.waitForResponse((response) => response.url().endsWith(`/api/ranking?${query}`))
+  for (const name of clicks) await mode(page, name).click()
+  await final
+  await expect(page.getByRole('table')).toHaveAttribute('aria-busy', 'false')
+}
+
+/** Hovers the model's Rating cell, and expects its tooltip to say this. */
+async function expectRatingTooltip(page: Page, model: string, says: RegExp) {
+  await page.mouse.move(0, 0)
+  await page.locator('tbody tr', { hasText: model }).locator('td').nth(2).locator('span').first().hover()
+  await expect(page.locator('[data-slot=tooltip-content]').filter({ hasText: says })).toBeVisible()
+}
 
 test.beforeEach(async ({ page }) => {
-  expect((await page.request.post('/e2e/leaderboard-games')).ok()).toBe(true)
+  expect((await page.request.post('/e2e/ranking-games')).ok()).toBe(true)
 })
 
-test('the leaderboard: ranked by Rating, sorted by a column, with all columns on demand', async ({ page }) => {
+test('the Ranking: models by their Rating under the Reference configuration, narrowed by Mode', async ({ page }) => {
   await page.goto('/analytics')
 
-  // The default columns, ranked by Rating: an estimate, an upper bound, then no Rating.
-  await expect(page.getByRole('columnheader')).toHaveText(['#', 'Player configuration', 'Rating', 'Games', 'W · D · L'])
-  await expect(page.getByRole('columnheader', { name: 'Rating' })).toHaveAttribute('aria-sort', 'descending')
-  await expect(page.locator('tbody tr')).toHaveCount(3)
-  const ranked = await rows(page)
-  expect(ranked.map((cells) => cells[0])).toEqual(['1', '2', '3'])
-  expect(await models(page)).toEqual(['qwen3.5:9b', 'llama3:8b', 'mistral:7b'])
-  expect(ranked[0]![2]).toMatch(/^\d+$/)
-  expect(ranked[1]![2]).toMatch(/^< \d+$/)
-  expect(ranked[2]![2]).toBe('—')
-  expect(ranked.map((cells) => [cells[3], cells[4]])).toEqual([
-    ['20', '10 · 1 · 9'],
-    ['10', '0 · 0 · 10'],
-    ['25', '0 · 0 · 25'],
+  await expect(page.getByRole('heading', { name: 'Ranking' })).toBeVisible()
+  await expect(page.getByRole('columnheader')).toHaveText([
+    '#',
+    'Model',
+    'Rating',
+    '95% interval',
+    'Move-quality estimate',
+    'Games',
+    'W · D · L',
+    'Forfeits',
   ])
-  await expect(page.locator('tbody tr').first().getByText('Listed enforced')).toHaveAttribute(
-    'data-hue',
-    'listed_enforced',
-  )
-  await expect(page.locator('tbody tr').first().getByText('thinking on')).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'All columns' })).toHaveCount(0)
+  await expect(page.locator('tbody tr')).toHaveCount(5)
 
-  // Sorting by Games, then the other way round.
-  await page.getByRole('button', { name: 'Games' }).click()
-  await expect.poll(() => models(page)).toEqual(['mistral:7b', 'qwen3.5:9b', 'llama3:8b'])
-  await page.getByRole('button', { name: 'Games' }).click()
-  await expect.poll(() => models(page)).toEqual(['llama3:8b', 'qwen3.5:9b', 'mistral:7b'])
-
-  // All columns.
-  await page.getByRole('switch', { name: 'All columns' }).click()
-  await expect(page.getByRole('columnheader')).toHaveCount(12)
-  await page.getByRole('button', { name: 'Rating', exact: true }).click()
-  await expect.poll(() => models(page)).toEqual(['qwen3.5:9b', 'llama3:8b', 'mistral:7b'])
+  // Ranked: an estimate, then an upper bound; then the unranked, those with reference games first.
   const all = await rows(page)
-  const qwen = all[0]!
-  expect(qwen[5]).toMatch(/^\d+ to \d+$/) // the Rating's 95% interval
-  expect(qwen[6]).toMatch(/^\d+\s*unvalidated$/) // the Move-quality estimate, not validated
-  expect(qwen.slice(9)).toEqual(['600', 'n/a', 'n/a']) // attempts legal and streak n/a under Enforced decoding
-  const llama = all[1]!
-  expect(llama[5]).toBe('—')
-  expect(llama[8]).toBe('4') // forfeits
-  expect(llama.slice(9)).toEqual(['30', '75%', '3.0'])
+  expect(await models(page)).toEqual(['qwen3.5:9b', 'llama3:8b', 'gemma3:12b', 'mistral:7b', 'phi4:14b'])
+  expect(all.map((cells) => cells[0])).toEqual(['1', '2', '', '', ''])
+  const [qwen, llama, gemma, mistral, phi] = all
+  expect(qwen![2]).toMatch(/^\d+$/)
+  expect(qwen![3]).toMatch(/^\d+ to \d+$/)
+  expect(qwen![4]).toMatch(/^\d+\s*unvalidated$/)
+  expect(qwen!.slice(5)).toEqual(['20', '10 · 1 · 9', '0'])
+  expect(llama![2]).toMatch(/^< \d+$/)
+  expect(llama!.slice(3)).toEqual(['—', '—', '14', '0 · 0 · 14', '4'])
+  expect(gemma!.slice(2)).toEqual(['—', '—', '—', '4', '4 · 0 · 0', '0'])
+  expect(mistral!.slice(2)).toEqual(['—', '—', '—', '25', '0 · 0 · 25', '0'])
+  expect(phi!.slice(2)).toEqual(['—', '—', '—', '0', '0 · 0 · 0', '0'])
 
-  await page.getByRole('switch', { name: 'All columns' }).click()
-  await expect(page.getByRole('columnheader')).toHaveCount(5)
+  // Each missing Rating says why on hover; the upper bound and the unvalidated estimate explain themselves too.
+  await expectRatingTooltip(page, 'gemma3:12b', /No path to an Anchor/)
+  await expectRatingTooltip(page, 'mistral:7b', /Only Play LLM games/)
+  await expectRatingTooltip(page, 'phi4:14b', /No games under the Reference configuration yet/)
+  await expectRatingTooltip(page, 'llama3:8b', /An upper bound/)
+  await page.getByText('unvalidated').hover()
+  await expect(page.locator('[data-slot=tooltip-content]', { hasText: 'has not passed its validation' })).toBeVisible()
+
+  // LLM faceoffs alone: no Rating, and each record is its faceoffs' alone.
+  await narrow(page, ['Anchor matches', 'Play LLM'], ['llm_faceoff'])
+  await expect(mode(page, 'LLM faceoffs')).toHaveAttribute('aria-pressed', 'true')
+  expect(await models(page)).toEqual(['gemma3:12b', 'llama3:8b', 'mistral:7b', 'phi4:14b', 'qwen3.5:9b'])
+  expect((await rows(page)).map((cells) => [cells[0], cells[2], cells[5], cells[6]])).toEqual([
+    ['', '—', '4', '4 · 0 · 0'],
+    ['', '—', '4', '0 · 0 · 4'],
+    ['', '—', '0', '0 · 0 · 0'],
+    ['', '—', '0', '0 · 0 · 0'],
+    ['', '—', '0', '0 · 0 · 0'],
+  ])
+  await expectRatingTooltip(page, 'llama3:8b', /No path to an Anchor/)
+  await expectRatingTooltip(page, 'qwen3.5:9b', /in the Modes chosen/)
+
+  // Anchor matches alone: a pure against-Anchors Rating, the same as with every Mode here, where no faceoff
+  // reaches qwen3.5:9b.
+  await narrow(page, ['Anchor matches', 'LLM faceoffs'], ['anchor_match'])
+  expect((await rows(page)).slice(0, 2).map((cells) => [cells[0], cells[1], cells[5], cells[6]])).toEqual([
+    ['1', 'qwen3.5:9b', '20', '10 · 1 · 9'],
+    ['2', 'llama3:8b', '10', '0 · 0 · 10'],
+  ])
+  expect((await rows(page))[0]![2]).toBe(qwen![2])
+
+  // Play LLM alone never gives a Rating, only the record.
+  await narrow(page, ['Play LLM', 'Anchor matches'], ['play_llm'])
+  expect((await rows(page)).find((cells) => cells[1] === 'mistral:7b')?.[5]).toBe('25')
+  expect((await rows(page)).map((cells) => cells[2])).toEqual(['—', '—', '—', '—', '—'])
+  await expectRatingTooltip(page, 'mistral:7b', /Only Play LLM games/)
 })
 
 /** Every text on the page with the contrast of its colour against the surface under it, all layers composited. */
@@ -113,12 +153,13 @@ async function contrasts(page: Page) {
 
 test('every text on the page, the secondary text too, passes WCAG AA (4.5:1)', async ({ page }) => {
   await page.goto('/analytics')
-  await page.getByRole('switch', { name: 'All columns' }).click()
   await expect(page.getByText('unvalidated')).toBeVisible()
+  await narrow(page, ['Play LLM'], ['anchor_match', 'llm_faceoff']) // a Mode not chosen, too
+  await expect(mode(page, 'Play LLM')).toHaveAttribute('aria-pressed', 'false')
 
   const texts = await contrasts(page)
-  // The legend, the muted chips, the switch's label, the headers, the note and the unvalidated mark are among them.
-  for (const text of ['Blind enforced', 'feedback bare', 'All columns', 'Rating 95%', 'unvalidated', 'The Rating']) {
+  // The filter's label and its Modes, chosen or not, the headers, the note and the unvalidated mark are among them.
+  for (const text of ['Modes', 'Anchor matches', 'Play LLM', '95% interval', 'unvalidated', 'Only games under']) {
     expect(texts.map((each) => each.text)).toContainEqual(expect.stringContaining(text))
   }
   expect(texts.filter((each) => each.ratio < 4.5)).toEqual([])
@@ -133,7 +174,7 @@ test('the game and the analytics page link to each other', async ({ page }) => {
 
   await page.getByRole('link', { name: 'Analytics' }).click()
   await expect(page).toHaveURL(/\/analytics$/)
-  await expect(page.getByRole('heading', { name: 'Leaderboard' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Ranking' })).toBeVisible()
 
   await page.getByRole('link', { name: 'ChessLLM' }).click()
   await yourMove(page)

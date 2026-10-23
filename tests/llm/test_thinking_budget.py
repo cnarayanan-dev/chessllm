@@ -8,6 +8,7 @@ import pytest
 from ollama import ChatResponse
 from ollama import Message as OllamaMessage
 
+from tests.analytics.test_leaderboard import configurations
 from tests.conftest import ScriptedPlayer, play_llm
 
 from chessllm.cli.common import player_for
@@ -176,15 +177,12 @@ def test_the_api_refuses_a_budget(scripted):
     assert not player.built_for
 
 
-def test_the_leaderboard_shows_a_budgets_configuration_without_the_budget_under_its_own_id(scripted, tmp_path):
+def test_the_leaderboard_shows_a_budgets_configuration_without_the_budget_under_its_own_id(tmp_path):
     faceoff(tmp_path / "games", "--models", QWEN, "gemma3:12b", "--thinking-for", QWEN,
             "--thinking-budget-for", f"{QWEN}=3072")
     faceoff(tmp_path / "games", "--models", QWEN, "gemma3:12b", "--thinking-for", QWEN)
-    client, _ = scripted([], games_dir=tmp_path / "games")
 
-    configurations = client.get("/api/leaderboard").json()["configurations"]
-
-    qwen = [entry for entry in configurations if entry["configuration"]["model"] == QWEN]
+    qwen = [entry for entry in configurations(tmp_path / "games") if entry["configuration"]["model"] == QWEN]
     assert len(qwen) == 2 and qwen[0]["id"] != qwen[1]["id"]
     assert qwen[0]["configuration"] == qwen[1]["configuration"]
     assert "thinking_budget" not in qwen[0]["configuration"]

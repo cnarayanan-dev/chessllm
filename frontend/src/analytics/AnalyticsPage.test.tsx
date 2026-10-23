@@ -1,37 +1,33 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, test } from 'vitest'
 import { AnalyticsPage } from '@/analytics/AnalyticsPage'
-import type { LeaderboardEntry } from '@/analytics/leaderboard'
-import { fakeBackend } from '@/test/fakeBackend'
-import { anEntry, moveQuality, rated, upperBound } from '@/test/leaderboard'
+import type { RankingEntry } from '@/analytics/ranking'
+import { fakeBackend, later } from '@/test/fakeBackend'
+import { anEntry, moveQuality, rated, unrated, upperBound } from '@/test/ranking'
 
 const ENTRIES = [
-  anEntry('faceoff-only', {
-    configuration: { model: 'mistral:7b', retry_feedback: 'bare' },
-    rating: null,
-    games: 6,
-    wins: 3,
-    draws: 0,
-    losses: 3,
-  }),
-  anEntry('lost-all', { rating: upperBound(70), games: 10, wins: 0, draws: 0, losses: 10 }),
-  anEntry('enforced', {
-    configuration: { model: 'qwen3.5:9b', thinking: true, llm_constraints: 'listed_enforced' },
+  anEntry('qwen3.5:9b', {
+    rank: 1,
     rating: rated(410, 270, 550),
     games: 24,
     wins: 9,
     draws: 3,
     losses: 12,
-    attempts: null,
-    average_legal_move_streak: null,
+    forfeits: 2,
     move_quality: moveQuality(520, { low: 420, high: 620, validated: false }),
   }),
+  anEntry('llama3:8b', { rank: 2, rating: upperBound(70), games: 10, wins: 0, draws: 0, losses: 10, forfeits: 4 }),
+  unrated('gemma3:12b', 'no_anchor_path', { games: 4, wins: 4, draws: 0, losses: 0, forfeits: 0 }),
+  unrated('phi4:14b', 'no_reference_games', { games: 0, wins: 0, draws: 0, losses: 0, forfeits: 0 }),
 ]
 
-function showPage(entries: LeaderboardEntry[] = ENTRIES) {
-  const backend = fakeBackend().on('GET /api/leaderboard', Response.json({ configurations: entries }))
+const ranking = (models: RankingEntry[], modes = ['play_llm', 'llm_faceoff', 'anchor_match']) =>
+  Response.json({ modes, models })
+
+function showPage(entries: RankingEntry[] = ENTRIES) {
+  const backend = fakeBackend().on('GET /api/ranking', ranking(entries))
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
@@ -48,131 +44,132 @@ const rows = () =>
     .getAllByRole('row')
     .slice(1)
     .map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))
-const models = () => rows().map((cells) => cells[1]!.split(' ')[0])
+const row = (model: string) => screen.getByText(model, { selector: 'td' }).closest('tr')!
 
-test('lists every configuration ranked by Rating, with the default columns', async () => {
+test('lists every model in the order of the Ranking, unranked ones last without a rank', async () => {
   showPage()
 
   expect(await screen.findByText('qwen3.5:9b')).toBeInTheDocument()
-  expect(headers()).toEqual(['#', 'Player configuration', 'Rating', 'Games', 'W · D · L'])
-  expect(screen.getByRole('columnheader', { name: 'Rating' })).toHaveAttribute('aria-sort', 'descending')
-  expect(rows().map((cells) => [cells[0], cells[2], cells[3], cells[4]])).toEqual([
-    ['1', '410', '24', '9 · 3 · 12'],
-    ['2', '< 70', '10', '0 · 0 · 10'],
-    ['3', '—', '6', '3 · 0 · 3'],
+  expect(screen.getByRole('heading', { name: 'Ranking' })).toBeInTheDocument()
+  expect(headers()).toEqual([
+    '#',
+    'Model',
+    'Rating',
+    '95% interval',
+    'Move-quality estimate',
+    'Games',
+    'W · D · L',
+    'Forfeits',
+  ])
+  expect(rows()).toEqual([
+    ['1', 'qwen3.5:9b', '410', '270 to 550', '520unvalidated', '24', '9 · 3 · 12', '2'],
+    ['2', 'llama3:8b', '< 70', '—', '—', '10', '0 · 0 · 10', '4'],
+    ['', 'gemma3:12b', '—', '—', '—', '4', '4 · 0 · 0', '0'],
+    ['', 'phi4:14b', '—', '—', '—', '0', '0 · 0 · 0', '0'],
   ])
 })
 
-test('shows each configuration as its model and chips, with a legend of the colours', async () => {
+test('the old table is gone: no Player configurations, no "All columns" switch, no Score', async () => {
   showPage()
+  await screen.findByText('qwen3.5:9b')
 
-  const qwen = (await screen.findByText('qwen3.5:9b')).closest('tr')!
-  expect(within(qwen).getByText('Listed enforced')).toHaveAttribute('data-hue', 'listed_enforced')
-  expect(within(qwen).getByText('thinking on')).toHaveAttribute('data-hue', 'thinking')
-  expect(within(qwen).getByText('feedback explained')).not.toHaveAttribute('data-hue')
-  const legend = screen.getByTestId('legend')
-  for (const name of ['Free', 'Listed', 'Blind enforced', 'Listed enforced', 'thinking on']) {
-    expect(within(legend).getByText(name)).toBeInTheDocument()
-  }
+  expect(screen.queryByRole('switch', { name: 'All columns' })).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: 'Score' })).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: 'Player configuration' })).toBeNull()
 })
 
-test('sorts by a column, and turns the order round on a second click', async () => {
+test('a missing Rating says why on hover and to screen readers', async () => {
   const user = userEvent.setup()
   showPage()
   await screen.findByText('qwen3.5:9b')
 
-  await user.click(screen.getByRole('button', { name: 'Games' }))
-  expect(models()).toEqual(['qwen3.5:9b', 'llama3:8b', 'mistral:7b'])
-  expect(screen.getByRole('columnheader', { name: /Games/ })).toHaveAttribute('aria-sort', 'descending')
+  const gemma = within(row('gemma3:12b')).getAllByText('—')[0]!
+  expect(gemma).toHaveAttribute('aria-description', expect.stringMatching(/No path to an Anchor/))
+  await user.hover(gemma)
+  expect(await screen.findByText(/ties it to no Anchor match/)).toBeInTheDocument()
 
-  await user.click(screen.getByRole('button', { name: /Games/ }))
-  expect(models()).toEqual(['mistral:7b', 'llama3:8b', 'qwen3.5:9b'])
-  expect(screen.getByRole('columnheader', { name: /Games/ })).toHaveAttribute('aria-sort', 'ascending')
-  // The rank stays the Rating's.
-  expect(rows().map((cells) => cells[0])).toEqual(['3', '2', '1'])
+  const phi = within(row('phi4:14b')).getAllByText('—')[0]!
+  expect(phi).toHaveAttribute('aria-description', expect.stringMatching(/No games under the Reference configuration/))
 })
 
-test('marks the sorted column with an arrow icon, not a text glyph', async () => {
+test('an upper bound explains itself, and so does the Reference configuration', async () => {
   const user = userEvent.setup()
   showPage()
   await screen.findByText('qwen3.5:9b')
 
-  const rating = screen.getByRole('columnheader', { name: 'Rating' })
-  expect(rating.querySelector('svg.lucide-arrow-down')).not.toBeNull()
-  expect(screen.getByRole('columnheader', { name: 'Games' }).querySelector('svg')).toBeNull()
+  await user.hover(within(row('llama3:8b')).getByText('< 70'))
+  expect(await screen.findByText(/An upper bound: it lost every game/)).toBeInTheDocument()
 
-  await user.click(screen.getByRole('button', { name: 'Rating' }))
-  expect(rating).toHaveAttribute('aria-sort', 'ascending')
-  expect(rating.querySelector('svg.lucide-arrow-up')).not.toBeNull()
+  const [reference] = screen.getAllByText('Reference configuration')
+  expect(reference).toHaveAttribute('aria-description', expect.stringMatching(/^Thinking off, Free, Standard rules/))
 })
 
-test('sits in a card: the switch, the legend, the table and the note under it; the chips are badges', async () => {
-  showPage()
-
-  const card = (await screen.findByRole('table')).closest('[data-slot=card]')!
-  expect(card).not.toBeNull()
-  expect(within(card as HTMLElement).getByRole('switch', { name: 'All columns' })).toBeInTheDocument()
-  expect(within(card as HTMLElement).getByTestId('legend')).toBeInTheDocument()
-  expect(within(card as HTMLElement).getByText(/The Rating comes only from/)).toBeInTheDocument()
-  for (const chip of [...within(screen.getByTestId('legend')).getAllByText(/./), screen.getByText('feedback bare')]) {
-    expect(chip).toHaveAttribute('data-slot', 'badge')
-  }
-})
-
-test('the unvalidated mark explains itself in a tooltip', async () => {
+test('the unvalidated Move-quality estimate is marked, and the mark explains itself', async () => {
   const user = userEvent.setup()
   showPage()
   await screen.findByText('qwen3.5:9b')
-  await user.click(screen.getByRole('switch', { name: 'All columns' }))
 
   await user.hover(screen.getByText('unvalidated'))
   expect(await screen.findByText(/has not passed its validation/)).toBeInTheDocument()
 })
 
-test('the Player configuration column does not sort', async () => {
-  showPage()
+test('the Mode filter starts with every Mode, and narrowing it asks for those Modes alone', async () => {
+  const user = userEvent.setup()
+  const backend = showPage()
   await screen.findByText('qwen3.5:9b')
+  const filter = screen.getByRole('group', { name: 'Modes' })
+  const mode = (name: string) => within(filter).getByRole('button', { name })
+  for (const name of ['Anchor matches', 'LLM faceoffs', 'Play LLM']) {
+    expect(mode(name)).toHaveAttribute('aria-pressed', 'true')
+  }
+  expect(mode('LLM faceoffs')).toHaveAttribute('aria-description', expect.stringMatching(/alone reach no Anchor/))
 
-  expect(screen.queryByRole('button', { name: 'Player configuration' })).toBeNull()
+  backend.on('GET /api/ranking?mode=llm_faceoff&mode=play_llm', ranking(ENTRIES, ['llm_faceoff', 'play_llm']))
+  backend.on(
+    'GET /api/ranking?mode=llm_faceoff',
+    ranking([unrated('qwen3.5:9b', 'no_anchor_path', { games: 6, wins: 3, draws: 0, losses: 3, forfeits: 0 })], [
+      'llm_faceoff',
+    ]),
+  )
+  await user.click(mode('Anchor matches'))
+  await user.click(mode('Play LLM'))
+
+  expect(mode('Anchor matches')).toHaveAttribute('aria-pressed', 'false')
+  await waitFor(() => expect(rows()).toEqual([['', 'qwen3.5:9b', '—', '—', '—', '6', '3 · 0 · 3', '0']]))
+
+  // The last Mode chosen stays.
+  await user.click(mode('LLM faceoffs'))
+  expect(mode('LLM faceoffs')).toHaveAttribute('aria-pressed', 'true')
+  expect(backend.sentTo('GET /api/ranking')).toHaveLength(1)
 })
 
-test('"All columns" adds the rest, with n/a under Enforced decoding and an unvalidated estimate marked', async () => {
+test('while the Modes just chosen load, the last Ranking stays, marked stale, and explains itself as before', async () => {
   const user = userEvent.setup()
-  showPage()
+  const backend = showPage()
   await screen.findByText('qwen3.5:9b')
+  const narrowed = later()
+  backend.on('GET /api/ranking?mode=llm_faceoff&mode=play_llm', narrowed.promise)
 
-  await user.click(screen.getByRole('switch', { name: 'All columns' }))
+  await user.click(screen.getByRole('button', { name: 'Anchor matches' }))
 
-  expect(headers()).toEqual([
-    '#',
-    'Player configuration',
-    'Rating',
-    'Games',
-    'W · D · L',
-    'Rating 95%',
-    'Move-quality estimate',
-    'Score',
-    'Forfeits',
-    'Legal moves played',
-    'Attempts legal',
-    'Avg. Legal-move streak',
-  ])
-  const [qwen, llama] = rows()
-  expect(qwen!.slice(5)).toEqual(['270 to 550', '520unvalidated', '60%', '1', '300', 'n/a', 'n/a'])
-  expect(llama!.slice(5)).toEqual(['—', '—', '60%', '1', '300', '94%', '12.5'])
+  const table = screen.getByRole('table')
+  expect(table).toHaveAttribute('aria-busy', 'true')
+  const phi = () => within(row('phi4:14b')).getAllByText('—')[0]!
+  expect(phi()).toHaveAttribute('aria-description', expect.stringMatching(/yet, so not ranked/))
 
-  await user.click(screen.getByRole('switch', { name: 'All columns' }))
-  expect(headers()).toHaveLength(5)
+  narrowed.resolve(ranking(ENTRIES, ['llm_faceoff', 'play_llm']))
+  await waitFor(() => expect(table).toHaveAttribute('aria-busy', 'false'))
+  expect(phi()).toHaveAttribute('aria-description', expect.stringMatching(/in the Modes chosen/))
 })
 
 test('says so when there are no finished games yet', async () => {
   showPage([])
 
-  expect((await screen.findByText(/No finished games yet/)).closest('[data-slot=card]')).not.toBeNull()
+  expect(await screen.findByText(/No finished games yet/)).toBeInTheDocument()
 })
 
-test('says so when the leaderboard cannot be loaded', async () => {
-  fakeBackend().on('GET /api/leaderboard', Response.json({ detail: 'disk on fire' }, { status: 500 }))
+test('says so when the Ranking cannot be loaded', async () => {
+  fakeBackend().on('GET /api/ranking', Response.json({ detail: 'disk on fire' }, { status: 500 }))
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
@@ -180,7 +177,7 @@ test('says so when the leaderboard cannot be loaded', async () => {
     </QueryClientProvider>,
   )
 
-  expect(await screen.findByText(/Could not load the leaderboard: disk on fire/)).toBeInTheDocument()
+  expect(await screen.findByText(/Could not load the Ranking: disk on fire/)).toBeInTheDocument()
 })
 
 test('has the top bar: the ChessLLM mark links back to the game, and Analytics is marked as the page shown', () => {

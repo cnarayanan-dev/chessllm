@@ -8,8 +8,7 @@ import chess
 import chess.pgn
 import pytest
 
-from fastapi.testclient import TestClient
-
+from tests.analytics.test_leaderboard import configurations
 from tests.conftest import ScriptedAnchor, ScriptedPlayer
 from tests.analytics.test_analysis import PeakedMoveModel
 from tests.game.test_move_cap import MOVE_CAP_PLIES, long_game, sans
@@ -17,7 +16,6 @@ from tests.game.test_move_cap import MOVE_CAP_PLIES, long_game, sans
 from chessllm.analytics.analysis import analyse_game
 from chessllm.cli.anchor_match import main
 from chessllm.engines.anchors import ANCHOR_RATINGS, RandomAnchor, anchor_name
-from chessllm.api.app import create_app
 
 
 def events(games_dir) -> list[dict]:
@@ -134,9 +132,7 @@ def test_with_retry_feedback_repeat_each_retry_is_sent_the_turns_first_prompt(an
 def test_the_leaderboard_counts_an_anchor_match_against_the_anchor_and_only_the_llms_attempts(anchor_match, tmp_path):
     # 1. Nf3 e5 2. Ke3 (illegal) Nd4 Qg5, then the LLM forfeits its third turn: with no reply left, the call fails.
     anchor_match(["Nf3", "Ke3", "Nd4"], ["e5", "Qg5"], "--color", "white", "--skill", "3")
-    client = TestClient(create_app(lambda settings, color: None, games_dir=tmp_path / "games"))
-
-    [entry] = client.get("/api/leaderboard").json()["configurations"]
+    [entry] = configurations(tmp_path / "games")
 
     assert entry["configuration"]["model"] == "llama3:8b"
     assert (entry["games"], entry["wins"], entry["losses"], entry["forfeits"]) == (1, 0, 1, 1)

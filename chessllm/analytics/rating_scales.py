@@ -1,4 +1,4 @@
-"""Converting a rating from Lichess Rapid to chess.com Rapid, the scale everything on the leaderboard is given on.
+"""Converting a rating from Lichess Rapid to chess.com Rapid, the scale everything on the analytics page is given on.
 
 The table is ChessGoals' rating comparison (https://www.chessgoals.com/rating-comparison/, updated July 2026: surveys
 of active players, chess.com Rapid N = 10,156, Lichess Rapid N = 1,066), as quoted in docs/research/elo-estimation.md

@@ -1,0 +1,57 @@
+{
+  "modes": [
+    "play_llm",
+    "llm_faceoff",
+    "anchor_match"
+  ],
+  "models": [
+    {
+      "model": "gemma3:12b",
+      "rank": null,
+      "rating": null,
+      "no_rating": "no_reference_games",
+      "move_quality": null,
+      "games": 0,
+      "wins": 0,
+      "draws": 0,
+      "losses": 0,
+      "forfeits": 0
+    },
+    {
+      "model": "llama3:8b",
+      "rank": null,
+      "rating": null,
+      "no_rating": "no_reference_games",
+      "move_quality": null,
+      "games": 0,
+      "wins": 0,
+      "draws": 0,
+      "losses": 0,
+      "forfeits": 0
+    },
+    {
+      "model": "qwen3.5:9b",
+      "rank": null,
+      "rating": null,
+      "no_rating": "no_reference_games",
+      "move_quality": null,
+      "games": 0,
+      "wins": 0,
+      "draws": 0,
+      "losses": 0,
+      "forfeits": 0
+    },
+    {
+      "model": "qwen3.8:latest",
+      "rank": null,
+      "rating": null,
+      "no_rating": "no_reference_games",
+      "move_quality": null,
+      "games": 0,
+      "wins": 0,
+      "draws": 0,
+      "losses": 0,
+      "forfeits": 0
+    }
+  ]
+}

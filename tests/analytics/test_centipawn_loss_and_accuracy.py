@@ -12,6 +12,7 @@ import chess
 import pytest
 from chess.engine import Cp, Mate
 
+from tests.analytics.test_leaderboard import configurations
 from tests.conftest import ScriptedAnchor, ScriptedPlayer, play_llm, play_move
 from tests.fakes import FixedEvaluator, UnavailableEvaluator
 
@@ -191,10 +192,8 @@ def test_re_analysing_all_games_recomputes_them(scripted, tmp_path):
     assert read(analysis_file)["centipawn_loss_and_accuracy"]["sides"]["black"]["average_centipawn_loss"] == 1100 / 3
 
 
-def leaderboard_entries(client):
-    response = client.get("/api/leaderboard")
-    assert response.status_code == 200, response.text
-    return response.json()["configurations"]
+def leaderboard_entries(tmp_path):
+    return configurations(tmp_path / "games")
 
 
 def test_the_leaderboard_averages_centipawn_loss_and_accuracy_over_all_analysed_moves(scripted, tmp_path):
@@ -206,7 +205,7 @@ def test_the_leaderboard_averages_centipawn_loss_and_accuracy_over_all_analysed_
     analyse_game(first, None, FixedEvaluator(SCHOLARS_MATE_SCORES))
     analyse_game(second, None, FixedEvaluator())
 
-    [qwen] = leaderboard_entries(client)
+    [qwen] = leaderboard_entries(tmp_path)
 
     # Pooled over the four moves, not averaged over the two games (which would give 1100 / 6).
     assert qwen["average_centipawn_loss"] == pytest.approx(1100 / 4)
@@ -218,7 +217,7 @@ def test_a_configuration_without_analysed_moves_has_no_centipawn_loss_or_accurac
     [log] = (tmp_path / "games").glob("*.jsonl")
     analyse_game(log, FlatMoveModel(), None)  # Maia-2 ran, Stockfish didn't
 
-    [qwen] = leaderboard_entries(client)
+    [qwen] = leaderboard_entries(tmp_path)
 
     assert qwen["average_centipawn_loss"] is None
     assert qwen["average_accuracy"] is None
@@ -229,7 +228,7 @@ def test_a_game_analysed_by_stockfish_alone_has_no_move_quality_estimate_on_the_
     [log] = (tmp_path / "games").glob("*.jsonl")
     analyse_game(log, None, FixedEvaluator(SCHOLARS_MATE_SCORES))  # Stockfish ran, Maia-2 didn't
 
-    [qwen] = leaderboard_entries(client)
+    [qwen] = leaderboard_entries(tmp_path)
 
     assert qwen["move_quality"] is None
     assert qwen["average_centipawn_loss"] == pytest.approx(1100 / 3)

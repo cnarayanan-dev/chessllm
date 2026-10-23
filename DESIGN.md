@@ -92,7 +92,7 @@ The board keeps its own small face for the coordinates and its flashes (`board.c
 
 ## Icons: Lucide
 
-All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (the Rules chip and the setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries (and under Chaos rules illegal moves), `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Scale` the Legal counterpart in the Turn panel, `Eye` / `Undo2` its move's toggle that previews its position on the board, `TrendingUp` / `TrendingDown` / `Minus` its Chaos gain (rising, falling, flat or not judged), `TrendingUpDown` the Chaos gain score, `ArrowUp` / `ArrowDown` the sorted column. In the New game sheet: `User` vs `Bot` and `Bot` vs `Bot` on the Mode cards, the Game card's setting icons on the Rules, constraint and Retry feedback cards, `ArrowLeftRight` to swap the sides and `ChevronDown` on Advanced settings. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
+All interface icons are Lucide (`lucide-react`), with `aria-hidden` next to a text label. In use on the game page and Analytics: `ChartNoAxesColumn` Analytics, `Plus` New game, `Settings` (the gear) Preferences, `User` vs `Bot` Play LLM and `Bot` vs `Bot` LLM faceoff in the Game card (the Rules chip and the setting icons: Game card), `RotateCcw` the result's Rematch, `User` the human, `Sparkles` spawned pieces, `X` illegal tries (and under Chaos rules illegal moves), `PenLine` notation slips, `TriangleAlert` a forfeit's error, `Scale` the Legal counterpart in the Turn panel, `Eye` / `Undo2` its move's toggle that previews its position on the board, `TrendingUp` / `TrendingDown` / `Minus` its Chaos gain (rising, falling, flat or not judged), `TrendingUpDown` the Chaos gain score, and on Analytics `Anchor` Anchor matches, `Bot` LLM faceoffs and `User` Play LLM in the Mode filter. In the New game sheet: `User` vs `Bot` and `Bot` vs `Bot` on the Mode cards, the Game card's setting icons on the Rules, constraint and Retry feedback cards, `ArrowLeftRight` to swap the sides and `ChevronDown` on Advanced settings. Chess pieces are drawn with the Merida set, never as Unicode glyphs.
 
 ## Layout
 
@@ -141,7 +141,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 | Evaluation bar | a `meter` with `Tooltip` |
 | Moves panel | `Card size="sm"`, `CardTitle`, `Switch size="sm"`, `ScrollArea` |
 | Start error | `Alert variant="destructive"` |
-| Analytics | `Card` with `CardHeader` / `CardContent` / `CardFooter`, `Switch`, `Table`, `Badge` (`secondary` chips, dashed `outline` mark), `Tooltip` |
+| Analytics | `Card` with `CardHeader` / `CardContent` / `CardFooter`, toggle `Button`s (`secondary` / `ghost`), `Table`, dashed `outline` `Badge`, `Tooltip` |
 | New game sheet | `Dialog`, `Radio group` cards, `Select`, `Switch`, `Collapsible`, `Button`, `Tooltip` |
 
 ## Player strip
@@ -213,14 +213,14 @@ Unchanged by the restyle (`frontend/src/components/board/`): cm-chessboard with 
 
 ## Analytics page
 
-`frontend/src/analytics/AnalyticsPage.tsx`, max 1400px: the top bar with Analytics marked, the title **Leaderboard** (24px semibold) and a muted line under it, then the leaderboard in one `Card`:
+`frontend/src/analytics/AnalyticsPage.tsx`, max 1400px: the top bar with Analytics marked, the title **Ranking** (24px semibold) and a muted line under it, then the Ranking of models (ADR 0011, `GET /api/ranking`) in one `Card`. Layout from the prototype's Ranking view (`prototype/model-ranking`, variant E):
 
-- **Header**: the legend of chips and the "All columns" Switch.
-- **The table**: its header row is a filled `muted` strip with rounded ends (12px muted labels, the sorted one in foreground with a Lucide arrow); rows are split by faint lines only (`border-border/70`), numbers right-aligned in tabular figures.
-- **Chips**: `secondary` Badges in muted text; a chip with a hue (`analytics.css`: one per LLM constraints, green for thinking on) is in the foreground with a coloured dot and a light tint of its hue. The unvalidated Move-quality estimate is a dashed `outline` Badge with a Tooltip.
+- **Header**: the **Mode filter**, a group named "Modes": its muted label, then **Anchor matches** (`Anchor`), **LLM faceoffs** (`Bot`) and **Play LLM** (`User`) as `sm` toggle Buttons (`aria-pressed`; chosen `secondary`, not chosen `ghost` in muted text), all chosen at first. What each Mode's games give is in its Tooltip and `aria-description`. The last one chosen stays chosen. Narrowed, the page asks for those Modes' Ranking, every number recomputed from their games, and keeps the last one shown, faded to half and `aria-busy`, while it loads; its tooltips describe the Modes it came from.
+- **The table**: #, Model, Rating, 95% interval, Move-quality estimate, Games, W · D · L, Forfeits, in the backend's order; no sorting and no Score (models face different Anchors). Its header row is a filled `muted` strip with rounded ends (12px muted labels); rows are split by faint lines only (`border-border/70`), numbers right-aligned in tabular figures. An unranked model has an empty #.
+- **Explained on hover** (Tooltip, keyboard focus and `aria-description`): a "—" Rating says why there is none (no games under the Reference configuration, Play LLM only, or no path to an Anchor), a "< X" or "> X" which bound it is, and "Reference configuration" in the intro and the note lists its settings, each a `cursor-help` span. The unvalidated Move-quality estimate is a dashed `outline` Badge with a Tooltip.
 - **Footer**: the note in muted 12px.
 
-Loading, no games and errors each show in a plain Card in the table's place.
+Loading, no games and errors each show as a muted line in the table's place, under the Mode filter.
 
 ## New game sheet
 

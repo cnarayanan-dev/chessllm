@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from tests.analytics.test_leaderboard import configurations
 from tests.conftest import ScriptedPlayer, play_llm
 
 from chessllm.cli.faceoff_batch import main
@@ -113,14 +114,11 @@ def test_the_api_refuses_a_level_and_plays_plain_thinking(scripted):
     assert "thinking_level" not in response.json()["settings"]["black"]
 
 
-def test_the_leaderboard_shows_a_levels_configuration_without_the_level_under_its_own_id(scripted, tmp_path):
+def test_the_leaderboard_shows_a_levels_configuration_without_the_level_under_its_own_id(tmp_path):
     faceoff(tmp_path / "games", "--models", "qwen3.8:latest", "gemma3:12b", "--thinking-for", "qwen3.8:latest=xhigh")
     faceoff(tmp_path / "games", "--models", "qwen3.8:latest", "gemma3:12b", "--thinking-for", "qwen3.8:latest")
-    client, _ = scripted([], games_dir=tmp_path / "games")
 
-    configurations = client.get("/api/leaderboard").json()["configurations"]
-
-    qwen = [entry for entry in configurations if entry["configuration"]["model"] == "qwen3.8:latest"]
+    qwen = [entry for entry in configurations(tmp_path / "games") if entry["configuration"]["model"] == "qwen3.8:latest"]
     assert len(qwen) == 2 and qwen[0]["id"] != qwen[1]["id"]
     assert qwen[0]["configuration"] == qwen[1]["configuration"]
     assert "thinking_level" not in qwen[0]["configuration"]

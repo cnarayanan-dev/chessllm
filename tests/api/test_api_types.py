@@ -37,7 +37,7 @@ def test_every_api_endpoint_describes_its_response_with_a_named_model():
             "items": {"$ref": "#/components/schemas/Probe"},
             "title": "Response List Probes Api Games  Game Id  Probes Get",
         },
-        ("GET", "/api/leaderboard"): {"$ref": "#/components/schemas/Leaderboard"},
+        ("GET", "/api/ranking"): {"$ref": "#/components/schemas/Ranking"},
     }
 
 

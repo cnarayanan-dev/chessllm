@@ -40,13 +40,13 @@ def log_events(tmp_path, game_id: str) -> list[dict]:
     raise AssertionError(f"no log for {game_id}")
 
 
-def test_an_abandoned_games_failed_turn_does_not_end_it_or_count_on_the_leaderboard(tmp_path):
+def test_an_abandoned_games_failed_turn_does_not_end_it_or_count_in_the_ranking(tmp_path):
     client, _, old, responses = abandon_during_llm_turn(tmp_path, [RuntimeError("connection refused")])
 
     events = log_events(tmp_path, old["game_id"])
     assert [event["type"] for event in events] == ["game_start", "llm_attempt"]
     assert events[-1]["result"] == "error"
-    assert client.get("/api/leaderboard").json() == {"configurations": []}
+    assert client.get("/api/ranking").json()["models"] == []
     [response] = responses
     assert response.status_code == 200
     assert response.json()["status"] == "playing"

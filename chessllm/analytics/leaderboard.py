@@ -1,6 +1,10 @@
 """The leaderboard: every finished game in the game logs, its results grouped by Player configuration.
 
-Read from the logs on every request, so there is no stored state to keep in step with them. Both log versions are
+No longer served: the analytics page shows the Ranking of models under the Reference configuration instead
+(chessllm.analytics.ranking, ADR 0011), which reads the logs with the functions here. The leaderboard stays as the
+Rating of every Player configuration in one pool, which the Setting effects are to be measured from.
+
+Read from the logs on every call, so there is no stored state to keep in step with them. Both log versions are
 read (ADR 0004); a missing `rules` means Standard rules."""
 
 import hashlib

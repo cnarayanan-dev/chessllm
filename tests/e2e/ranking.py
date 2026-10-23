@@ -1,21 +1,25 @@
 """Synthetic finished games for the analytics page's Playwright journey (frontend/e2e/analytics.e2e.ts), written by
-the e2e server (tests/e2e/server.py) on POST /e2e/leaderboard-games. Three Player configurations:
+the e2e server (tests/e2e/server.py) on POST /e2e/ranking-games. Five models, all under the Reference configuration
+but phi4:
 
-- qwen3.5:9b, Listed enforced, thinking on: rated from Anchor matches against Dragon (10 · 1 · 9, 30 legal moves a
-  game), with an unvalidated
-  Move-quality estimate from its first five games' analysis files
-- llama3:8b, Free: lost every anchored game (10, 4 of them by Forfeit), 3 legal moves in 4 attempts a game, so "< X"
-- mistral:7b, Free, bare retry feedback: Play LLM games only (0 · 0 · 25), so no Rating"""
+- qwen3.5:9b: rated from Anchor matches against Dragon (10 · 1 · 9), with an unvalidated Move-quality estimate from
+  its first five games' analysis files
+- llama3:8b: lost every anchored game (10, 4 of them by Forfeit), so "< X"; and lost 4 LLM faceoffs to gemma3:12b
+- gemma3:12b: those 4 LLM faceoffs only, which lead to no Anchor, so no Rating
+- mistral:7b: Play LLM games only (0 · 0 · 25), so no Rating
+- phi4:14b: Anchor matches under Listed only, none under the Reference configuration, so listed last"""
 
 import json
 import math
 from pathlib import Path
 from typing import Any
 
-from tests.analytics.test_leaderboard import HUMAN, LLAMA, QWEN, game, write_log
+from tests.analytics.test_leaderboard import HUMAN, LLAMA, game, with_start, write_log
 
-QWEN_ENFORCED = QWEN | {"llm_constraints": "listed_enforced"}
-MISTRAL_BARE = LLAMA | {"model": "mistral:7b", "retry_feedback": "bare"}
+QWEN = LLAMA | {"model": "qwen3.5:9b"}
+GEMMA = LLAMA | {"model": "gemma3:12b"}
+MISTRAL = LLAMA | {"model": "mistral:7b"}
+PHI_LISTED = LLAMA | {"model": "phi4:14b", "llm_constraints": "listed"}
 MOVE_MODEL_GRID = list(range(1000, 2001, 100))
 
 Events = list[dict[str, Any]]
@@ -25,30 +29,20 @@ def dragon(skill: int) -> dict[str, Any]:
     return {"player": "anchor", "engine": "dragon", "skill": skill}
 
 
-def against_dragon(
-    llm: dict[str, Any], skill: int, outcomes: list[str], attempts: list[str] | None = None
-) -> list[Events]:
-    """Anchor match games with these outcomes ("win", "draw", "loss", "forfeit") of the LLM, colours alternating, each
-    with the LLM's attempts given."""
+def reference(events: Events) -> Events:
+    """The game with 5 attempts a turn, as the Reference configuration has it."""
+    return with_start(events, max_retries=4)
+
+
+def against_dragon(llm: dict[str, Any], skill: int, outcomes: list[str]) -> list[Events]:
+    """Anchor match games with these outcomes ("win", "draw", "loss", "forfeit") of the LLM, colours alternating."""
     games = []
     for number, outcome in enumerate(outcomes):
         llm_white = number % 2 == 0
-        color = "white" if llm_white else "black"
         white, black = (llm, dragon(skill)) if llm_white else (dragon(skill), llm)
         result = "1/2-1/2" if outcome == "draw" else "1-0" if (outcome == "win") == llm_white else "0-1"
         reason = {"draw": "move_cap", "forfeit": "forfeit"}.get(outcome, "checkmate")
-        streak = attempts.index("illegal") if attempts and "illegal" in attempts else 0
-        games.append(
-            game(
-                white,
-                black,
-                result,
-                reason,
-                attempts={color: attempts} if attempts else None,
-                streaks={color: streak},
-                mode="anchor_match",
-            )
-        )
+        games.append(reference(game(white, black, result, reason, mode="anchor_match")))
     return games
 
 
@@ -74,21 +68,22 @@ def move_quality_analysis(color: str, peak: int, moves: int) -> dict[str, Any]:
     }
 
 
-def write_leaderboard_games(games_dir: Path) -> None:
+def write_ranking_games(games_dir: Path) -> None:
     """Replaces every file in games_dir (game logs, PGNs, analysis files) with the games above."""
     for old in games_dir.glob("*"):
         old.unlink()
-    legal = ["legal"] * 30
     qwen = [
-        *against_dragon(QWEN_ENFORCED, 1, ["win"] * 7 + ["loss"] * 3, legal),
-        *against_dragon(QWEN_ENFORCED, 3, ["win"] * 3 + ["draw"] + ["loss"] * 6, legal),
+        *against_dragon(QWEN, 1, ["win"] * 7 + ["loss"] * 3),
+        *against_dragon(QWEN, 3, ["win"] * 3 + ["draw"] + ["loss"] * 6),
     ]
-    llama = against_dragon(LLAMA, 1, ["loss"] * 6 + ["forfeit"] * 4, ["legal", "legal", "legal", "illegal"])
-    mistral = [game(HUMAN, MISTRAL_BARE, "1-0") for _ in range(25)]
-    for number, events in enumerate([*qwen, *llama, *mistral]):
+    llama = against_dragon(LLAMA, 1, ["loss"] * 6 + ["forfeit"] * 4)
+    faceoffs = [reference(game(GEMMA, LLAMA, "1-0")), reference(game(LLAMA, GEMMA, "0-1"))] * 2
+    mistral = [reference(game(HUMAN, MISTRAL, "1-0")) for _ in range(25)]
+    phi = against_dragon(PHI_LISTED, 1, ["win"] * 5)
+    for number, events in enumerate([*qwen, *llama, *faceoffs, *mistral, *phi]):
         name = f"2026-10-19T10-00-{number:02d}_game"
         write_log(games_dir, name, events)
         if number < 5:  # the first five qwen games
-            color = "white" if events[0]["white"] == QWEN_ENFORCED else "black"
+            color = "white" if events[0]["white"] == QWEN else "black"
             analysis = move_quality_analysis(color, 1400, 30)
             (games_dir / f"{name}.analysis.json").write_text(json.dumps(analysis), encoding="utf-8")

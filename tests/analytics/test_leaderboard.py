@@ -1,10 +1,8 @@
 import json
 
 import pytest
-from fastapi.testclient import TestClient
 
-from chessllm.analytics.leaderboard import side_outcome
-from chessllm.api.app import create_app
+from chessllm.analytics.leaderboard import leaderboard as leaderboard_of, side_outcome
 
 PROMPT = "/somewhere/chessllm/prompts/system.txt"
 LLAMA = {"player": "llm", "model": "llama3:8b", "thinking": False, "llm_constraints": "free", "retry_feedback": "explained"}
@@ -72,18 +70,22 @@ def game(
     return [start, *moves, *([end] if ended else [])]
 
 
+def configurations(games_dir, **options) -> list[dict]:
+    """The leaderboard of the games in games_dir, as JSON: what the Setting effects (#123) are measured from, now
+    that the page shows the Ranking instead."""
+    return leaderboard_of(games_dir, **options).model_dump(mode="json")["configurations"]
+
+
 @pytest.fixture
 def leaderboard(tmp_path):
-    """Writes the given game logs into a temporary games directory and returns the leaderboard the API makes of them."""
+    """Writes the given game logs into a temporary games directory and returns their leaderboard, as JSON."""
 
     def make(*games) -> list[dict]:
         games_dir = tmp_path / "games"
+        games_dir.mkdir(parents=True, exist_ok=True)
         for number, events in enumerate(games):
             write_log(games_dir, f"2026-10-19T10-00-{number:02d}_game", events)
-        client = TestClient(create_app(lambda settings, color: None, games_dir=games_dir))
-        response = client.get("/api/leaderboard")
-        assert response.status_code == 200, response.text
-        return response.json()["configurations"]
+        return configurations(games_dir)
 
     return make
 
@@ -295,9 +297,7 @@ def test_unfinished_games_and_files_that_are_not_game_logs_are_left_out(leaderbo
 
 
 def test_no_games_make_an_empty_leaderboard(tmp_path):
-    client = TestClient(create_app(lambda settings, color: None, games_dir=tmp_path / "no-games-yet"))
-
-    assert client.get("/api/leaderboard").json() == {"configurations": []}
+    assert configurations(tmp_path / "no-games-yet") == []
 
 
 @pytest.mark.parametrize(

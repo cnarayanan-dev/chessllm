@@ -8,11 +8,9 @@ import json
 import math
 
 import pytest
-from fastapi.testclient import TestClient
 
-from tests.analytics.test_leaderboard import HUMAN, LLAMA, QWEN, by_model, game, write_log
+from tests.analytics.test_leaderboard import HUMAN, LLAMA, QWEN, by_model, configurations, game, write_log
 
-from chessllm.api.app import create_app
 
 GRID = list(range(1000, 2001, 100))  # Maia-2's grid: 1000 stands for "under 1100"
 MODEL_VERSION = "fake-move-model 1"
@@ -68,10 +66,7 @@ def leaderboard(tmp_path):
         validation_file = tmp_path / "move_quality_validation.json"
         if validation is not None:
             validation_file.write_text(json.dumps(validation), encoding="utf-8")
-        app = create_app(lambda settings, color: None, games_dir=games_dir, move_quality_validation=validation_file)
-        response = TestClient(app).get("/api/leaderboard")
-        assert response.status_code == 200, response.text
-        return response.json()["configurations"]
+        return configurations(games_dir, move_quality_validation=validation_file)
 
     return make
 

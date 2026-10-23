@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from chessllm.api.errors import register_error_handlers
-from chessllm.api.routes import games, leaderboard, models as model_routes, pages, probes, prompts
+from chessllm.api.routes import games, models as model_routes, pages, probes, prompts, ranking
 from chessllm.api.state import Engines, GameStore
 from chessllm.core.config import DIST_DIR, GAMES_DIR, PROMPT_LIBRARY_DIR, SAMPLING_FILE, VALIDATION_FILE, AppConfig
 from chessllm.core.types import Color, Sampling
@@ -48,6 +48,6 @@ def create_app(
     app.state.games = GameStore()
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
     register_error_handlers(app)
-    for router in [pages.router, model_routes.router, prompts.router, games.router, probes.router, leaderboard.router]:
+    for router in [pages.router, model_routes.router, prompts.router, games.router, probes.router, ranking.router]:
         app.include_router(router)
     return app

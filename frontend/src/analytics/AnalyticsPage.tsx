@@ -1,49 +1,61 @@
-// The analytics page: the leaderboard of every Player configuration, ranked by Rating (prototype variant A), in a
-// Luma card on the Stone page.
+// The analytics page: the Ranking of models, each by its Rating under the Reference configuration (ADR 0011),
+// narrowed by Mode, in a Luma card on the Stone page. Layout from the prototype's Ranking view (variant E).
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { Anchor, Bot, User, type LucideIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import {
-  DEFAULT_SORT,
-  LEGEND,
-  attemptsLegalText,
-  chips,
-  columns,
+  ALL_MODES,
+  MODES,
+  REFERENCE_CONFIGURATION,
+  boundText,
   estimateText,
   intervalText,
-  nextSort,
-  ranked,
-  scoreText,
-  sortRows,
-  streakText,
-  type Chip,
-  type ColumnKey,
-  type LeaderboardEntry,
-  type Sort,
-} from '@/analytics/leaderboard'
-import { leaderboardQuery } from '@/api/leaderboard'
+  noRatingText,
+  toggleMode,
+  type ModeKey,
+  type RankingEntry,
+} from '@/analytics/ranking'
+import { rankingQuery } from '@/api/ranking'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
-import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import '@/analytics/analytics.css'
 
-function ChipView({ chip }: { chip: Chip }) {
+const MODE_ICONS: Record<ModeKey, LucideIcon> = { anchor_match: Anchor, llm_faceoff: Bot, play_llm: User }
+
+const COLUMNS = ['#', 'Model', 'Rating', '95% interval', 'Move-quality estimate', 'Games', 'W · D · L', 'Forfeits']
+
+/** A word or number that explains itself on hover and on keyboard focus, the same text read to screen readers. */
+function Explained({ children, explanation, className }: { children: ReactNode; explanation: string; className?: string }) {
   return (
-    <Badge
-      variant="secondary"
-      className="chip gap-1.5 font-normal text-muted-foreground"
-      data-hue={chip.hue ?? undefined}
-    >
-      {chip.label}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger
+        render={<span tabIndex={0} aria-description={explanation} />}
+        className={cn('cursor-help rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50', className)}
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80">{explanation}</TooltipContent>
+    </Tooltip>
   )
 }
 
-function MoveQualityCell({ entry }: { entry: LeaderboardEntry }) {
+function RatingCell({ entry, narrowed }: { entry: RankingEntry; narrowed: boolean }) {
+  const text = estimateText(entry.rating)
+  const explanation =
+    entry.no_rating !== null ? noRatingText(entry.no_rating, narrowed) : boundText(entry.rating)
+  if (explanation === null) return <span className="font-semibold">{text}</span>
+  return (
+    <Explained explanation={explanation} className={cn(entry.rating !== null && 'font-semibold')}>
+      {text}
+    </Explained>
+  )
+}
+
+function MoveQualityCell({ entry }: { entry: RankingEntry }) {
   const quality = entry.move_quality
   return (
     <>
@@ -66,157 +78,137 @@ function MoveQualityCell({ entry }: { entry: LeaderboardEntry }) {
   )
 }
 
-/** The cell of each column but the rank and Player configuration. */
-const CELLS: Record<Exclude<ColumnKey, 'rank' | 'configuration'>, (entry: LeaderboardEntry) => ReactNode> = {
-  rating: (entry) => <span className="font-semibold">{estimateText(entry.rating)}</span>,
-  games: (entry) => entry.games,
-  wdl: (entry) => (
-    <span className="whitespace-nowrap tabular-nums">
-      <b>{entry.wins}</b> · {entry.draws} · {entry.losses}
-    </span>
-  ),
-  interval: (entry) => <span className="text-muted-foreground">{intervalText(entry.rating)}</span>,
-  move_quality: (entry) => <MoveQualityCell entry={entry} />,
-  score: scoreText,
-  forfeits: (entry) => entry.forfeits,
-  legal_moves: (entry) => entry.legal_moves,
-  attempts_legal: attemptsLegalText,
-  streak: streakText,
+/** The Modes whose games count: each a toggle, its name and icon, what its games give in its tooltip. */
+function ModeFilter({ modes, onChange }: { modes: ModeKey[]; onChange: (modes: ModeKey[]) => void }) {
+  return (
+    <div role="group" aria-label="Modes" className="flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 text-muted-foreground">Modes</span>
+      {MODES.map(({ key, name, explanation }) => {
+        const Icon = MODE_ICONS[key]
+        const on = modes.includes(key)
+        return (
+          <Tooltip key={key}>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={on ? 'secondary' : 'ghost'}
+                  size="sm"
+                  aria-pressed={on}
+                  aria-description={explanation}
+                  onClick={() => onChange(toggleMode(modes, key))}
+                />
+              }
+              className={cn(!on && 'text-muted-foreground')}
+            >
+              <Icon aria-hidden="true" />
+              {name}
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-80">
+              {explanation}
+            </TooltipContent>
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
 }
 
-function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
-  const [all, setAll] = useState(false)
-  const [sort, setSort] = useState<Sort>(DEFAULT_SORT)
-  const ranks = useMemo(() => new Map(ranked(entries).map((entry, index) => [entry.id, index + 1])), [entries])
-  const rows = useMemo(() => sortRows(entries, sort), [entries, sort])
-  const shown = columns(all)
-  const SortIcon = sort.direction === 'asc' ? ArrowUp : ArrowDown
-
+/** The table; `stale` while the Modes just chosen load, the last Ranking shown faded and marked busy until then. */
+function RankingTable({ entries, narrowed, stale }: { entries: RankingEntry[]; narrowed: boolean; stale: boolean }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-        <div data-testid="legend" className="flex flex-wrap gap-1.5">
-          {LEGEND.map((chip) => (
-            <ChipView chip={chip} key={chip.label} />
+    <Table
+      className={cn('border-separate border-spacing-0 transition-opacity', stale && 'opacity-50')}
+      aria-busy={stale}
+      data-stale={stale || undefined}
+    >
+      <TableHeader className="[&_tr]:border-0">
+        <TableRow className="hover:bg-transparent">
+          {COLUMNS.map((column, index) => (
+            <TableHead
+              key={column}
+              className={cn(
+                'h-10 bg-muted text-xs text-muted-foreground first:rounded-l-2xl last:rounded-r-2xl',
+                index > 1 && 'text-right',
+              )}
+            >
+              {column}
+            </TableHead>
           ))}
-        </div>
-        <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
-          <Switch checked={all} onCheckedChange={setAll} />
-          All columns
-        </label>
-      </CardHeader>
-      <CardContent className="px-3">
-        <Table className="border-separate border-spacing-0">
-          <TableHeader className="[&_tr]:border-0">
-            <TableRow className="hover:bg-transparent">
-              {shown.map((column) => {
-                const sorted = sort.key === column.key
-                return (
-                  <TableHead
-                    key={column.key}
-                    className={cn(
-                      'h-10 bg-muted text-xs text-muted-foreground first:rounded-l-2xl last:rounded-r-2xl',
-                      column.numeric && 'text-right',
-                      sorted && 'text-foreground',
-                    )}
-                    aria-sort={sorted ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined}
-                  >
-                    {column.sortable ? (
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer items-center gap-1 rounded-full outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:size-3.5"
-                        onClick={() => setSort(nextSort(sort, column.key as Sort['key']))}
-                      >
-                        {column.label}
-                        {sorted && <SortIcon aria-hidden="true" />}
-                      </button>
-                    ) : (
-                      column.label
-                    )}
-                  </TableHead>
-                )
-              })}
-            </TableRow>
-          </TableHeader>
-          <TableBody className="[&_tr:last-child_td]:border-0">
-            {rows.map((entry) => (
-              <TableRow key={entry.id} className="border-0 [&>td]:border-b [&>td]:border-border/70">
-                {shown.map((column) => {
-                  if (column.key === 'rank')
-                    return (
-                      <TableCell key="rank" className="w-8 text-muted-foreground">
-                        {ranks.get(entry.id)}
-                      </TableCell>
-                    )
-                  if (column.key === 'configuration')
-                    return (
-                      <TableCell key="configuration" className="min-w-80 whitespace-normal">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="mr-1 font-semibold">{entry.configuration.model}</span>{' '}
-                          {chips(entry.configuration).map((chip) => (
-                            <ChipView chip={chip} key={chip.label} />
-                          ))}
-                        </div>
-                      </TableCell>
-                    )
-                  return (
-                    <TableCell key={column.key} className="text-right tabular-nums">
-                      {CELLS[column.key](entry)}
-                    </TableCell>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-      <CardFooter>
-        <p className="text-xs text-muted-foreground">
-          The Rating comes only from wins, draws and losses against Anchors and in LLM faceoffs; “&lt; X” is an upper
-          bound when every anchored game was lost, “—” no path to an Anchor. The Move-quality estimate comes from the
-          moves alone, and is never blended with it. n/a: not applicable under Enforced decoding.
-        </p>
-      </CardFooter>
-    </Card>
+        </TableRow>
+      </TableHeader>
+      <TableBody className="[&_tr:last-child_td]:border-0">
+        {entries.map((entry) => (
+          <TableRow key={entry.model} className="border-0 [&>td]:border-b [&>td]:border-border/70">
+            <TableCell className="w-8 text-muted-foreground">{entry.rank ?? ''}</TableCell>
+            <TableCell className="font-semibold">{entry.model}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              <RatingCell entry={entry} narrowed={narrowed} />
+            </TableCell>
+            <TableCell className="text-right text-muted-foreground tabular-nums">{intervalText(entry.rating)}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              <MoveQualityCell entry={entry} />
+            </TableCell>
+            <TableCell className="text-right tabular-nums">{entry.games}</TableCell>
+            <TableCell className="text-right whitespace-nowrap tabular-nums">
+              <b>{entry.wins}</b> · {entry.draws} · {entry.losses}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">{entry.forfeits}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }
 
-/** What the page says in the leaderboard's place: loading, no games yet, or an error. */
+/** What the page says in the table's place: loading, no games yet, or an error. */
 function Notice({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <Card>
-      <CardContent>
-        <p className={cn('text-muted-foreground', className)}>{children}</p>
-      </CardContent>
-    </Card>
-  )
+  return <p className={cn('px-3 text-muted-foreground', className)}>{children}</p>
 }
 
 export function AnalyticsPage() {
-  const leaderboard = useQuery(leaderboardQuery)
-  const entries = leaderboard.data?.configurations
+  const [modes, setModes] = useState<ModeKey[]>(ALL_MODES)
+  const ranking = useQuery(rankingQuery(modes.length < ALL_MODES.length ? modes : []))
+  const entries = ranking.data?.models
+  // The Ranking shown, which stays while another Modes' loads: its own Modes say what its numbers come from.
+  const narrowed = (ranking.data?.modes.length ?? ALL_MODES.length) < ALL_MODES.length
+  const stale = ranking.isPlaceholderData
+  const reference = <Explained explanation={REFERENCE_CONFIGURATION}>Reference configuration</Explained>
 
   return (
     <TooltipProvider>
       <div className="min-h-svh text-sm">
         <TopBar current="analytics" />
         <main className="mx-auto max-w-[1400px] px-6 pt-4 pb-10">
-          <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Ranking</h1>
           <p className="mt-1 mb-5 text-muted-foreground">
-            Every Player configuration, ranked by Rating on the chess.com Rapid scale. Click a column to sort.
+            Every model, ranked by its Rating under the {reference}, on the chess.com Rapid scale.
           </p>
-          {leaderboard.isError ? (
-            <Notice className="text-destructive">Could not load the leaderboard: {leaderboard.error.message}</Notice>
-          ) : entries === undefined ? (
-            <Notice>Loading…</Notice>
-          ) : entries.length === 0 ? (
-            <Notice>
-              No finished games yet. Play a game or run an Anchor match batch, and its Player configuration shows up
-              here.
-            </Notice>
-          ) : (
-            <Leaderboard entries={entries} />
-          )}
+          <Card>
+            <CardHeader>
+              <ModeFilter modes={modes} onChange={setModes} />
+            </CardHeader>
+            <CardContent className="px-3">
+              {ranking.isError ? (
+                <Notice className="text-destructive">Could not load the Ranking: {ranking.error.message}</Notice>
+              ) : entries === undefined ? (
+                <Notice>Loading…</Notice>
+              ) : entries.length === 0 ? (
+                <Notice>
+                  No finished games yet. Run an Anchor match batch, and its model shows up here.
+                </Notice>
+              ) : (
+                <RankingTable entries={entries} narrowed={narrowed} stale={stale} />
+              )}
+            </CardContent>
+            <CardFooter>
+              <p className="text-xs text-muted-foreground">
+                Only games under the {reference} count, in the Modes chosen. The Rating comes only from wins, draws
+                and losses against Anchors and in LLM faceoffs; “&lt; X” is an upper bound, “—” no Rating, why on
+                hover. The Move-quality estimate comes from the moves alone, and is never blended with it. No score:
+                models face different Anchors on the ladder.
+              </p>
+            </CardFooter>
+          </Card>
         </main>
       </div>
     </TooltipProvider>

@@ -63,7 +63,7 @@ test('Inter is the only interface font: the game page, the New game sheet and th
   await page.getByRole('button', { name: 'Advanced settings' }).click()
   expect(await fonts(page)).toEqual(INTER)
 
-  expect((await page.request.post('/e2e/leaderboard-games')).ok()).toBe(true)
+  expect((await page.request.post('/e2e/ranking-games')).ok()).toBe(true)
   await page.goto('/analytics')
   await expect(page.locator('tbody tr')).not.toHaveCount(0)
   expect(await fonts(page)).toEqual(INTER)

@@ -56,17 +56,20 @@ class RatedGame:
     white_score: float  # 1, 0.5 or 0
 
 
+def counted(game: RatedGame, anchors: Mapping[str, AnchorRating]) -> bool:
+    """Whether the game goes into the pool: not a configuration against itself, nor against an Anchor missing from
+    anchors."""
+    return game.white != game.black and all(
+        player in anchors or not is_anchor(player) for player in (game.white, game.black)
+    )
+
+
 def ratings(games: Iterable[RatedGame], anchors: Mapping[str, AnchorRating]) -> dict[str, Rating]:
     """The Rating of every player in the games that isn't an Anchor and can be rated; the rest are left out.
 
     Games against an Anchor missing from anchors, and a configuration's games against itself, carry no information
     about the scale and are left out."""
-    pool = sorted(
-        (game.white, game.black, game.white_score)
-        for game in games
-        if game.white != game.black
-        and all(player in anchors or not is_anchor(player) for player in (game.white, game.black))
-    )
+    pool = sorted((game.white, game.black, game.white_score) for game in games if counted(game, anchors))
     counts: dict[str, int] = defaultdict(int)
     scored: dict[str, set[str]] = defaultdict(set)  # u -> every v that u scored against, Anchors as one node
     for white, black, score in pool:
