@@ -14,21 +14,25 @@ import chess
 from chessllm.core.types import COLORS, Color, color_of
 from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
-from chessllm.exceptions import AnchorUnavailable, RefusedAnchorTurn, RefusedLlmTurn, RejectedHumanMove
+from chessllm.exceptions import (
+    AnchorUnavailable, NoLlmTurn, RefusedAnchorTurn, RefusedLlmTurn, RefusedProbe, RejectedHumanMove,
+)
 from chessllm.game.chaos_gain import GainBaselines, for_mover, result_for_mover
 from chessllm.game.ending import GameEnd, check_end, position_key
 from chessllm.game.evaluation import judge
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer
-from chessllm.game.llm_turn.prompt import move_record, prompt_file, side_template
-from chessllm.game.llm_turn.turn import LlmTurns
+from chessllm.game.llm_turn.probe import Probe, ProbeTemplate, ask_probe
+from chessllm.game.llm_turn.prompt import check_prompt_template, move_record, prompt_file, side_template
+from chessllm.game.llm_turn.turn import LlmTurns, token_accounting
 from chessllm.game.records import (
     ChaosGain, Evaluation, EvaluationEngine, GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed,
 )
 from chessllm.game.rules.chaos import ResolvedMove, apply
 from chessllm.game.settings import Settings
-from chessllm.game.sides import HumanSide, side_log_shape
+from chessllm.game.sides import HumanSide, PromptTemplate, side_log_shape
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog, now
+from chessllm.logs.probe_log import ProbeLog
 
 
 def started(evaluator: Evaluator | None) -> tuple[Evaluator | None, EvaluationEngine | None]:
@@ -99,6 +103,9 @@ class GameSession:
         # Requests run in a threadpool, so two could otherwise both find it an LLM's turn and both ask it to move.
         # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
         self._llm_turn_running = threading.Lock()
+        # Held while a Probe is asked, so an LLM turn asked for meanwhile waits for it: a probe never runs alongside
+        # a real turn, nor one probe alongside another.
+        self._probe_running = threading.Lock()
         self._abandoned = threading.Event()  # set by abandon(), from the request that starts a new game
         # Held while the game is abandoned, while an LLM turn ends the game, so a game is never both, and while a
         # ply's Evaluation is added, so an abandoned game never gets one.
@@ -107,9 +114,11 @@ class GameSession:
         # the clock it starts, or the reverse. Never held while a side thinks, so a running turn doesn't hold up the
         # state.
         self._landing = threading.Lock()
+        self._players = players
+        self._probes = ProbeLog(log.path.parent, log.game_id)  # the game's Probes, apart from its log (ADR 0010)
         # The Prompt template of each LLM side, read once, so the game plays it unchanged whatever happens to its
         # files (ADR 0010).
-        templates = {color: side_template(side) for color, side in self._llm_sides.items()}
+        templates = self._templates = {color: side_template(side) for color, side in self._llm_sides.items()}
         # The turns of each LLM side, which keep its totals.
         self._turns_of = {
             color: LlmTurns(
@@ -220,7 +229,9 @@ class GameSession:
 
         Raises RefusedLlmTurn and leaves the game unchanged if it isn't an LLM's turn, the game is over, or
         another LLM turn is still running."""
-        if not self._llm_turn_running.acquire(blocking=False):
+        with self._probe_running:  # a Probe being asked ends first
+            started_now = self._llm_turn_running.acquire(blocking=False)
+        if not started_now:
             raise RefusedLlmTurn("an LLM turn is already running", code="llm_turn_running")
         try:
             if self._abandoned.is_set():
@@ -277,6 +288,48 @@ class GameSession:
                 self._add_chaos_gain(baselines.gain(for_mover(evaluation, color)))
         finally:
             self._llm_turn_running.release()
+
+    def probe(self, ply: int, color: Color, template: PromptTemplate | None = None) -> Probe:
+        """Ask a Probe of the game's LLM turn of ply and color, with template, or else the Prompt template the side
+        plays the game with: the side's LLM asked once more, by
+        its own model and settings, for a move in the position before that ply, and the answer judged as an attempt.
+        The probe is appended to the game's probe log and returned; the game, its state and its log are unchanged.
+
+        Raises NoLlmTurn if the game has no such turn, InvalidSettings if the template doesn't fit the side's LLM
+        constraints, and RefusedProbe while an LLM turn runs."""
+        with self._landing:
+            turn = next((turn for turn in self._llm_turns if (turn.ply, turn.color) == (ply, color)), None)
+            if turn is None:
+                raise NoLlmTurn(f"the game has no LLM turn of {color} at ply {ply} to probe")
+            moves = [written for _, written in self._moves[: ply - 1]]
+            # A turn's ply is played, or else it was the forfeited last turn, in the position as it stands.
+            fen = self._plies[ply - 1].fen_before if ply <= len(self._plies) else self._board.fen()
+        side = self._llm_sides[color]
+        template = template or self._templates[color]
+        check_prompt_template(template, side.llm_constraints)
+        with self._probe_running:
+            if not self._llm_turn_running.acquire(blocking=False):
+                raise RefusedProbe("an LLM turn is running: a Probe can be asked once it has ended")
+            try:
+                board = chess.Board(fen)
+                answer = ask_probe(self._players[color], side, template, color, board, moves, self._rules)
+            finally:
+                self._llm_turn_running.release()
+            probe = Probe(
+                game_id=self._log.game_id,
+                game_log=self._log.path.name,
+                ply=ply,
+                color=color,
+                pgn=move_record(moves),
+                fen=fen,
+                side=side,
+                sampling=self._settings.sampling,
+                template=ProbeTemplate.of(template),
+                attempt=answer.attempt,
+                probed_at=now(),
+            )
+            self._probes.write(probe, **(token_accounting(answer.reply) if answer.reply is not None else {}))
+        return probe
 
     def _publish_llm_turn(self, turn: LlmTurn) -> None:
         """Add the turn just played to the state in one step, so state() never shows a turn half-built. It comes
@@ -418,6 +471,7 @@ class GameSession:
             stats=self._all_stats(),
             time_used=self._time_used_record(),
             running_s=self._time_since_move_started(self._clock()) if self._end is None else None,
+            prompt_template_ids={color: template.id for color, template in self._templates.items()},
             evaluator=self._evaluation_engine,
         )
 

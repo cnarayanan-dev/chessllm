@@ -113,6 +113,8 @@ def test_every_refusal_a_route_can_give_is_described_with_the_error_detail(scrip
         ("GET", "/api/games/current"): {"404"},
         ("POST", "/api/games/current/moves"): {"400", "404"},
         ("POST", "/api/games/current/llm-turn"): {"404", "409"},
+        ("POST", "/api/games/current/probes"): {"400", "404", "409"},
+        ("GET", "/api/games/{game_id}/probes"): set(),
         ("GET", "/api/leaderboard"): set(),
     }
     assert description["components"]["schemas"]["ErrorDetail"]["required"] == ["detail", "code"]

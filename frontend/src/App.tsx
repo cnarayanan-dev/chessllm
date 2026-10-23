@@ -17,7 +17,7 @@ import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, counterpartAt } from '@/game/chaos'
 import { evaluationBar, previewBar } from '@/game/evaluation'
-import { boardInput, orientation, shownPosition } from '@/game/gameLoop'
+import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
@@ -28,6 +28,8 @@ import { usePromptLab } from '@/settings/promptLab'
 const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
 const EMPTY_BOARD = '8/8/8/8/8/8/8/8 w - - 0 1'
+// Why Try can't probe while an LLM turn runs: a probe never runs alongside a real turn.
+const TRY_BLOCKED = 'An LLM turn is running. Try once it has ended.'
 
 /** Whether a key press belongs to a field or a dialog rather than to the move history. */
 const keyTakenElsewhere = (event: KeyboardEvent) =>
@@ -46,6 +48,9 @@ export default function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
   // Off, a Rematch plays every LLM's default Prompt template, as a new game does.
   const promptLab = usePromptLab()
+  // Why Try can't probe now: only while an LLM turn is running, as the backend takes probes between turns. (Pause,
+  // #116, decides here when a running game may be probed.)
+  const tryBlocked = waitingForLlm(state) ? TRY_BLOCKED : undefined
   const openSheet = useCallback(() => setSheetOpen(true), [])
   // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
@@ -140,6 +145,7 @@ export default function App() {
                 live={!history}
                 previewing={previewing}
                 onPreview={togglePreview}
+                tryBlocked={tryBlocked}
               />
             </>
           ) : (

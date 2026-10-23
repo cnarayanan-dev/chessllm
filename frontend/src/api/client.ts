@@ -1,5 +1,5 @@
 // The game endpoints, typed with the generated API types.
-import type { GameState, NewGame, PromptTemplateInfo } from '@/api/types'
+import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo } from '@/api/types'
 
 /** A response other than 2xx, with the backend's detail as its message. */
 export class ApiError extends Error {
@@ -46,3 +46,11 @@ export const playMove = (uci: string, signal?: AbortSignal) =>
 
 export const playLlmTurn = (signal?: AbortSignal) =>
   api<GameState>('POST', '/api/games/current/llm-turn', undefined, signal)
+
+/** Probes a past LLM turn of the current game; refused (409) while an LLM turn runs. */
+export const probeTurn = (request: ProbeRequest, signal?: AbortSignal) =>
+  api<Probe>('POST', '/api/games/current/probes', request, signal)
+
+/** Every probe of the game, in the order asked, from its probe log. */
+export const getProbes = (gameId: string, signal?: AbortSignal) =>
+  api<Probe[]>('GET', `/api/games/${gameId}/probes`, undefined, signal)

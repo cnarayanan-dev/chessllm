@@ -426,6 +426,10 @@
     "black": 5.75
   },
   "running_s": null,
+  "prompt_template_ids": {
+    "white": "default-listed@7d131053",
+    "black": "default@deee1ac8"
+  },
   "evaluator": {
     "version": "material count",
     "search": {

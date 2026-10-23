@@ -1,18 +1,20 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
 import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, Eye, MessageSquareText, Scale, Undo2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import type { Attempt, GameState, LlmTurn, PromptMessage } from '@/api/types'
+import type { Attempt, GameState, LlmTurn } from '@/api/types'
+import { decisionOf, mono, prose, quiet, RESULT_NAMES, type Decision } from '@/components/turn/attempt'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
+import { Probes } from '@/components/turn/Probes'
+import { PromptMessages } from '@/components/turn/PromptMessages'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { shownGain } from '@/game/chaosGain'
 import { faceoff } from '@/game/wording'
+import { usePromptLab } from '@/settings/promptLab'
 
-type Decision = 'Thinking' | 'Reasoning'
 type Tab = 'decision' | 'prompt' | 'answer'
 
 // The tab last chosen, kept in this browser across turns, games and reloads.
@@ -30,6 +32,8 @@ type TurnPanelProps = {
   previewing?: boolean
   /** Shows the Legal counterpart on the board, or the Chaos move again: its move's button. */
   onPreview?: () => void
+  /** Why Try can't probe now (an LLM turn runs), shown on hover; undefined when it can. Only with Prompt lab on. */
+  tryBlocked?: string
 }
 
 /**
@@ -56,37 +60,12 @@ const thinks = (game: GameState, turn: LlmTurn) => {
   return side.player === 'llm' && side.thinking
 }
 
-/** The attempt's Thinking or Reasoning, by what its side produces; else why there is none, as a quiet line. */
-function decisionOf(kind: Decision, attempt: Attempt | undefined): { text: string; quiet: boolean } {
-  const text = kind === 'Thinking' ? attempt?.thinking : attempt?.reasoning
-  if (text) return { text, quiet: false }
-  const why = attempt?.error ? `It gave no answer, so there is no ${kind}.` : `Its reply has no ${kind}.`
-  return { text: why, quiet: true }
-}
-
-/** What each message of the Prompt is: the System prompt, the position, then per Retry the answer and the feedback. */
-function messageLabel(message: PromptMessage, index: number): string {
-  if (message.role === 'system') return 'System prompt'
-  if (message.role === 'assistant') return 'Answer'
-  return index <= 1 ? 'Position' : 'Retry feedback'
-}
-
 // What each tab holds, in its tooltip and aria-description.
 const TAB_MEANINGS: Record<Decision | Exclude<Tab, 'decision'>, string> = {
   Thinking: 'The internal reasoning the model produced before it answered.',
   Reasoning: 'The short explanation the LLM wrote in its answer, before its move.',
   prompt: 'Exactly what was sent to the LLM for this attempt.',
   answer: "The LLM's raw reply, and whether its move was legal.",
-}
-
-const RESULT_NAMES: Record<NonNullable<Attempt['result']>, string> = {
-  legal: 'Legal',
-  invalid: 'Invalid',
-  illegal: 'Illegal',
-  ambiguous: 'Ambiguous',
-  timeout: 'Timeout',
-  error: 'Error',
-  cut_off: 'Cut off',
 }
 
 /** The raw reply, its JSON laid out when it parses; else the error of an attempt that got none. */
@@ -103,15 +82,15 @@ function replyText(attempt: Attempt): string {
 // 1100px) drop their icons and shrink; each pane scrolls inside a fixed height.
 const trigger = 'gap-1 px-1 @max-[17rem]:text-xs @max-[17rem]:[&_svg]:hidden'
 const pane = 'max-h-80 overflow-y-auto'
-const quiet = 'text-sm text-muted-foreground'
-const mono = 'font-mono text-xs leading-relaxed whitespace-pre-wrap break-words'
-const prose = 'leading-relaxed whitespace-pre-wrap text-card-foreground'
 
-export function TurnPanel({ game, ply, live, previewing = false, onPreview }: TurnPanelProps) {
+export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryBlocked }: TurnPanelProps) {
   const turn = turnShown(game, ply, live)
   const move = turn && moveName(game, turn)
   const gain = turn ? shownGain(game, turn) : undefined
   const [tab, setTab] = useState(storedTab)
+  const promptLab = usePromptLab()
+  // The Prompt template picked to Try, kept from turn to turn; null for the game's own.
+  const [tried, setTried] = useState<string | null>(null)
   const choose = (chosen: Tab) => {
     localStorage.setItem(TAB_KEY, chosen)
     setTab(chosen)
@@ -135,6 +114,11 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview }: Tu
             kind={thinks(game, turn) ? 'Thinking' : 'Reasoning'}
             tab={tab}
             onTab={choose}
+            probes={
+              promptLab ? (
+                <Probes game={game} turn={turn} tryBlocked={tryBlocked} picked={tried} onPick={setTried} />
+              ) : undefined
+            }
           />
         ) : (
           <p className={quiet}>{faceoff(game) ? 'No LLM has moved yet.' : 'The LLM has not moved yet.'}</p>
@@ -236,9 +220,16 @@ function CounterpartButton({ name, chaosMove, previewing, onPreview }: Counterpa
   )
 }
 
-type TurnTabsProps = { turn: LlmTurn; kind: Decision; tab: Tab; onTab: (tab: Tab) => void }
+type TurnTabsProps = {
+  turn: LlmTurn
+  kind: Decision
+  tab: Tab
+  onTab: (tab: Tab) => void
+  /** With Prompt lab on, the Prompt row, Try and the turn's probes, at the top of the Prompt tab. */
+  probes?: ReactNode
+}
 
-function TurnTabs({ turn, kind, tab, onTab }: TurnTabsProps) {
+function TurnTabs({ turn, kind, tab, onTab, probes }: TurnTabsProps) {
   const count = turn.attempts.length
   const [number, setNumber] = useState(count) // the attempt shown, from 1
   const attempt = turn.attempts[number - 1]
@@ -289,42 +280,11 @@ function TurnTabs({ turn, kind, tab, onTab }: TurnTabsProps) {
         <p className={decision.quiet ? quiet : prose}>{decision.text}</p>
       </TabsContent>
       <TabsContent className={pane} value="prompt">
-        <Prompt messages={attempt?.prompt ?? null} />
+        {probes}
+        <PromptMessages messages={attempt?.prompt ?? null} />
       </TabsContent>
       <TabsContent className={pane} value="answer">{attempt && <Answer attempt={attempt} />}</TabsContent>
     </Tabs>
-  )
-}
-
-/** The messages sent, each under its label; the System prompt folded, as it is the same every turn. */
-function Prompt({ messages }: { messages: PromptMessage[] | null }) {
-  if (!messages) return <p className={quiet}>The Prompt was not recorded for this turn.</p>
-  return (
-    <ol className="flex flex-col gap-2">
-      {messages.map((message, index) => {
-        const label = messageLabel(message, index)
-        return (
-          <li key={index} className="rounded-md border">
-            {message.role === 'system' ? (
-              <Collapsible>
-                <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground">
-                  <ChevronRight aria-hidden="true" className="size-3 transition-transform group-data-[panel-open]:rotate-90" />
-                  {label}
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <p className={`${mono} border-t px-2 py-1.5`}>{message.content}</p>
-                </CollapsibleContent>
-              </Collapsible>
-            ) : (
-              <>
-                <p className="px-2 pt-1 text-xs font-medium text-muted-foreground">{label}</p>
-                <p className={`${mono} px-2 pb-1.5`}>{message.content}</p>
-              </>
-            )}
-          </li>
-        )
-      })}
-    </ol>
   )
 }
 

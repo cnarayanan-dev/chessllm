@@ -140,5 +140,8 @@
     "white": 17.75,
     "black": 3.2
   },
-  "running_s": null
+  "running_s": null,
+  "prompt_template_ids": {
+    "black": "default@deee1ac8"
+  }
 }

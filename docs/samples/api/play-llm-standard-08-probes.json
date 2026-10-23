@@ -1,0 +1,98 @@
+[
+  {
+    "game_id": "00000000000000000000000000000001",
+    "game_log": "2026-01-01T10-01-00_human_vs_llama3-8b.jsonl",
+    "ply": 4,
+    "color": "black",
+    "pgn": "1. f3 e5 2. g4",
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+    "side": {
+      "player": "llm",
+      "model": "llama3:8b",
+      "thinking": false,
+      "llm_constraints": "free",
+      "retry_feedback": "explained"
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40
+    },
+    "template": {
+      "id": "described@24ad892a",
+      "name": "Described",
+      "system_prompt": "You are playing chess as $color against a human playing $opponent.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: $example_pgn\nFEN: $example_fen\nAnswer: {\"move\": \"$example_move\"}\n",
+      "turn_template": "PGN: $moves\nFEN: $fen\n$description"
+    },
+    "attempt": {
+      "move": "Qh4#",
+      "san": "Qh4#",
+      "notation_slip": false,
+      "result": "legal",
+      "feedback_sent": null,
+      "raw_reply": "{\"reasoning\": \"The queen can't reach f2; Qh4 is mate.\", \"move\": \"Qh4#\"}",
+      "thinking": null,
+      "reasoning": "The queen can't reach f2; Qh4 is mate.",
+      "error": null,
+      "latency_s": 0.0,
+      "prompt": [
+        {
+          "role": "system",
+          "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+        },
+        {
+          "role": "user",
+          "content": "PGN: 1. f3 e5 2. g4\nFEN: rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2\nLast move: g4\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f3, g4, h2"
+        }
+      ]
+    },
+    "probed_at": "2026-01-01T10:01:45+00:00"
+  },
+  {
+    "game_id": "00000000000000000000000000000001",
+    "game_log": "2026-01-01T10-01-00_human_vs_llama3-8b.jsonl",
+    "ply": 4,
+    "color": "black",
+    "pgn": "1. f3 e5 2. g4",
+    "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2",
+    "side": {
+      "player": "llm",
+      "model": "llama3:8b",
+      "thinking": false,
+      "llm_constraints": "free",
+      "retry_feedback": "explained"
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_k": 40
+    },
+    "template": {
+      "id": "described@24ad892a",
+      "name": "Described",
+      "system_prompt": "You are playing chess as $color against a human playing $opponent.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: $example_pgn\nFEN: $example_fen\nAnswer: {\"move\": \"$example_move\"}\n",
+      "turn_template": "PGN: $moves\nFEN: $fen\n$description"
+    },
+    "attempt": {
+      "move": "Qh4",
+      "san": "Qh4#",
+      "notation_slip": true,
+      "result": "legal",
+      "feedback_sent": null,
+      "raw_reply": "{\"reasoning\": \"f3 and g4 left h4 open.\", \"move\": \"Qh4\"}",
+      "thinking": null,
+      "reasoning": "f3 and g4 left h4 open.",
+      "error": null,
+      "latency_s": 0.0,
+      "prompt": [
+        {
+          "role": "system",
+          "content": "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+        },
+        {
+          "role": "user",
+          "content": "PGN: 1. f3 e5 2. g4\nFEN: rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2\nLast move: g4\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f3, g4, h2"
+        }
+      ]
+    },
+    "probed_at": "2026-01-01T10:01:45+00:00"
+  }
+]

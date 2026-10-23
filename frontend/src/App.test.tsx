@@ -7,7 +7,7 @@ import type { Evaluation, GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { fakeBackend, later } from '@/test/fakeBackend'
 import { theBoard } from '@/test/fakeChessboard'
-import { aFaceoff, aGame, aTurn, afterE4, afterE5, chaosGame, E4, E5, judged, NF3, notJudged, plies, STOCKFISH } from '@/test/games'
+import { AFTER_NF3, aFaceoff, aGame, aTurn, afterE4, afterE5, chaosGame, E4, E5, judged, NF3, notJudged, plies, STOCKFISH } from '@/test/games'
 
 vi.mock('@/components/board/moveSound', () => ({ playMoveSound: vi.fn(), isMoveSoundOn: () => true, setMoveSoundOn: vi.fn() }))
 
@@ -294,6 +294,42 @@ test("the human's move lands at once, then the LLM's turn runs, timed in its str
   await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
   await waitFor(() => expect(board.input?.color).toBe('w'))
   expect(playMoveSound).toHaveBeenCalledTimes(2)
+})
+
+describe('with Prompt lab on', () => {
+  beforeEach(() => localStorage.setItem('chessllm.promptLab', 'on'))
+  // The Prompt lab switch and the Turn panel's tab, which the other tests expect at their defaults.
+  afterEach(() => ['chessllm.promptLab', 'chessllm.turnTab'].forEach((key) => localStorage.removeItem(key)))
+
+  test("Try in the Turn panel's Prompt tab is disabled while the LLM's turn runs", async () => {
+    const turn = later()
+    const afterNf3 = afterE5({ fen: AFTER_NF3, pgn: '1. e4 e5 2. Nf3', turn: 'black', plies: plies(E4, E5, NF3), running_s: null })
+    const library = [
+      { id: 'default@1', name: 'Default', system_prompt: '', turn_template: '$moves', fits: ['free'], default_for: ['free'] },
+    ]
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(afterE5()))
+      .on('GET /api/prompt-templates', Response.json(library))
+      .on('GET /api/games/game-1/probes', Response.json([]))
+      .on('POST /api/games/current/moves', Response.json(afterNf3))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+    renderApp()
+    await yourMove()
+    await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
+    const tryButton = () => within(turnPanel()).getByRole('button', { name: 'Try' })
+    await waitFor(() => expect(tryButton()).toBeEnabled())
+
+    await drop('g1', 'f3')
+
+    await llmMoving('black')
+    expect(tryButton()).toBeDisabled()
+    expect(tryButton()).toHaveAttribute('aria-description', 'An LLM turn is running. Try once it has ended.')
+
+    await act(async () => turn.resolve(Response.json(afterE5({ ...afterNf3, turn: 'white', running_s: 0 }))))
+
+    await yourMove()
+    expect(tryButton()).toBeEnabled()
+  })
 })
 
 test("a thinking LLM's move is timed too, and once its move lands its Thinking is shown", async () => {

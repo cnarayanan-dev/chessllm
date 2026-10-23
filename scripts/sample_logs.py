@@ -120,9 +120,13 @@ class Samples:
             directory.mkdir(parents=True)
         for number, game in enumerate(self.games, start=1):
             [log] = self.games_dir(game).glob("*.jsonl")
+            probe_logs = list(self.games_dir(game).glob("probes/*.jsonl"))
             for path in (log, log.with_suffix(".pgn")):
                 text = self.fixed(path.read_text(encoding="utf-8"), number)
                 (out / "game-logs" / f"{game}{path.suffix}").write_text(text, encoding="utf-8")
+            for path in probe_logs:  # the game's probe log, if it was probed
+                text = self.fixed(path.read_text(encoding="utf-8"), number)
+                (out / "game-logs" / f"{game}.probes.jsonl").write_text(text, encoding="utf-8")
         for name, data in (self.api | {"errors": self.errors}).items():
             text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
             (out / "api" / f"{name}.json").write_text(self.fixed(text), encoding="utf-8")
@@ -137,6 +141,8 @@ class Samples:
         text = re.sub(r'"started_at": "[^"]*"', f'"started_at": "2026-01-01T10:{number:02}:00.000000+00:00"', text)
         text = re.sub(r'"ended_at": "[^"]*"', f'"ended_at": "2026-01-01T10:{number:02}:30+00:00"', text)
         text = re.sub(r'"latency_s": [0-9.e+-]+', '"latency_s": 0.0', text)
+        text = re.sub(r'"probed_at": "[^"]*"', f'"probed_at": "2026-01-01T10:{number:02}:45+00:00"', text)
+        text = re.sub(r'"game_log": "[0-9T-]{19}_', f'"game_log": "2026-01-01T10-{number:02}-00_', text)
         return re.sub(r'\[Date "[^"]*"\]', '[Date "2026.01.01"]', text)
 
 
@@ -163,6 +169,17 @@ def play_llm_standard(samples: Samples) -> None:
     samples.response(f"{game}-06-current", client.get("/api/games/current"))
     samples.refused(client, "POST", "/api/games/current/moves", {"uci": "e2e4"})  # the game is over
     samples.refused(client, "POST", "/api/games/current/llm-turn")
+    # Two Probes of the illegal Qxf2's turn once the game is over, with the Described template: its probe log.
+    described = next(entry["id"] for entry in client.get("/api/prompt-templates").json() if entry["name"] == "Described")
+    llm.replies += [
+        reasoned("The queen can't reach f2; Qh4 is mate.", "Qh4#"),
+        reasoned("f3 and g4 left h4 open.", "Qh4"),  # a Notation slip: the mate is Qh4#
+    ]
+    probe = {"ply": 4, "color": "black", "prompt_template_id": described}
+    samples.response(f"{game}-07-probe", client.post("/api/games/current/probes", json=probe))
+    client.post("/api/games/current/probes", json=probe)
+    samples.response(f"{game}-08-probes", client.get(f"/api/games/{state['game_id']}/probes"))
+    samples.refused(client, "POST", "/api/games/current/probes", probe | {"ply": 3})  # the human's ply
 
 
 def llm_faceoff_chaos(samples: Samples) -> None:

@@ -26,3 +26,7 @@ export type ModelInfo = Schemas['ModelInfo']
 /** A Prompt template of the Prompt library, with the LLM constraints it fits and those it is the Default of. */
 export type PromptTemplateInfo = Schemas['PromptTemplateInfo']
 export type Color = GameState['turn']
+/** A Probe of a past LLM turn (CONTEXT.md): its position, the side's settings, the template and the attempt. */
+export type Probe = Schemas['Probe']
+/** What Try asks for: the turn, by its ply and colour, and the Prompt template, by its ID in the Prompt library. */
+export type ProbeRequest = Schemas['ProbeRequest']

@@ -89,6 +89,40 @@ test('with Prompt lab on, a side picked to play Described gets the piece list in
   await expect(panel(page)).toContainText('Your pieces (Black): King e8')
 })
 
+test('with Prompt lab on, Try probes the turn shown with the Prompt picked; the probes and their tally survive a reload', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('chessllm.promptLab', 'on'))
+  await playLlm(page, ['Qh4', 'e5', 'd5', 'Qh4']) // the turn: Qh4, illegal, then e5; the probes: d5, then Qh4
+  await clickMove(page, 'e2e4')
+  await expect(badge(page)).toHaveText('1… e5')
+  await tab(page, 'Prompt').click()
+
+  const picker = panel(page).getByRole('combobox', { name: 'Prompt to try' })
+  await expect(picker).toContainText('Default')
+  await picker.click()
+  await page.getByRole('option', { name: 'Described', exact: true }).click()
+  const tryButton = panel(page).getByRole('button', { name: 'Try' })
+  await tryButton.click()
+  const probes = panel(page).getByRole('list', { name: 'Probes' }).getByRole('listitem')
+  await expect(probes).toHaveCount(1)
+  await tryButton.click()
+
+  await expect(probes).toHaveCount(2)
+  await expect(probes.nth(0)).toContainText('d5')
+  await expect(probes.nth(1)).toContainText('Illegal')
+  await expect(panel(page).getByTestId('probe-tally')).toHaveText('Described: 1 of 2 legal')
+  await probes.nth(0).getByRole('button').click()
+  await expect(probes.nth(0)).toContainText('Reasoning for d5.')
+  await expect(probes.nth(0)).toContainText('Your pieces (Black): King e8')
+  await expect(page.locator('[data-testid="moves"]')).not.toContainText('d5') // the game is unchanged
+
+  await page.reload()
+  await tab(page, 'Prompt').click()
+  await expect(panel(page).getByTestId('probe-tally')).toHaveText('Described: 1 of 2 legal')
+  await expect(probes).toHaveCount(2)
+})
+
 test("after a Forfeit, the last attempt's Reasoning, marked as forfeited, and every attempt one step away", async ({
   page,
 }) => {

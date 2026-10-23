@@ -68,5 +68,8 @@
     "white": 0.0,
     "black": 0.0
   },
-  "running_s": 0.0
+  "running_s": 0.0,
+  "prompt_template_ids": {
+    "black": "default@deee1ac8"
+  }
 }

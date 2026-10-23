@@ -20,8 +20,10 @@ from chessllm.exceptions.engines import AnchorUnavailable, Maia2Unavailable, Sto
 from chessllm.exceptions.game import (  # noqa: E402
     InvalidSettings,
     NoGameStarted,
+    NoLlmTurn,
     RefusedAnchorTurn,
     RefusedLlmTurn,
+    RefusedProbe,
     RejectedHumanMove,
 )
 from chessllm.exceptions.llm import LlmTimeout  # noqa: E402
@@ -34,8 +36,10 @@ __all__ = [
     "LlmTimeout",
     "Maia2Unavailable",
     "NoGameStarted",
+    "NoLlmTurn",
     "RefusedAnchorTurn",
     "RefusedLlmTurn",
+    "RefusedProbe",
     "RejectedHumanMove",
     "StockfishUnavailable",
 ]

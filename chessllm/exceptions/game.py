@@ -34,3 +34,17 @@ class RefusedAnchorTurn(ChessLlmError):
     """An Anchor turn can't start: it isn't an Anchor's turn (not_anchor_turn), or the game is over (game_over)."""
 
     code = "not_anchor_turn"
+
+
+class RefusedProbe(ChessLlmError):
+    """A Probe can't be asked now: an LLM turn of the game is running (llm_turn_running), and a probe never runs
+    alongside a real turn."""
+
+    code = "llm_turn_running"
+
+
+class NoLlmTurn(ChessLlmError):
+    """The game has no LLM turn of that ply and colour to probe (no_llm_turn): it was a human's or an Anchor's ply,
+    or isn't played yet."""
+
+    code = "no_llm_turn"

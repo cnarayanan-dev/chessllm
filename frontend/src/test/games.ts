@@ -68,6 +68,7 @@ export function aGame(overrides: Partial<GameState> = {}): GameState {
     },
     time_used: { white: 0, black: 0 },
     running_s: 0,
+    prompt_template_ids: { black: 'default@1' },
     ...overrides,
   }
 }
@@ -255,6 +256,7 @@ export function aFaceoff(
       return evaluation ? { ...ply, evaluation } : ply
     }),
     settings: { ...aGame().settings, mode: 'llm_faceoff', white: llm, black: llm },
+    prompt_template_ids: { white: 'default@1', black: 'default@1' },
     evaluator: STOCKFISH,
     ...overrides,
   })
