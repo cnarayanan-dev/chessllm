@@ -36,7 +36,7 @@ from chessllm.game.sides import (
     TurnMemory,
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
-from chessllm.llm.models import CONTEXT_TOKENS, LLM_MODELS, load_sampling
+from chessllm.llm.models import LLM_MODELS, load_sampling
 
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
@@ -70,18 +70,6 @@ def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
         "chat_position (one conversation for the game, each turn adding its message), or chat_moves (one "
         "conversation, each turn adding only the opponent's last move)",
     )
-
-
-def warn_of_turn_memory(args: argparse.Namespace) -> None:
-    """Warn, before any game, that a conversation isn't trimmed to the model's context yet (#106): a long game can
-    outgrow it, and Ollama then cuts it silently. The attempts that may not have fit log context_may_be_cut."""
-    if args.turn_memory != "fresh":
-        print(
-            f"Warning: under Turn memory {args.turn_memory} a conversation is not yet trimmed to the "
-            f"{CONTEXT_TOKENS:,}-token context (#106). In a long game Ollama may cut its oldest messages silently; "
-            "each attempt that may not have fit logs context_may_be_cut: true.",
-            file=sys.stderr,
-        )
 
 
 def tool_set(value: str) -> frozenset[ToolName]:

@@ -71,6 +71,8 @@ LLM_MODELS = [
 
 # The cap on a forced answer, given when a Thinking budget runs out: the JSON move took 7-10 tokens in the spike.
 FORCED_ANSWER_TOKENS = 64
+# Closes the thinking handed back when a Thinking budget runs out, so the model gives its move (ADR 0007).
+BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
 # The context Ollama loads every model here with (`ollama ps`). A Thinking budget must fit in it with the prompt (up
 # to about 1,500 tokens late in a long game) and the forced answer, so at most 6,144, rounded down to a multiple of
 # 1,024; a budget smaller than the forced answer's cap can't hold an answer (ADR 0007).

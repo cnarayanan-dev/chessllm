@@ -4,27 +4,35 @@ over every turn; under chat_position and chat_moves it lasts the whole game, eac
 A conversation keeps every attempt's answer as the LLM sent it and the Retry feedback after it, illegal attempts
 included, but never the Thinking. Under Retry feedback repeat a rejected attempt is left out of it, so the next
 attempt is sent what the rejected one was. In a conversation each attempt records only the messages it added, and
-full_prompt rebuilds the whole Prompt of any attempt from the records (ADR 0009)."""
+full_prompt rebuilds the whole Prompt of any attempt from the records (ADR 0009).
 
+A conversation that outgrows the model's context is trimmed by us, never silently by Ollama: before each attempt
+the oldest whole earlier turns are dropped, every attempt and its feedback together, until it fits with room left
+for the reply. The System prompt and the turn being played always stay."""
+
+import math
 from collections.abc import Sequence
 
 from chessllm.core.types import Color
 from chessllm.game.llm_turn.prompt import fill_system_prompt
 from chessllm.game.records import Attempt, LlmTurn, PromptMessage
 from chessllm.game.sides import BenchmarkLlmSide, LlmSide, PromptTemplate, TurnMemory
-from chessllm.llm.models import CONTEXT_TOKENS
+from chessllm.llm.models import BUDGET_SENTENCE, CONTEXT_TOKENS, FORCED_ANSWER_TOKENS
 from chessllm.llm.players import Message
 
 # A conservative estimate of the characters per token of a conversation's text: fewer than the models average, so
-# the size it gives is never too small.
-CHARS_PER_TOKEN = 3
+# the size it gives is never too small. FEN and PGN tokenize densely: llama3:8b counted a chat_position turn's
+# message and answer at about 1.6 characters a token, and a chat_moves conversation at about 3, so 3 would be too
+# many.
+CHARS_PER_TOKEN = 1.5
 
 
 def reply_reserve(side: LlmSide) -> int:
-    """The tokens left in the context for a reply: the side's Thinking budget when it has one, otherwise about 4,096
-    with thinking on and 512 with it off."""
+    """The tokens left in the context for a reply: the side's Thinking budget when it has one, with room for the
+    forced answer's call should the budget run out (ADR 0007): its cap, and the sentence handed back with the
+    thinking. Otherwise about 4,096 with thinking on and 512 with it off."""
     if isinstance(side, BenchmarkLlmSide) and side.thinking_budget is not None:
-        return side.thinking_budget
+        return side.thinking_budget + FORCED_ANSWER_TOKENS + math.ceil(len(BUDGET_SENTENCE) / CHARS_PER_TOKEN)
     return 4096 if side.thinking else 512
 
 
@@ -44,6 +52,8 @@ class Conversation:
         self._earlier: list[list[Message]] = []  # each earlier turn the conversation holds, its answers included
         self._turn: list[Message] = []  # this turn's messages so far
         self._added: list[Message] = []  # what the attempt about to be sent adds to the conversation
+        # The messages of the last call whose prompt_tokens Ollama reported, each with its share of them.
+        self._measured: list[tuple[Message, float]] = []
 
     @property
     def kept(self) -> bool:
@@ -90,13 +100,41 @@ class Conversation:
         self._turn.append(Message("user", feedback))
         self._added = [self._turn[-1]]
 
-    def may_not_fit(self, reserve: int) -> bool:
-        """Whether the conversation to send may not fit the model's context with reserve tokens left for the reply.
-        Until a conversation is trimmed to fit (#106), Ollama would then cut its oldest messages silently, so the
-        attempt logs context_may_be_cut. Its size is estimated conservatively, at CHARS_PER_TOKEN; a fresh Prompt
-        always fits."""
-        size = sum(len(message.content) for message in self.messages()) / CHARS_PER_TOKEN
-        return self.kept and size + reserve > CONTEXT_TOKENS
+    def fit(self, reserve: int) -> bool:
+        """Drop the oldest whole earlier turns until the conversation to send fits the model's context with reserve
+        tokens left for the reply, and say whether it fits: it may not with no earlier turn left to drop, and then
+        Ollama may cut it. A fresh Prompt always fits.
+
+        Its size is the last call's prompt_tokens, as Ollama reported them (measured), plus the text added since,
+        estimated conservatively at CHARS_PER_TOKEN. A dropped turn takes its share of the tokens with it."""
+        if not self.kept:
+            return True
+        while self._size() + reserve > CONTEXT_TOKENS and self._earlier:
+            del self._earlier[0]
+        return self._size() + reserve <= CONTEXT_TOKENS
+
+    def measured(self, sent: list[Message], prompt_tokens: int | None) -> None:
+        """The prompt_tokens Ollama reported for the messages sent, which size the conversation from then on (fit).
+        A message measured by an earlier call keeps its share; those new since share the rest by their characters."""
+        if prompt_tokens is None:
+            return
+        shares = self._shares()
+        new = [message for message in sent if id(message) not in shares]
+        rest = max(0, prompt_tokens - sum(shares[id(message)] for message in sent if id(message) in shares))
+        characters = sum(len(message.content) for message in new) or 1
+        for message in new:
+            shares[id(message)] = rest * len(message.content) / characters
+        self._measured = [(message, shares[id(message)]) for message in sent]
+
+    def _size(self) -> float:
+        """The tokens of the conversation to send: each message's share of a call's prompt_tokens once measured,
+        before that its characters at CHARS_PER_TOKEN."""
+        shares = self._shares()
+        return sum(shares.get(id(message), len(message.content) / CHARS_PER_TOKEN) for message in self.messages())
+
+    def _shares(self) -> dict[int, float]:
+        """Each measured message's share of the last call's prompt_tokens, by the message's identity."""
+        return {id(message): tokens for message, tokens in self._measured}
 
     def drop_answer(self) -> None:
         """Leave the last answer out, under Retry feedback repeat: the next attempt is sent what this one was."""
@@ -109,14 +147,17 @@ def full_prompt(llm_turns: Sequence[LlmTurn], ply: int, attempt: int) -> list[Pr
     """The whole Prompt of an attempt (numbered from 1 in its turn) of the LLM turn at ply, rebuilt from the game's
     LLM turns, as the LLM received it. A fresh turn's attempt has it recorded whole. In a conversation it is the
     side's System prompt, the earlier turns the turn remembered, and this turn's attempts up to this one: what each
-    attempt added, and its answer when the conversation kept it (ADR 0009)."""
+    attempt added, and its answer when the conversation kept it (ADR 0009). The earlier turns are the turn's
+    remembered, or fewer from a retry that had to drop more of them to fit the context."""
     turn = next(turn for turn in llm_turns if turn.ply == ply)
     if turn.remembered is None:
         return list(turn.attempts[attempt - 1].prompt or [])
+    remembered = turn.held(attempt)
+    assert remembered is not None, "a turn of a conversation"
     side = [earlier for earlier in llm_turns if earlier.color == turn.color and earlier.ply <= ply]
     [system, *_] = side[0].attempts[0].prompt or []
     prompt = [system]
-    for earlier in side[len(side) - 1 - turn.remembered : -1]:
+    for earlier in side[len(side) - 1 - remembered : -1]:
         prompt += kept(earlier.attempts, ended=True)
     return prompt + kept(turn.attempts[:attempt], ended=False)
 

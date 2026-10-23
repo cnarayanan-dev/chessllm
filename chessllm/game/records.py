@@ -98,6 +98,9 @@ class Attempt(AttemptSummary):
     # The messages sent for this try; None in games from before it was kept. In a conversation kept by Turn memory
     # (its turn's remembered is set) only the messages it added, the whole Prompt rebuilt by full_prompt (ADR 0009).
     prompt: list[PromptMessage] | None = None
+    # Only on a retry whose conversation had to drop more of the earlier turns than its turn's first attempt, to fit
+    # the context: how many it still held (LlmTurn.remembered), so full_prompt can rebuild it.
+    remembered: int | None = Field(default=None, exclude_if=is_none)
 
     # Unannotated, as pydantic would take an annotated return type for the record's schema in the API description.
     @model_serializer(mode="wrap")
@@ -110,7 +113,7 @@ class Attempt(AttemptSummary):
         """The attempt as llm_attempt logs it (ADR 0004), unchanged since before the API gave the Reasoning a field
         of its own: with thinking off, the Reasoning is the attempt's thinking. The game's Rules may add to it
         (Rules.attempt_log_shape)."""
-        shape: dict[str, Any] = self.model_dump(mode="json", by_alias=True)
+        shape: dict[str, Any] = self.model_dump(mode="json", by_alias=True, exclude={"remembered"})
         reasoning = shape.pop("reasoning")
         if reasoning is not None:
             shape["thinking"] = reasoning
@@ -192,6 +195,17 @@ class LlmTurn(LlmTurnSummary):
     thinking: str | None  # the thinking of the last try that answered
     reasoning: str | None  # the Reasoning of the last try: the one played, or the last before a Forfeit
     legal_counterpart: LegalCounterpart | None = Field(default=None, exclude_if=is_none)
+
+    def own_remembered(self, held: int | None) -> int | None:
+        """The remembered an attempt of this turn sent with held earlier turns records as its own: only a retry's
+        that had to drop more of them than the turn's first attempt."""
+        return held if held != self.remembered else None
+
+    def held(self, attempt: int) -> int | None:
+        """How many earlier turns an attempt (numbered from 1) was sent: the turn's remembered, or fewer from a retry
+        that had to drop more of them. None for a fresh turn."""
+        own = [sent.remembered for sent in self.attempts[:attempt] if sent.remembered is not None]
+        return own[-1] if own else self.remembered
 
 
 class EvaluationEngine(BaseModel):

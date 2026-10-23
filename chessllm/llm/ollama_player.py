@@ -9,12 +9,9 @@ import ollama
 
 from chessllm.core.config import OLLAMA_REPLY_TIMEOUT_S
 from chessllm.core.types import Sampling
-from chessllm.llm.models import FORCED_ANSWER_TOKENS
+from chessllm.llm.models import BUDGET_SENTENCE, FORCED_ANSWER_TOKENS
 from chessllm.llm.players import LlmReply, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.exceptions import LlmTimeout
-
-# Closes the thinking handed back when a Thinking budget runs out, so the model gives its move (ADR 0007).
-BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
 
 
 def time_limit_s(budget: int | None, tokens_per_s: float | None) -> float:

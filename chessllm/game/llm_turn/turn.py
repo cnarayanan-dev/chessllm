@@ -153,8 +153,9 @@ class LlmTurns:
         # In a conversation the turn opens with its Chaos move report, if any; a fresh turn's position shows the board.
         report = chaos_move_report(plies, color) if conversation.kept else None
         conversation.start_turn(f"{report}\n{message}" if report is not None else message)
+        reserve = reply_reserve(side)
+        conversation.fit(reserve)
         remembered = conversation.remembered
-        logged_remembered = {"remembered": remembered} if remembered is not None else {}
         turn = LlmTurn(
             ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None, remembered=remembered
         )
@@ -164,15 +165,19 @@ class LlmTurns:
         for number in range(1, max_attempts + 1):
             if self._abandoned.is_set():
                 return TurnOutcome(turn)
+            # Trimmed to the context, the oldest turns dropped whole; the log says when even that left too little.
+            logged_context = {} if conversation.fit(reserve) else {"context_may_be_cut": True}
             # The Prompt as sent for this attempt, or in a conversation what it added (ADR 0009).
             prompt = conversation.record()
             messages = conversation.messages()
-            # Until a conversation is trimmed to the context (#106), the log says when Ollama may have cut it.
-            logged_context = {"context_may_be_cut": True} if conversation.may_not_fit(reply_reserve(side)) else {}
+            # A retry that had to drop more turns than its turn's first attempt records how many it still held.
+            held = conversation.remembered
+            logged_remembered = {"remembered": held} if held is not None else {}
+            own = {"remembered": turn.own_remembered(held)}
             try:
                 reply = player.reply(messages, allowed_moves)
             except Exception as error:
-                attempt = no_answer(model, error, prompt, feedback)
+                attempt = no_answer(model, error, prompt, feedback).model_copy(update=own)
                 turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
@@ -181,6 +186,7 @@ class LlmTurns:
                 )
                 turn.reasoning = None  # the turn's Reasoning is its last attempt's: none without an answer
                 break
+            conversation.measured(messages, reply.prompt_tokens)
             result: AttemptResult
             written, move, result = judge(board, reply.raw)
             if result == "invalid" and reply.forced and reply.stop_reason == "length":
@@ -188,6 +194,7 @@ class LlmTurns:
             resolution = self._rules.resolve(board, written, result)
             recorded = resolution.record() if resolution is not None else None
             attempt = answered(board, reply, written, move, result, side.thinking, prompt, feedback, recorded)
+            attempt = attempt.model_copy(update=own)
             turn.attempts.append(attempt)
             chaos = move is None and resolution is not None and resolution.kind in ("chaos", "spawn")
             last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits

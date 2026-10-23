@@ -12,7 +12,8 @@ from chessllm.game.records import Attempt, LlmTurn
 def logged_llm_turns(events: Iterable[dict[str, Any]]) -> list[LlmTurn]:
     """The LLM turns of a version 2 game log, in the order played, from its llm_attempt events: each attempt as its
     record has it, the log's thinking being the Reasoning when the side's thinking is off (Attempt.log_shape), and
-    each turn's Time used and remembered as its attempts log them. Legal counterparts are left out."""
+    each turn's Time used and remembered as its attempts log them: the turn's as its first attempt logs it, and a
+    retry's own when it held fewer earlier turns. Legal counterparts are left out."""
     thinks: dict[str, bool] = {}
     turns: dict[int, LlmTurn] = {}
     for event in events:
@@ -21,7 +22,7 @@ def logged_llm_turns(events: Iterable[dict[str, Any]]) -> list[LlmTurn]:
         if event["type"] != "llm_attempt":
             continue
         thinking, reasoning = (event["thinking"], None) if thinks[event["color"]] else (None, event["thinking"])
-        attempt = Attempt.model_validate(event | {"thinking": thinking, "reasoning": reasoning})
+        attempt = Attempt.model_validate(event | {"thinking": thinking, "reasoning": reasoning, "remembered": None})
         turn = turns.setdefault(
             event["ply"],
             LlmTurn(
@@ -29,6 +30,7 @@ def logged_llm_turns(events: Iterable[dict[str, Any]]) -> list[LlmTurn]:
                 remembered=event.get("remembered"),
             ),
         )
+        attempt.remembered = turn.own_remembered(event.get("remembered"))
         turn.attempts.append(attempt)
         turn.reasoning = reasoning  # the last attempt's: none without an answer
         if attempt.raw_reply is not None:

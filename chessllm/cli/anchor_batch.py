@@ -40,7 +40,6 @@ from chessllm.cli.common import (
     default_evaluator,
     default_move_model,
     fail,
-    warn_of_turn_memory,
 )
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.anchors import Anchor
@@ -111,7 +110,6 @@ def main(
         settings = anchor_match_settings(args, "white", engine_side, sampling_file)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
-    warn_of_turn_memory(args)
     if anchor_for is None:
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
     try:
