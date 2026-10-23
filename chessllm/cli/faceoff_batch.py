@@ -27,7 +27,6 @@ from chessllm.cli.common import (
     fail,
     prompt_template,
     tool_set,
-    warn_of_turn_memory,
 )
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
@@ -205,7 +204,6 @@ def main(
         faceoff_settings(args, first, second, sampling_file)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
-    warn_of_turn_memory(args)
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
     scores = {first: 0.0, second: 0.0}
     log: GameLog | None = None

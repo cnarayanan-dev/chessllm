@@ -101,7 +101,6 @@ def test_under_fresh_every_turn_starts_a_new_conversation_and_records_its_whole_
     assert all(turn.remembered is None for turn in black_turns)
     logged = [event for event in events(tmp_path / "games") if event["type"] == "llm_attempt"]
     assert all("remembered" not in event for event in logged if event["color"] == "black")
-    assert all("context_may_be_cut" not in event for event in logged)
 
 
 def test_in_a_conversation_each_attempt_records_only_the_messages_it_added(tmp_path):
@@ -151,16 +150,6 @@ def test_under_retry_feedback_repeat_a_rejected_attempt_is_left_out_of_the_conve
     assert (rejected_too.prompt, played.prompt) == ([], [])
 
 
-def test_an_attempt_whose_conversation_may_not_fit_the_context_logs_that_it_may_have_been_cut(tmp_path):
-    long_reply = Raw(json.dumps({"reasoning": "x" * 25_000, "move": "f3"}))
-    white = ScriptedPlayer([long_reply, "g4"])
-
-    faceoff(tmp_path, LLAMA_CHAT, LlmSide(), {"white": white, "black": ScriptedPlayer(["e5", "Qh4#"])})
-
-    logged = [event for event in events(tmp_path / "games") if event["type"] == "llm_attempt"]
-    assert [event.get("context_may_be_cut") for event in logged if event["color"] == "white"] == [None, True]
-
-
 def test_a_conversations_system_prompt_is_filled_in_once_from_the_template_read_at_game_start(tmp_path, monkeypatch):
     prompt_file = tmp_path / "system.txt"
     prompt_file.write_text("You play $color. The first instructions.", encoding="utf-8")
@@ -179,7 +168,7 @@ def test_a_conversations_system_prompt_is_filled_in_once_from_the_template_read_
     assert [prompt[0].content for prompt in black.prompts] == ["You play Black. The first instructions."] * 2
 
 
-def test_a_faceoff_batch_with_turn_memory_warns_logs_it_and_is_its_own_player_configuration(tmp_path, capsys):
+def test_a_faceoff_batch_with_turn_memory_logs_it_and_is_its_own_player_configuration(tmp_path, capsys):
     player = ScriptedPlayer(["f3", "e5", "g4", "Qh4#"])
 
     code = faceoff_batch(
@@ -190,7 +179,7 @@ def test_a_faceoff_batch_with_turn_memory_warns_logs_it_and_is_its_own_player_co
     )
 
     assert code == 0
-    assert "not yet trimmed" in capsys.readouterr().err
+    assert capsys.readouterr().err == ""  # no warning: the conversation is trimmed to the context
     start, *_ = events(tmp_path)
     assert start["white"]["turn_memory"] == start["black"]["turn_memory"] == "chat_position"
     assert [len(prompt) for prompt in player.prompts] == [2, 2, 4, 4]  # each side's second turn continues its first

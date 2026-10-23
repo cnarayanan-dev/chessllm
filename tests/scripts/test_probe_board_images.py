@@ -107,7 +107,7 @@ def test_a_move_is_asked_like_the_game_does_with_the_image_on_the_last_message_a
     row = ask_move(chat, "gemma3:12b", p, "text+image", {})
 
     [request] = calls
-    assert request["think"] is False and request["options"] is None
+    assert request["think"] is False and request["options"] == {"num_ctx": 8192}
     assert list(request["format"]["properties"]) == ["reasoning", "move"]
     assert "images" not in request["messages"][0]
     assert png_size(request["messages"][-1]["images"][0]) == (512, 512)

@@ -98,6 +98,10 @@ class Attempt(AttemptSummary):
     # The messages sent for this try; None in games from before it was kept. In a conversation kept by Turn memory
     # (its turn's remembered is set) only the messages it added, the whole Prompt rebuilt by full_prompt (ADR 0009).
     prompt: list[PromptMessage] | None = None
+    # Only when the conversation was trimmed to the context within its turn, after the turn's first attempt: how many
+    # of the side's earlier turns this attempt's Prompt still held, fewer than its turn's remembered. Its llm_attempt
+    # logs it as the turn's remembered (log_shape leaves it out).
+    remembered: int | None = Field(default=None, exclude_if=is_none)
 
     # Unannotated, as pydantic would take an annotated return type for the record's schema in the API description.
     @model_serializer(mode="wrap")
@@ -110,7 +114,7 @@ class Attempt(AttemptSummary):
         """The attempt as llm_attempt logs it (ADR 0004), unchanged since before the API gave the Reasoning a field
         of its own: with thinking off, the Reasoning is the attempt's thinking. The game's Rules may add to it
         (Rules.attempt_log_shape)."""
-        shape: dict[str, Any] = self.model_dump(mode="json", by_alias=True)
+        shape: dict[str, Any] = self.model_dump(mode="json", by_alias=True, exclude={"remembered"})
         reasoning = shape.pop("reasoning")
         if reasoning is not None:
             shape["thinking"] = reasoning
@@ -178,8 +182,9 @@ class LlmTurnSummary(BaseModel):
     legal_counterpart: LegalCounterpartSummary | None = Field(default=None, exclude_if=is_none)
     # Only for a turn that ended in a chaos move, with an evaluator, once the positions it needs are judged.
     chaos_gain: ChaosGain | None = Field(default=None, exclude_if=is_none)
-    # Only in a conversation kept by Turn memory: how many of the side's earlier turns its Prompt still held, so
-    # full_prompt can rebuild it (ADR 0009). Each of its llm_attempts logs it.
+    # Only in a conversation kept by Turn memory: how many of the side's earlier turns its first attempt's Prompt
+    # still held once the oldest were dropped to fit the context, so full_prompt can rebuild it (ADR 0009). Each of
+    # its llm_attempts logs it, or the attempt's own when the conversation was trimmed again within the turn.
     remembered: int | None = Field(default=None, exclude_if=is_none)
 
     def log_shape(self) -> dict[str, Any]:

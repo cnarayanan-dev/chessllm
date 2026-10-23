@@ -17,7 +17,6 @@ from chessllm.cli.common import (
     anchor_match_settings,
     default_anchor,
     fail,
-    warn_of_turn_memory,
 )
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.anchors import RANDOM_MOVER_SKILL, Anchor
@@ -65,7 +64,6 @@ def main(
         settings = anchor_match_settings(args, llm_color, args.skill, sampling_file, args.seed)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
-    warn_of_turn_memory(args)
     anchor_color = opponent(llm_color)
     anchor_side = settings.anchor_sides()[anchor_color]  # with the random mover's seed, as game_start logs it
     if anchor_for is None:

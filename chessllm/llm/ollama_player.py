@@ -9,13 +9,9 @@ import ollama
 
 from chessllm.core.config import OLLAMA_REPLY_TIMEOUT_S
 from chessllm.core.types import Sampling
-from chessllm.llm.models import FORCED_ANSWER_TOKENS
+from chessllm.llm.models import BUDGET_SENTENCE, CONTEXT_TOKENS, FORCED_ANSWER_TOKENS
 from chessllm.llm.players import LlmReply, Message, MoveAnswer, ReasonedMoveAnswer
 from chessllm.exceptions import LlmTimeout
-
-# Closes the thinking handed back when a Thinking budget runs out, so the model gives its move (ADR 0007).
-BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
-
 
 def time_limit_s(budget: int | None, tokens_per_s: float | None) -> float:
     """The per-call time limit of a side with this Thinking budget, generating at tokens_per_s (ADR 0007): the
@@ -99,14 +95,15 @@ class OllamaPlayer:
         )
 
     def _call(self, messages: list[dict[str, str]], schema: dict[str, Any], cap: int | None) -> ollama.ChatResponse:
-        """One chat call, its generation capped at cap tokens when given."""
+        """One chat call in the CONTEXT_TOKENS context, its generation capped at cap tokens when given."""
+        capped = {} if cap is None else {"num_predict": cap}
         try:
             return self._chat(
                 model=self._model,
                 messages=messages,
                 think=self._thinking,
                 format=schema,
-                options=self._sampling if cap is None else (self._sampling or {}) | {"num_predict": cap},
+                options=(self._sampling or {}) | {"num_ctx": CONTEXT_TOKENS} | capped,
             )
         except httpx.TimeoutException:
             raise LlmTimeout(self.timeout_s) from None

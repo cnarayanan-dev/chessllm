@@ -132,7 +132,7 @@ def test_listed_enforced_shows_and_holds_the_legal_moves_and_scores_the_move_by_
     assert sorted(first["format"]["properties"]["move"]["enum"]) == legal
     assert first["messages"][0]["content"] == system_prompt("black", LISTED_SYSTEM_PROMPT_FILE)
     assert first["messages"][1]["content"].endswith(f"Legal moves: {' '.join(listed_moves(AFTER_E4))}")
-    assert first["think"] is True and first["options"] == {"num_predict": 512}
+    assert first["think"] is True and first["options"] == {"num_ctx": 8192, "num_predict": 512}
     assert forced["format"] == first["format"]
     assert row["latency_s"] >= 0
     assert row | {"latency_s": 0} == {
@@ -164,7 +164,7 @@ def test_free_shows_no_legal_moves_and_an_illegal_answer_gets_no_centipawn_loss(
     [request] = calls
     assert "enum" not in request["format"]["properties"]["move"]
     assert "Legal moves" not in request["messages"][1]["content"]
-    assert request["think"] is False and request["options"] == {"temperature": 0.7}
+    assert request["think"] is False and request["options"] == {"temperature": 0.7, "num_ctx": 8192}
     assert (row["result"], row["move"], row["centipawn_loss"], row["forced"]) == ("illegal", "Ke2", None, False)
     assert (row["level"], row["budget"], row["thinking_tokens"], row["answer_tokens"]) == (False, None, 0, 40)
     assert evaluator.asked == []

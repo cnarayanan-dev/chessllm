@@ -161,8 +161,9 @@ class LlmTurns:
             message = turn_message(self._template, position)
         self._plies_seen = len(plies)
         conversation.start_turn(message)
+        reserve = reply_reserve(side)  # the room left in the context for the reply
+        conversation.fit(reserve)
         remembered = conversation.remembered
-        logged_remembered = {"remembered": remembered} if remembered is not None else {}
         turn = LlmTurn(
             ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None, remembered=remembered
         )
@@ -172,15 +173,20 @@ class LlmTurns:
         for number in range(1, max_attempts + 1):
             if self._abandoned.is_set():
                 return TurnOutcome(turn)
-            # The Prompt as sent for this attempt, or in a conversation what it added (ADR 0009).
+            # The Prompt as sent for this attempt, or in a conversation what it added (ADR 0009), trimmed to the
+            # context first: a Retry can outgrow it too, and its attempt then records what it still remembered.
+            fits = conversation.fit(reserve)
+            # Should the System prompt and this turn alone not fit, Ollama may cut them: never silently.
+            logged_context = {} if fits else {"context_may_be_cut": True}
             prompt = conversation.record()
             messages = conversation.messages()
-            # Until a conversation is trimmed to the context (#106), the log says when Ollama may have cut it.
-            logged_context = {"context_may_be_cut": True} if conversation.may_not_fit(reply_reserve(side)) else {}
+            trimmed = conversation.remembered if conversation.remembered != remembered else None
+            logged_remembered = {"remembered": conversation.remembered} if remembered is not None else {}
             try:
                 reply = player.reply(messages, allowed_moves)
             except Exception as error:
                 attempt = no_answer(model, error, prompt, feedback)
+                attempt.remembered = trimmed
                 turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
@@ -196,6 +202,7 @@ class LlmTurns:
             resolution = self._rules.resolve(board, written, result)
             recorded = resolution.record() if resolution is not None else None
             attempt = answered(board, reply, written, move, result, side.thinking, prompt, feedback, recorded)
+            attempt.remembered = trimmed
             turn.attempts.append(attempt)
             chaos = move is None and resolution is not None and resolution.kind in ("chaos", "spawn")
             last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits
@@ -204,7 +211,7 @@ class LlmTurns:
                 **self._rules.attempt_log_shape(attempt.log_shape()), **logged_remembered, **logged_context,
                 **token_accounting(reply), **(self._ended(turn, started) if last else {}),
             )
-            conversation.answered(reply.raw)
+            conversation.answered(reply.raw, reply.prompt_tokens)
             turn.thinking, turn.reasoning = attempt.thinking, attempt.reasoning
             if move is not None:
                 if illegal_in_turn:

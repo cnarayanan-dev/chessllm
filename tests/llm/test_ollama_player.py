@@ -76,7 +76,7 @@ def test_the_default_time_limit_is_five_minutes():
     assert OllamaPlayer("qwen3.5:9b", chat=lambda **request: None).timeout_s == 300
 
 
-def test_the_adapter_sends_the_sampling_options():
+def test_the_adapter_sends_the_sampling_options_and_the_context_size():
     calls = []
 
     def chat(**request):
@@ -86,7 +86,7 @@ def test_the_adapter_sends_the_sampling_options():
     OllamaPlayer("qwen3.5:9b", chat=chat, sampling={"temperature": 0.2}).reply([Message("user", "PGN: 1. e4")])
     OllamaPlayer("qwen3.5:9b", chat=chat).reply([Message("user", "PGN: 1. e4")])
 
-    assert [request["options"] for request in calls] == [{"temperature": 0.2}, None]
+    assert [request["options"] for request in calls] == [{"temperature": 0.2, "num_ctx": 8192}, {"num_ctx": 8192}]
 
 
 @pytest.mark.parametrize("thinking", [True, False])
@@ -208,7 +208,7 @@ def test_a_budgeted_reply_that_stops_normally_makes_one_call_capped_at_the_budge
     reply = player.reply(TURN, allowed_moves=["e5", "Nf6"])
 
     [request] = calls
-    assert request["options"] == {"temperature": 0.6, "num_predict": 1024}
+    assert request["options"] == {"temperature": 0.6, "num_ctx": 8192, "num_predict": 1024}
     assert (reply.raw, reply.forced, reply.stop_reason) == ('{"move": "e5"}', False, "stop")
 
 
@@ -230,7 +230,7 @@ def test_a_reply_cut_while_thinking_is_forced_in_one_more_call_with_the_thinking
     assert forced["messages"] == first["messages"] + [
         {"role": "assistant", "thinking": "Nf6 develops, but" + BUDGET_SENTENCE, "content": " "}
     ]
-    assert forced["options"] == {"temperature": 0.6, "num_predict": 64}
+    assert forced["options"] == {"temperature": 0.6, "num_ctx": 8192, "num_predict": 64}
     assert (reply.raw, reply.thinking, reply.forced) == (' {"move": "Nf6"}', "Nf6 develops, but", True)
     # All of the first call was thinking; the answer is the forced call's; the prompt is the turn's, the first call's.
     assert (reply.thinking_tokens, reply.answer_tokens, reply.prompt_tokens) == (1024, 8, 400)
@@ -263,11 +263,12 @@ def test_gemma4_cut_while_thinking_is_forced_by_the_same_chat_route_under_the_sa
     reply = OllamaPlayer("gemma4:26b", chat=chat, budget=256).reply(TURN, allowed_moves=["Bxf7+", "Bb3", "d3"])
 
     first, forced = calls  # exactly one forced-answer call
-    assert (first["model"], first["think"], first["options"]) == ("gemma4:26b", True, {"num_predict": 256})
+    assert (first["model"], first["think"]) == ("gemma4:26b", True)
+    assert first["options"] == {"num_ctx": 8192, "num_predict": 256}
     assert (forced["model"], forced["think"], forced["format"]) == ("gemma4:26b", True, first["format"])
     assert forced["format"]["properties"]["move"]["enum"] == ["Bxf7+", "Bb3", "d3"]
     assert forced["messages"] == first["messages"] + [
         {"role": "assistant", "thinking": "Bxf7+ wins a pawn, but" + BUDGET_SENTENCE, "content": " "}
     ]
-    assert forced["options"] == {"num_predict": 64}
+    assert forced["options"] == {"num_ctx": 8192, "num_predict": 64}
     assert (reply.raw, reply.forced, reply.thinking_tokens, reply.answer_tokens) == ('{"move": "Bb3"}', True, 256, 7)
