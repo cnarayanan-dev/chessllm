@@ -169,6 +169,18 @@ def test_a_later_batch_extends_the_configurations_games_where_the_ladder_left_of
     assert "Going on from 3 earlier Anchor matches" in capsys.readouterr().out
 
 
+def test_a_batch_with_tools_has_a_ladder_of_its_own(batch, tmp_path):
+    thinking = ["--model", "qwen3.5:9b", "--thinking"]
+    batch(["win", "win"], "--games", "2", *thinking)
+
+    code, _ = batch(["win", "win"], "--games", "2", *thinking, "--tools", "board")
+
+    assert code == 0
+    assert [skill for skill, *_ in games(tmp_path / "games")] == [1, 1, 1, 1]
+    sides = [start[color] for start, *_ in logs(tmp_path / "games") for color in ("white", "black")]
+    assert [side["tools"] for side in sides if "tools" in side] == [["board"], ["board"]]
+
+
 def test_an_unfinished_game_is_not_part_of_the_history_and_skill_overrides_where_a_batch_starts(batch, tmp_path):
     batch(["win", "win", "interrupted"], "--games", "3")
 

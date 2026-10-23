@@ -21,7 +21,7 @@ from chessllm.core.types import COLORS, Color, RulesKey, Sampling, opponent, sco
 from chessllm.game.modes import mode_named
 from chessllm.game.rules import rules_named
 from chessllm.game.settings import Settings
-from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, RetryFeedback, TurnMemory
+from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, RetryFeedback, ToolName, TurnMemory
 from chessllm.analytics.move_quality import (
     ConfigurationMoves,
     MoveQuality,
@@ -74,16 +74,22 @@ class PlayerConfiguration(BaseModel):
     thinking_level: SkipJsonSchema[str | None] = Field(None, exclude=True)
     # The Thinking budget in tokens, None for none: benchmark only like the level, and kept out of the API the same way.
     thinking_budget: SkipJsonSchema[int | None] = Field(None, exclude=True)
+    # The Tools, sorted, and their Tool-call cap; empty and None for no Tools. Benchmark only and kept out of the API
+    # the same way (ADR 0011).
+    tools: SkipJsonSchema[tuple[ToolName, ...]] = Field((), exclude=True)
+    tool_call_cap: SkipJsonSchema[int | None] = Field(None, exclude=True)
 
     def id(self) -> str:
         """A short fingerprint of the settings, the same for the same settings on every request. The default
-        position and Turn memory, no Thinking level and no Thinking budget are left out, so configurations from
-        before those settings keep their id."""
-        settings = self.model_dump()  # without the default position, the Thinking level or the Thinking budget
+        position and Turn memory, no Thinking level, no Thinking budget and no Tools are left out, so configurations
+        from before those settings keep their id."""
+        settings = self.model_dump()  # without the default position, the Thinking level, budget or Tools
         if self.thinking_level is not None:
             settings["thinking_level"] = self.thinking_level
         if self.thinking_budget is not None:
             settings["thinking_budget"] = self.thinking_budget
+        if self.tools:
+            settings["tools"], settings["tool_call_cap"] = list(self.tools), self.tool_call_cap
         canonical = json.dumps(settings, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
@@ -343,6 +349,8 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         turn_memory=side.get("turn_memory"),
         thinking_level=side.get("thinking_level"),
         thinking_budget=side.get("thinking_budget"),
+        tools=tuple(sorted(side.get("tools", ()))),
+        tool_call_cap=side.get("tool_call_cap"),
     )
 
 
@@ -373,6 +381,8 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         turn_memory=side.turn_memory,
         thinking_level=side.thinking_level if isinstance(side, BenchmarkLlmSide) else None,
         thinking_budget=side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None,
+        tools=tuple(sorted(side.tools)) if isinstance(side, BenchmarkLlmSide) else (),
+        tool_call_cap=side.tool_call_cap if isinstance(side, BenchmarkLlmSide) and side.tools else None,
     )
 
 

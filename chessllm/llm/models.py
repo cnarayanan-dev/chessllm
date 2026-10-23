@@ -38,6 +38,9 @@ class LlmModel:
     # A conservative generation speed in tokens per second on this machine, from which a Thinking budget's time
     # limit is derived (ADR 0007). None for a model that can't think, which can't have a budget.
     tokens_per_s: float | None = None
+    # Whether it can call tools natively, the "tools" capability `ollama show` lists for it: only then may it have
+    # Tools (ADR 0011). Hand-set, like thinking_values.
+    tools: bool = False
 
     @property
     def thinking(self) -> bool:
@@ -53,15 +56,17 @@ class LlmModel:
 # The models offered in the New game sheet, with the thinking values `ollama show` lists for each under Ollama
 # 0.40.0, checked on 2026-10-20 (and their capabilities on 2026-10-19 against the Ollama library:
 # ollama.com/library/qwen3.5, ollama.com/library/llama3, ollama.com/library/gemma3). The thinking models' speeds are
-# the low end of those measured on 2026-10-20 (docs/research/thinking-budget.md, "Verified").
+# the low end of those measured on 2026-10-20 (docs/research/thinking-budget.md, "Verified"). The thinking models
+# are also the ones with the "tools" capability; Llama 3 and Gemma 3 have neither (`ollama show`, 2026-10-23).
 LLM_MODELS = [
-    LlmModel("qwen3.5:9b", (False, True), tokens_per_s=20),  # Qwen 3.5, 9.7B parameters; thinking on by default
+    # Qwen 3.5, 9.7B parameters; thinking on by default
+    LlmModel("qwen3.5:9b", (False, True), tokens_per_s=20, tools=True),
     # Qwen 3.8, 27.8B parameters. Thinking on means Ollama's default level, medium.
-    LlmModel("qwen3.8:latest", (False, "low", "medium", "xhigh"), tokens_per_s=18),
+    LlmModel("qwen3.8:latest", (False, "low", "medium", "xhigh"), tokens_per_s=18, tools=True),
     LlmModel("llama3:8b"),  # Llama 3, 8B parameters
     LlmModel("gemma3:12b"),  # Gemma 3, 11.8B parameters
     # Gemma 4, 26.2B parameters (a 16 GB nvfp4 build). Thinking on by default, so the player must always send it.
-    LlmModel("gemma4:26b", (False, True), tokens_per_s=36),
+    LlmModel("gemma4:26b", (False, True), tokens_per_s=36, tools=True),
 ]
 
 # The cap on a forced answer, given when a Thinking budget runs out: the JSON move took 7-10 tokens in the spike.

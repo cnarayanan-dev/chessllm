@@ -8,11 +8,13 @@ from chessllm.exceptions import InvalidSettings
 from chessllm.game.llm_turn.prompt import check_prompt_template, check_turn_memory, side_template
 from chessllm.game.modes import MODES, Mode
 from chessllm.game.rules import RULES, Rules
-from chessllm.game.sides import AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side
+from chessllm.game.sides import LISTED, AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side
 from chessllm.llm.models import CONTEXT_TOKENS, THINKING_BUDGET_RANGE, LlmModel
 
 # How many illegal moves an LLM may make in one turn before it forfeits: one attempt, the rest retries.
 MAX_ATTEMPTS_RANGE = range(1, 26)
+# How many tool calls an LLM with Tools may make in one attempt, its Tool-call cap (ADR 0011).
+TOOL_CALL_CAP_RANGE = range(1, 26)
 
 
 @dataclass(frozen=True)
@@ -101,9 +103,35 @@ class Settings:
                     raise InvalidSettings(f"{of_tokens}, too many for its {context}: at most {high}")
                 if model.tokens_per_s is None:
                     raise InvalidSettings(f"{has_budget}, but no measured speed to set its time limit from")
+            if isinstance(side, BenchmarkLlmSide) and side.tools:
+                self._check_tools(color, side, model)
             rules.check_llm(color, side)
             try:
                 check_prompt_template(side_template(side), side.llm_constraints)
                 check_turn_memory(side_template(side), side)
             except InvalidSettings as refused:
                 raise InvalidSettings(f"{side.model} ({color}): {refused}", code=refused.code) from None
+
+    def _check_tools(self, color: Color, side: BenchmarkLlmSide, model: LlmModel) -> None:
+        """Raises InvalidSettings if the side can't have its Tools: v1 allows them only for a model that calls tools
+        natively, thinking on with no Thinking budget, under Free or Blind enforced, Standard rules and fresh Turn
+        memory (ADR 0011)."""
+        player = f"{side.model} ({color})"
+        has_tools = f"{player} has Tools, so"
+        if not model.tools:
+            raise InvalidSettings(f"{player} cannot call tools natively, so it can't have Tools")
+        if not side.thinking:
+            raise InvalidSettings(f"{has_tools} thinking must be on")
+        if side.llm_constraints in LISTED:
+            raise InvalidSettings(
+                f"{has_tools} its LLM constraints must be free or blind_enforced, not {side.llm_constraints}"
+            )
+        if self.rules != "standard":
+            raise InvalidSettings(f"{has_tools} it must play under Standard rules")
+        if side.turn_memory != "fresh":
+            raise InvalidSettings(f"{has_tools} its Turn memory must be fresh, not {side.turn_memory}")
+        if side.thinking_budget is not None:
+            raise InvalidSettings(f"{has_tools} it can't have a Thinking budget")
+        if side.tool_call_cap not in TOOL_CALL_CAP_RANGE:
+            low, high = TOOL_CALL_CAP_RANGE[0], TOOL_CALL_CAP_RANGE[-1]
+            raise InvalidSettings(f"{player} has a Tool-call cap of {side.tool_call_cap}, not {low}-{high}")

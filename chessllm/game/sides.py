@@ -1,7 +1,7 @@
 """Who plays a side of a game: a human, an LLM with the settings it plays under, or an Anchor."""
 
 from dataclasses import asdict, dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field
 from pydantic.json_schema import SkipJsonSchema
@@ -16,6 +16,11 @@ LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
 # the default), chat_position (one conversation, each turn adding its message as a fresh turn has it) or chat_moves
 # (one conversation, each turn adding only the opponent's last move, from its own default Prompt templates).
 TurnMemory = Literal["fresh", "chat_position", "chat_moves"]
+# The Tools an LLM side may have (ADR 0011), each answering about the current position: board (a diagram, the FEN,
+# whose move it is, castling rights, en passant), move_history (the PGN), legal_moves (in random order) and material.
+ToolName = Literal["board", "move_history", "legal_moves", "material"]
+TOOL_NAMES: tuple[ToolName, ...] = get_args(ToolName)
+ALL_TOOLS: frozenset[ToolName] = frozenset(TOOL_NAMES)
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
@@ -95,12 +100,20 @@ class BenchmarkLlmSide(LlmSide):
     # The Thinking budget: the most tokens of thinking and answer per attempt before the model is made to answer
     # (ADR 0007); needs thinking on. None is no budget.
     thinking_budget: int | None = None
+    # The Tools it may call in each attempt (ADR 0011), none by default, and the most calls per attempt, the Tool-call
+    # cap. The cap means nothing without tools, so both are left out of the game log then.
+    tools: frozenset[ToolName] = frozenset()
+    tool_call_cap: int = 10
 
     def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
         shape = super().log_shape(template)
         for setting in ("thinking_level", "thinking_budget"):
             if shape[setting] is None:
                 del shape[setting]
+        if self.tools:
+            shape["tools"] = sorted(self.tools)
+        else:
+            del shape["tools"], shape["tool_call_cap"]
         return shape
 
     def think(self) -> bool | str:
