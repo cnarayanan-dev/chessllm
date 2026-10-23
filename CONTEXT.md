@@ -144,6 +144,14 @@ _Avoid_: Token limit, thinking limit, time budget, max tokens
 The short explanation an LLM writes in its answer, before its move, when thinking is off. A model with thinking on gives none.
 _Avoid_: Explanation, thinking, justification
 
+**Tool**:
+A question about the game an LLM may ask the benchmark during its **Turn**, before it gives its move, and get an answer to. There are four, none taking any input, each answering about the current position: *board* (a diagram, the FEN, whose move it is, castling rights and the en passant square), *move history* (the moves so far as PGN), *legal moves* (every legal move, in random order like the **Legal-move list**) and *material* (each side's pieces and points, and the balance from the caller's side). Which tools a side has, none, any of them or all four, is fixed for the whole game, set only in the benchmark's commands, never from the app, possible only under **Free** or **Blind enforced** (the **Legal-move list** would make the legal moves tool pointless), only under **Standard rules** and *fresh* **Turn memory**, only with **Thinking** on (at any **Thinking level**) and no **Thinking budget**, and only for a model that can call tools natively, never through a text protocol of the benchmark's own, and is part of the **Player configuration**, so a model with tools and the same model without them are rated apart. Every tool call is recorded with the **Attempt** it was made in.
+_Avoid_: Skill, agent call, function, action
+
+**Tool-call cap**:
+The most **Tool** calls an LLM may make in one **Attempt**, 10 by default, each call counted even when several come in one reply; each **Retry** gets a fresh one. When the LLM answers without calling a tool, or has used its last call, it is asked once more for its move under the **Answer format**, and under **Enforced decoding** the same legal-move constraint. Tool calls and that last answer count towards the turn's **Time used**. Part of the **Player configuration**, with the tools.
+_Avoid_: Tool limit, max turns, step limit
+
 **Prompt**:
 Everything sent to the LLM in a **Turn**, exactly as it received it: the **System prompt**, the **Turn template** filled in for the position, the **Answer format**, and for each **Retry** its previous answer and the **Retry feedback**. Under a conversation kept by **Turn memory** it also holds the earlier turns the LLM still remembers. A side's **Prompt template** is fixed for the whole game: a changed one is played only from a new game. Recorded as sent; in a conversation each attempt records only what it added, and the whole prompt is rebuilt from the game's earlier records.
 _Avoid_: Input, context, query
@@ -215,8 +223,20 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, sampling and **Prompt template**, chosen per LLM side when a game starts. Games count towards the same rating only if their player configurations are identical.
+An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, **Tools**, sampling and **Prompt template**, chosen per LLM side when a game starts. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
+
+**Reference configuration**:
+The one set of settings, everything in a **Player configuration** but the model, under which every model is compared with every other: thinking off, **Free**, **Standard rules**, 5 attempts per turn with *explained* **Retry feedback**, *fresh* **Turn memory**, no **Tools**, the default **Prompt template** and the model's own sampling. Chosen to be what a model can do unaided and what most games were played under, not where it plays best. A model's **Rating** under it is the model's overall number; every other Player configuration of that model is shown as how far it moves the Rating from there. A model without games under it has no overall number.
+_Avoid_: Default settings, baseline, standard configuration, overall rating (pooled over settings)
+
+**Ranking**:
+The models in order of their **Rating** under the **Reference configuration**, each with its **Move-quality estimate** and its record, counting only games under the Reference configuration. It can be narrowed to some **Modes**, and then every number in it comes from those games alone, so a Mode with no path to an **Anchor** gives no Rating. It ranks models, never Player configurations.
+_Avoid_: Leaderboard (for a list of Player configurations), standings, model rating
+
+**Setting effect**:
+How far changing exactly one setting of the **Reference configuration** moves a model's **Rating**: the Rating of that Player configuration minus the model's Rating under the Reference configuration, given with its uncertainty, which comes from both Ratings. None when either Rating is only an upper bound. A Player configuration that differs from the Reference configuration in more than one setting has a Rating, but no setting effect: which setting did what can't be told apart.
+_Avoid_: Parameter effect, rule effect, delta, impact
 
 **Rating**:
 The Elo of a **Player configuration** on the chess.com scale, estimated only from its wins, draws and losses, with a **Forfeit** counted as a loss. Games against **Anchors** set the scale; **LLM faceoff** games only place configurations relative to each other, so a configuration with no path to an Anchor has no Rating. **Play LLM** games do not count towards it, since the human's strength is unknown; they count only towards the **Move-quality estimate**. Fitted over all games together, so the order they were played in does not matter. Always given with its uncertainty, or as an upper bound when every game was lost.

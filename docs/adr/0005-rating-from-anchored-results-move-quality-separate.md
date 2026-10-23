@@ -6,7 +6,7 @@ We want a chess.com-comparable Elo for each Player configuration from a handful 
 
 - **Stockfish `UCI_Elo` / Skill Level as Anchors**: everywhere and easy, but calibrated engine-vs-engine on CCRL from 1320 up. Its own FAQ calls a human mapping "virtually impossible", and 8B LLMs would score 0% against its weakest level.
 - **Maia bots as Anchors**: human-like, but Maia-1100 is still far too strong, and Maia-2 at a low rating has never been measured as an opponent.
-- **A random legal mover as the floor** (about −122): deferred, not rejected. It is the only Anchor weak LLMs can beat, and is added if the bottom of the leaderboard is all "< X".
+- **A random legal mover as the floor** (about −122): deferred, not rejected. It is the only Anchor weak LLMs can beat, and is added if the bottom of the leaderboard is all "< X". Added by ADR 0011, which ranks models under Free.
 - **Move quality as the Rating** (average centipawn loss → Elo, accuracy, chess.com's Game Rating): works on every game, but per-game centipawn loss explained only 5-7% of rating variance in one sample, the regressions are fitted far above where 8B models play, and forfeits are invisible to it.
 - **One blended number**: a single headline, but no source says how to weight the two, and it would no longer mean anything on chess.com.
 - **Glicko-style game-by-game updates** (as chess.com does): a Player configuration does not change over time, so order-dependence would only add noise.
