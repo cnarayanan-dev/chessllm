@@ -7,8 +7,8 @@ Run:
     uv run games-report --include-unfinished --json                  # the same report as JSON
 
 A Player configuration is grouped here by model, LLM constraints, thinking and its Thinking level and Thinking budget,
-rules, retry feedback and position (the leaderboard also splits by sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for
-each side. Both log versions are read (ADR 0004) through chessllm.analytics.leaderboard.read_sides; a file that isn't a
+rules, retry feedback, position and Turn memory (the leaderboard also splits by sampling, prompt and retries). Each
+LLM side of a game is counted, so an LLM faceoff counts once for each side. Both log versions are read (ADR 0004) through chessllm.analytics.leaderboard.read_sides; a file that isn't a
 readable game log is skipped and counted.
 
 Phases: an illegal move at ply 20 or earlier is in the opening; later, it is in the endgame when the queens, rooks,
@@ -94,6 +94,7 @@ class Configuration:
     rules: str
     retry_feedback: str
     position: str = "fen"
+    turn_memory: str = "fresh"
     thinking_level: str | None = None  # None for plain thinking on or off
     thinking_budget: int | None = None  # in tokens; None for no budget
 
@@ -103,10 +104,11 @@ class Configuration:
             thinking = f"thinking {self.thinking_level}"
         if self.thinking_budget is not None:
             thinking += f", budget {self.thinking_budget}"
-        described = " / described position" if self.position != "fen" else ""
+        extra = " / described position" if self.position != "fen" else ""
+        extra += f" / {self.turn_memory}" if self.turn_memory != "fresh" else ""
         return (
             f"{self.model} / {self.llm_constraints} / {thinking} / {self.rules} / {self.retry_feedback} feedback"
-            f"{described}"
+            f"{extra}"
         )
 
 
@@ -171,6 +173,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             rules=game.rules,
             retry_feedback=str(side["retry_feedback"]),
             position=logged_prompt(game.start, color, side)[1] or "fen",
+            turn_memory=str(side.get("turn_memory") or "fresh"),
             thinking_level=side.get("thinking_level"),
             thinking_budget=side.get("thinking_budget"),
         )

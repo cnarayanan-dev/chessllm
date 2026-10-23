@@ -10,7 +10,13 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from chessllm.cli.common import add_configuration_arguments, anchor_match_settings, default_anchor, fail
+from chessllm.cli.common import (
+    add_configuration_arguments,
+    anchor_match_settings,
+    default_anchor,
+    fail,
+    warn_of_turn_memory,
+)
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.anchors import Anchor
 from chessllm.core.config import SAMPLING_FILE
@@ -49,6 +55,7 @@ def main(
         settings = anchor_match_settings(args, llm_color, args.skill, sampling_file)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
+    warn_of_turn_memory(args)
     anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     if anchor_for is None:
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731

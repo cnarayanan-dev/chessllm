@@ -10,9 +10,10 @@ from typing import Any
 import chess
 
 from chessllm.core.types import Color
+from chessllm.game.llm_turn.conversation import Conversation, reply_reserve
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer, ask_legal_counterpart
 from chessllm.game.llm_turn.judging import answered, judge, no_answer
-from chessllm.game.llm_turn.prompt import TurnPosition, cut_off_feedback, fresh_prompt, move_record, retry_feedback
+from chessllm.game.llm_turn.prompt import TurnPosition, cut_off_feedback, move_record, retry_feedback, turn_message
 from chessllm.game.records import (
     ILLEGAL_RESULTS,
     Attempt,
@@ -20,12 +21,11 @@ from chessllm.game.records import (
     IllegalMoves,
     LlmSideStats,
     LlmTurn,
-    PromptMessage,
 )
 from chessllm.game.rules import Rules
 from chessllm.game.rules.chaos import ResolvedMove
 from chessllm.game.sides import ENFORCED, LISTED, LlmConstraints, LlmSide, PromptTemplate
-from chessllm.llm.players import LlmPlayer, LlmReply, Message
+from chessllm.llm.players import LlmPlayer, LlmReply
 from chessllm.logs.game_log import GameLog
 
 
@@ -116,6 +116,8 @@ class LlmTurns:
         self._abandoned = abandoned
         self._clock = clock
         self.stats = SideStats(side.llm_constraints, rules)
+        # What the side's turns send: one conversation for the game, or a new one every turn (Turn memory).
+        self._conversation = Conversation(side.turn_memory, color, template)
 
     def play(self, board: chess.Board, moves: Sequence[str], started: float) -> TurnOutcome:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
@@ -137,17 +139,24 @@ class LlmTurns:
             random.shuffle(legal_moves)
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
-        messages = fresh_prompt(self._template, color, TurnPosition(board, moves, listed_moves))
-        first_messages = messages
-        turn = LlmTurn(ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None)
+        conversation = self._conversation
+        conversation.start_turn(turn_message(self._template, TurnPosition(board, moves, listed_moves)))
+        remembered = conversation.remembered
+        logged_remembered = {"remembered": remembered} if remembered is not None else {}
+        turn = LlmTurn(
+            ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None, remembered=remembered
+        )
         feedback = None
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
         max_attempts = self._max_attempts
         for number in range(1, max_attempts + 1):
             if self._abandoned.is_set():
                 return TurnOutcome(turn)
-            # The Prompt as sent for this attempt.
-            prompt = [PromptMessage(role=message.role, content=message.content) for message in messages]
+            # The Prompt as sent for this attempt, or in a conversation what it added (ADR 0009).
+            prompt = conversation.record()
+            messages = conversation.messages()
+            # Until a conversation is trimmed to the context (#106), the log says when Ollama may have cut it.
+            logged_context = {"context_may_be_cut": True} if conversation.may_not_fit(reply_reserve(side)) else {}
             try:
                 reply = player.reply(messages, allowed_moves)
             except Exception as error:
@@ -155,7 +164,8 @@ class LlmTurns:
                 turn.attempts.append(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
-                    **self._rules.attempt_log_shape(attempt.log_shape()), **self._ended(turn, started),
+                    **self._rules.attempt_log_shape(attempt.log_shape()), **logged_remembered, **logged_context,
+                    **self._ended(turn, started),
                 )
                 turn.reasoning = None  # the turn's Reasoning is its last attempt's: none without an answer
                 break
@@ -171,9 +181,10 @@ class LlmTurns:
             last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits
             self._log.write(
                 "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
-                **self._rules.attempt_log_shape(attempt.log_shape()), **token_accounting(reply),
-                **(self._ended(turn, started) if last else {}),
+                **self._rules.attempt_log_shape(attempt.log_shape()), **logged_remembered, **logged_context,
+                **token_accounting(reply), **(self._ended(turn, started) if last else {}),
             )
+            conversation.answered(reply.raw)
             turn.thinking, turn.reasoning = attempt.thinking, attempt.reasoning
             if move is not None:
                 if illegal_in_turn:
@@ -185,7 +196,7 @@ class LlmTurns:
                 return TurnOutcome(turn, move=move)
             if result == "cut_off":
                 feedback = cut_off_feedback(number, max_attempts)
-                messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
+                conversation.retry(feedback)
                 continue
             illegal_in_turn = True
             stats.illegal_moves[result] += 1
@@ -195,10 +206,11 @@ class LlmTurns:
                 stats.spawns += resolution.kind == "spawn"
                 return TurnOutcome(turn, chaos_move=resolution, written=written)
             if side.retry_feedback == "repeat":  # another sample: the first Prompt again, the rejected move unseen
-                feedback, messages = None, first_messages
+                feedback = None
+                conversation.drop_answer()
             else:
                 feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
-                messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
+                conversation.retry(feedback)
         return TurnOutcome(turn, forfeit=True)
 
     def _ended(self, turn: LlmTurn, started: float) -> dict[str, Any]:

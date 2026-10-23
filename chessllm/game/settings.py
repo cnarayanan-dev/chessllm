@@ -101,6 +101,9 @@ class Settings:
                     raise InvalidSettings(f"{of_tokens}, too many for its {context}: at most {high}")
                 if model.tokens_per_s is None:
                     raise InvalidSettings(f"{has_budget}, but no measured speed to set its time limit from")
+            if side.turn_memory == "chat_moves":
+                reason = f"{side.model} ({color}) has Turn memory chat_moves, which can't be played until #105"
+                raise InvalidSettings(reason)
             rules.check_llm(color, side)
             try:
                 check_prompt_template(side_template(side), side.llm_constraints)

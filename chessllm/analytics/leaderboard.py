@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePath
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from chessllm.analytics.analysis import analysis_path
@@ -21,7 +21,7 @@ from chessllm.core.types import COLORS, Color, RulesKey, Sampling, opponent, sco
 from chessllm.game.modes import mode_named
 from chessllm.game.rules import rules_named
 from chessllm.game.settings import Settings
-from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, RetryFeedback
+from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, RetryFeedback, TurnMemory
 from chessllm.analytics.move_quality import (
     ConfigurationMoves,
     MoveQuality,
@@ -61,6 +61,14 @@ class PlayerConfiguration(BaseModel):
     # How each turn gave the position; None is the default, fen. Left out when it is fen, so the API's configurations
     # and their ids stay as they were before the setting existed.
     position: PositionFormat | None = Field(None, exclude_if=lambda position: position in (None, "fen"))
+    # Whether its turns shared one conversation; None is the default, fresh, which it is given as. Left out when it
+    # is fresh, like position, so the configurations from before the setting keep their ids.
+    turn_memory: TurnMemory | None = Field(None, exclude_if=lambda memory: memory is None)
+
+    @field_validator("turn_memory")
+    @classmethod
+    def _fresh_is_none(cls, turn_memory: TurnMemory | None) -> TurnMemory | None:
+        return None if turn_memory == "fresh" else turn_memory
     # The Thinking level, None for plain thinking on or off. Set only by the benchmark's commands, so it is kept out
     # of the API's schema and output, which stay as they were (#67); it still gives the configuration its own id.
     thinking_level: SkipJsonSchema[str | None] = Field(None, exclude=True)
@@ -69,8 +77,8 @@ class PlayerConfiguration(BaseModel):
 
     def id(self) -> str:
         """A short fingerprint of the settings, the same for the same settings on every request. The default
-        position, no Thinking level and no Thinking budget are left out, so configurations from before those
-        settings keep their id."""
+        position and Turn memory, no Thinking level and no Thinking budget are left out, so configurations from
+        before those settings keep their id."""
         settings = self.model_dump()  # without the default position, the Thinking level or the Thinking budget
         if self.thinking_level is not None:
             settings["thinking_level"] = self.thinking_level
@@ -332,6 +340,7 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         sampling=sampling if isinstance(sampling, dict) else {},
         prompt=prompt,
         position=position,
+        turn_memory=side.get("turn_memory"),
         thinking_level=side.get("thinking_level"),
         thinking_budget=side.get("thinking_budget"),
     )
@@ -361,6 +370,7 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         sampling=dict(settings.sampling),
         prompt=prompt,
         position=position,
+        turn_memory=side.turn_memory,
         thinking_level=side.thinking_level if isinstance(side, BenchmarkLlmSide) else None,
         thinking_budget=side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None,
     )

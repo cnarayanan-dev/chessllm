@@ -43,6 +43,14 @@ def start_game(
         if isinstance(side, LlmSide) and side.prompt_template is not None:
             refused = f"A new game takes no Prompt template yet: the LLM side ({color}) plays its default one"
             raise InvalidSettings(refused, code="prompt_template_not_accepted")
+        # Hidden from the schema until the page shows a conversation's whole Prompt (#108): it would show only what
+        # each attempt added (ADR 0009).
+        if isinstance(side, LlmSide) and side.turn_memory != "fresh":
+            refused = (
+                f"A new game takes no Turn memory but fresh yet: the LLM side ({color}) can't play "
+                f"{side.turn_memory} from the app, only from the batch commands"
+            )
+            raise InvalidSettings(refused, code="turn_memory_not_accepted")
     settings = Settings(
         new_game.mode,
         new_game.white,

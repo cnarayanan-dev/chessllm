@@ -12,6 +12,10 @@ RetryFeedback = Literal["explained", "bare", "hinted", "repeat"]
 # Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
 # free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
 LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
+# Whether an LLM side's Turns share one conversation, fixed for the game: fresh (every turn starts a new conversation,
+# the default), chat_position (one conversation, each turn adding its message as a fresh turn has it) or chat_moves
+# (one conversation, each turn adding only the opponent's last move; not playable until #105).
+TurnMemory = Literal["fresh", "chat_position", "chat_moves"]
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
@@ -53,11 +57,18 @@ class LlmSide:
     # (llm_turn.prompt.side_template). Only the benchmark's commands give one so far: the API refuses it and leaves it
     # out of its schema and output, which stay as they were until the Prompt library (#113).
     prompt_template: Annotated[SkipJsonSchema[PromptTemplate | None], Field(exclude=True)] = None
+    # Whether its turns share one conversation (game/llm_turn/conversation.py). Only the benchmark's commands set it
+    # so far: the API refuses any but fresh and leaves it out of its schema and output until the page shows a
+    # conversation's whole Prompt (#108). Left out of the game log when fresh, so games from before it log the same.
+    turn_memory: Annotated[SkipJsonSchema[TurnMemory], Field(exclude=True)] = "fresh"
 
     def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
-        """The side as game_start logs it, with the Prompt template it plays the game with in full, last."""
+        """The side as game_start logs it, with the Prompt template it plays the game with in full, last, and its
+        Turn memory unless fresh."""
         shape = asdict(self)
         del shape["prompt_template"]
+        if self.turn_memory == "fresh":
+            del shape["turn_memory"]
         return shape | {"prompt_template": template.log_shape()}
 
     def think(self) -> bool | str:

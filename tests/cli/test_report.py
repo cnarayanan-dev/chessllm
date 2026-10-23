@@ -97,6 +97,20 @@ def test_record_counts_each_llm_side_and_splits_anchor_matches_by_skill(tmp_path
     assert report["end_reasons"] == {"checkmate": 2, "move_cap": 1, "forfeit": 1}
 
 
+def test_a_side_with_turn_memory_is_a_configuration_of_its_own(tmp_path):
+    games_dir = tmp_path / "games"
+    chat = LLAMA | {"turn_memory": "chat_position"}
+    write_log(games_dir, "a", game(chat, LLAMA, ["f3", "e5", "g4", "Qh4#"], "0-1", "checkmate"))
+    games, _ = load_games(games_dir)
+
+    labels = sorted(c["configuration"]["label"] for c in analyse(games, Filters())["configurations"])
+
+    assert labels == [
+        "llama3:8b / free / no thinking / standard / explained feedback",
+        "llama3:8b / free / no thinking / standard / explained feedback / chat_position",
+    ]
+
+
 def test_themes_find_illegal_moves_mates_and_openings(tmp_path):
     games, _ = load_games(logs(tmp_path))
 

@@ -29,9 +29,10 @@ from chessllm.game.sides import (
     LlmSide,
     PromptTemplate,
     RetryFeedback,
+    TurnMemory,
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
-from chessllm.llm.models import LLM_MODELS, load_sampling
+from chessllm.llm.models import CONTEXT_TOKENS, LLM_MODELS, load_sampling
 
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
@@ -53,6 +54,25 @@ def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
         help="the default Prompt template: default (the PGN and FEN), or described (also the last move, every "
         "piece's square and check)",
     )
+    parser.add_argument(
+        "--turn-memory",
+        choices=get_args(TurnMemory),
+        default=defaults.turn_memory,
+        help="whether the LLM's turns share one conversation: fresh (the default: each turn starts anew), or "
+        "chat_position (one conversation for the game, each turn adding its message)",
+    )
+
+
+def warn_of_turn_memory(args: argparse.Namespace) -> None:
+    """Warn, before any game, that a conversation isn't trimmed to the model's context yet (#106): a long game can
+    outgrow it, and Ollama then cuts it silently. The attempts that may not have fit log context_may_be_cut."""
+    if args.turn_memory != "fresh":
+        print(
+            f"Warning: under Turn memory {args.turn_memory} a conversation is not yet trimmed to the "
+            f"{CONTEXT_TOKENS:,}-token context (#106). In a long game Ollama may cut its oldest messages silently; "
+            "each attempt that may not have fit logs context_may_be_cut: true.",
+            file=sys.stderr,
+        )
 
 
 def add_rules_arguments(parser: argparse.ArgumentParser) -> None:
@@ -131,6 +151,7 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         llm_constraints=args.llm_constraints,
         retry_feedback=args.retry_feedback,
         prompt_template=prompt_template(args),
+        turn_memory=args.turn_memory,
     )
     anchor_side = AnchorSide(engine=args.engine, skill=skill)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)

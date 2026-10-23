@@ -95,7 +95,9 @@ class Attempt(AttemptSummary):
     raw_reply: str | None
     thinking: str | None  # the Thinking, with thinking on
     reasoning: str | None  # the Reasoning in the answer, with thinking off
-    prompt: list[PromptMessage] | None = None  # the messages sent for this try; None in games from before it was kept
+    # The messages sent for this try; None in games from before it was kept. In a conversation kept by Turn memory
+    # (its turn's remembered is set) only the messages it added, the whole Prompt rebuilt by full_prompt (ADR 0009).
+    prompt: list[PromptMessage] | None = None
 
     # Unannotated, as pydantic would take an annotated return type for the record's schema in the API description.
     @model_serializer(mode="wrap")
@@ -176,6 +178,9 @@ class LlmTurnSummary(BaseModel):
     legal_counterpart: LegalCounterpartSummary | None = Field(default=None, exclude_if=is_none)
     # Only for a turn that ended in a chaos move, with an evaluator, once the positions it needs are judged.
     chaos_gain: ChaosGain | None = Field(default=None, exclude_if=is_none)
+    # Only in a conversation kept by Turn memory: how many of the side's earlier turns its Prompt still held, so
+    # full_prompt can rebuild it (ADR 0009). Each of its llm_attempts logs it.
+    remembered: int | None = Field(default=None, exclude_if=is_none)
 
     def log_shape(self) -> dict[str, Any]:
         """What the turn's last llm_attempt logs of the turn itself: its time."""
