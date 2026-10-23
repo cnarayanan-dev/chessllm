@@ -47,7 +47,7 @@ from chessllm.game.sides import BenchmarkLlmSide, HumanSide, LlmConstraints
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.exceptions import InvalidSettings, LlmTimeout
-from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES, turn_messages
+from chessllm.game.llm_turn.prompt import turn_messages
 from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 from scripts.probe_board_images import POSITIONS_FILE, Position
 
@@ -142,7 +142,7 @@ def ask(
     player = OllamaPlayer(model, condition.think, chat=chat, timeout_s=limit, sampling=sampling,
                           budget=condition.budget)
     shown = listed_moves(position.fen) if pass_ == "listed_enforced" else None
-    messages = turn_messages(position.pgn, position.fen, position.color, SYSTEM_PROMPT_FILES[pass_],
+    messages = turn_messages(position.pgn, position.fen, position.color, pass_,
                              " ".join(shown) if shown is not None else None)
     record: dict[str, Any] = {
         "model": model, "condition": condition.label, "level": condition.think, "budget": condition.budget,

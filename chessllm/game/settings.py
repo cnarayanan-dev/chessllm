@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from chessllm.core.types import COLORS, Color, ModeKey, RulesKey, Sampling
 from chessllm.engines.anchors import DRAGON_SKILLS
 from chessllm.exceptions import InvalidSettings
+from chessllm.game.llm_turn.prompt import check_prompt_template, side_template
 from chessllm.game.modes import MODES, Mode
 from chessllm.game.rules import RULES, Rules
 from chessllm.game.sides import AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side
@@ -101,3 +102,7 @@ class Settings:
                 if model.tokens_per_s is None:
                     raise InvalidSettings(f"{has_budget}, but no measured speed to set its time limit from")
             rules.check_llm(color, side)
+            try:
+                check_prompt_template(side_template(side), side.llm_constraints)
+            except InvalidSettings as refused:
+                raise InvalidSettings(f"{side.model} ({color}): {refused}", code=refused.code) from None

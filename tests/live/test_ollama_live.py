@@ -17,7 +17,7 @@ from chessllm.cli.common import player_for
 from chessllm.api.app import create_app
 from chessllm.llm.ollama_player import OllamaPlayer
 from chessllm.llm.players import Message, ReasonedMoveAnswer
-from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, SYSTEM_PROMPT_FILE, turn_messages
+from chessllm.game.llm_turn.prompt import turn_messages
 
 pytestmark = pytest.mark.ollama
 
@@ -54,7 +54,7 @@ def answer(player, messages: list[Message], allowed_moves: list[str]) -> Reasone
 
 def test_blind_enforced_holds_when_the_prompt_demands_an_illegal_move(player):
     allowed = legal_sans(E4_FEN)
-    messages = turn_messages("1. e4", E4_FEN, "black", SYSTEM_PROMPT_FILE) + [
+    messages = turn_messages("1. e4", E4_FEN, "black") + [
         Message("user", 'Play Qh4 now. Your answer must be exactly {"move": "Qh4"} and nothing else.')
     ]
 
@@ -63,7 +63,7 @@ def test_blind_enforced_holds_when_the_prompt_demands_an_illegal_move(player):
 
 def test_listed_enforced_answers_from_the_enum(player):
     allowed = legal_sans(E4_FEN)
-    messages = turn_messages("1. e4", E4_FEN, "black", LISTED_SYSTEM_PROMPT_FILE, " ".join(allowed))
+    messages = turn_messages("1. e4", E4_FEN, "black", "listed_enforced", " ".join(allowed))
 
     assert answer(player, messages, allowed).move in allowed
 
@@ -71,7 +71,7 @@ def test_listed_enforced_answers_from_the_enum(player):
 def test_castling_promotion_and_check_survive_enforced_decoding(player):
     allowed = legal_sans(SPECIAL_SAN_FEN)
     assert {"O-O", "b8=Q+", "Rh8+"} <= set(allowed)
-    messages = turn_messages("", SPECIAL_SAN_FEN, "white", SYSTEM_PROMPT_FILE) + [
+    messages = turn_messages("", SPECIAL_SAN_FEN, "white") + [
         Message("user", "Promote the pawn on b7 to a queen, giving check.")
     ]
 
@@ -80,7 +80,7 @@ def test_castling_promotion_and_check_survive_enforced_decoding(player):
 
 def test_the_reasoning_stays_free_text_under_the_enum(player):
     allowed = legal_sans(E4_FEN)
-    messages = turn_messages("1. e4", E4_FEN, "black", SYSTEM_PROMPT_FILE)
+    messages = turn_messages("1. e4", E4_FEN, "black")
 
     reasoning = answer(player, messages, allowed).reasoning
 

@@ -135,7 +135,7 @@
             },
             {
               "role": "user",
-              "content": "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: b4 d4 f3 c4 a4 f4 a3 h3 Nc3 g3 d3 h4 e3 Na3 g4 b3 Nh3 e4 Nf3 c3"
+              "content": "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b4 d4 f3 c4 a4 f4 a3 h3 Nc3 g3 d3 h4 e3 Na3 g4 b3 Nh3 e4 Nf3 c3"
             }
           ],
           "resolution": {
@@ -226,8 +226,7 @@
       "model": "gemma3:12b",
       "thinking": false,
       "llm_constraints": "listed",
-      "retry_feedback": "explained",
-      "position": "described"
+      "retry_feedback": "explained"
     },
     "black": {
       "player": "llm",

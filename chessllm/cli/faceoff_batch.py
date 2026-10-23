@@ -24,6 +24,7 @@ from chessllm.cli.common import (
     default_evaluator,
     default_move_model,
     fail,
+    prompt_template,
 )
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
@@ -119,7 +120,7 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
             thinking_budget=budgets.get(model),
             llm_constraints=args.llm_constraints,
             retry_feedback=args.retry_feedback,
-            position=args.position,
+            prompt_template=prompt_template(args),
         )
 
     settings = Settings(

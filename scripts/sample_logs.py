@@ -165,7 +165,7 @@ def play_llm_standard(samples: Samples) -> None:
 
 
 def llm_faceoff_chaos(samples: Samples) -> None:
-    """An LLM faceoff under Chaos rules, White Listed with the position described: a chaos move, a Spawn, a Retry
+    """An LLM faceoff under Chaos rules, White Listed: a chaos move, a Spawn, a Retry
     after badly formed notation (never a chaos move), and King capture. Each ply is judged by material alone, a
     stand-in for Stockfish, to show the Evaluations. Each chaos move is followed by its Legal counterpart: a legal
     move twice, and once a timeout, which the game goes on without."""
@@ -187,7 +187,7 @@ def llm_faceoff_chaos(samples: Samples) -> None:
     client = samples.client(game, {"white": white, "black": black}, MaterialEvaluator())
     new_game = {
         "mode": "llm_faceoff",
-        "white": {"player": "llm", "model": "gemma3:12b", "llm_constraints": "listed", "position": "described"},
+        "white": {"player": "llm", "model": "gemma3:12b", "llm_constraints": "listed"},
         "black": {"player": "llm"},
         "rules": "chaos",
         "max_attempts": 3,

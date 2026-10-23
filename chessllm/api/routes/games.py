@@ -19,6 +19,7 @@ from chessllm.exceptions import (
 from chessllm.game.records import GameState
 from chessllm.game.session import GameSession
 from chessllm.game.settings import Settings
+from chessllm.game.sides import LlmSide
 from chessllm.llm.models import load_sampling
 from chessllm.logs.game_log import GameLog
 
@@ -37,6 +38,11 @@ def start_game(
     config: ConfigDep, engines: EnginesDep, games: GameStoreDep, new_game: NewGame | None = None
 ) -> GameState:
     new_game = new_game or NewGame()
+    for color, side in (("white", new_game.white), ("black", new_game.black)):
+        # Hidden from the schema until the Prompt library (#113) lets a new game choose one by its ID.
+        if isinstance(side, LlmSide) and side.prompt_template is not None:
+            refused = f"A new game takes no Prompt template yet: the LLM side ({color}) plays its default one"
+            raise InvalidSettings(refused, code="prompt_template_not_accepted")
     settings = Settings(
         new_game.mode,
         new_game.white,

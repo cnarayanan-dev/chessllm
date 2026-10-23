@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
+from pydantic.json_schema import SkipJsonSchema
 
 # What the LLM is told after an illegal move: explained (the default), bare or hinted; or repeat, nothing: the turn's
 # first Prompt is sent again unchanged, as the control for the other levels.
@@ -11,11 +12,27 @@ RetryFeedback = Literal["explained", "bare", "hinted", "repeat"]
 # Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
 # free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
 LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
-# How the position is given in each turn's message: fen (the PGN and FEN, the default) or described (also the last
-# move, where every piece stands and whether the LLM is in check, so it needn't decode the FEN).
-PositionFormat = Literal["fen", "described"]
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
+
+
+@dataclass(frozen=True)
+class PromptTemplate:
+    """A System prompt and a Turn template written for each other, which an LLM side plays a whole game with
+    (ADR 0010). Both are templates with $placeholders, filled in by llm_turn.prompt; the Answer format is the
+    benchmark's, never the template's. The default ones are in llm_turn.prompt."""
+
+    id: str
+    name: str | None  # optional, to recognise it by
+    system_prompt: str
+    turn_template: str
+
+    def log_shape(self) -> dict[str, Any]:
+        """The template as game_start logs it, in full: without the name when it has none."""
+        shape = asdict(self)
+        if self.name is None:
+            del shape["name"]
+        return shape
 
 
 @dataclass(frozen=True)
@@ -32,17 +49,16 @@ class LlmSide:
     thinking: bool = False
     llm_constraints: LlmConstraints = "free"
     retry_feedback: RetryFeedback = "explained"
-    # How each turn gives the position; None is the default, fen. Left out of the API's output and the game log
-    # (log_shape) when it is fen, so games from before the setting read the same.
-    position: Annotated[PositionFormat | None, Field(exclude_if=lambda position: position in (None, "fen"))] = None
+    # The Prompt template it plays with; None for the Default of its LLM constraints, read when the game starts
+    # (llm_turn.prompt.side_template). Only the benchmark's commands give one so far: the API refuses it and leaves it
+    # out of its schema and output, which stay as they were until the Prompt library (#113).
+    prompt_template: Annotated[SkipJsonSchema[PromptTemplate | None], Field(exclude=True)] = None
 
-    def log_shape(self) -> dict[str, Any]:
-        """The side as game_start logs it: without position when it is the default, so that logs from before the
-        setting existed and logs since describe the same Player configuration the same way."""
+    def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
+        """The side as game_start logs it, with the Prompt template it plays the game with in full, last."""
         shape = asdict(self)
-        if self.position in (None, "fen"):
-            del shape["position"]
-        return shape
+        del shape["prompt_template"]
+        return shape | {"prompt_template": template.log_shape()}
 
     def think(self) -> bool | str:
         """The thinking sent to Ollama: on or off, on meaning the model's default level."""
@@ -65,8 +81,8 @@ class BenchmarkLlmSide(LlmSide):
     # (ADR 0007); needs thinking on. None is no budget.
     thinking_budget: int | None = None
 
-    def log_shape(self) -> dict[str, Any]:
-        shape = super().log_shape()
+    def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
+        shape = super().log_shape(template)
         for setting in ("thinking_level", "thinking_budget"):
             if shape[setting] is None:
                 del shape[setting]
@@ -109,6 +125,9 @@ Side = HumanSide | LlmSide | AnchorSide
 SideKind = Literal["human", "llm", "anchor"]
 
 
-def side_log_shape(side: Side) -> dict[str, Any]:
-    """A side as game_start logs it (ADR 0004)."""
-    return side.log_shape() if isinstance(side, LlmSide) else asdict(side)
+def side_log_shape(side: Side, template: PromptTemplate | None) -> dict[str, Any]:
+    """A side as game_start logs it (ADR 0004): an LLM side with the Prompt template it plays the game with."""
+    if isinstance(side, LlmSide):
+        assert template is not None, "an LLM side plays with a Prompt template"
+        return side.log_shape(template)
+    return asdict(side)

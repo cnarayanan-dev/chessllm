@@ -21,7 +21,7 @@ from chessllm.core.types import COLORS, Color, RulesKey, Sampling, opponent, sco
 from chessllm.game.modes import mode_named
 from chessllm.game.rules import rules_named
 from chessllm.game.settings import Settings
-from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, PositionFormat, RetryFeedback
+from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, RetryFeedback
 from chessllm.analytics.move_quality import (
     ConfigurationMoves,
     MoveQuality,
@@ -29,8 +29,22 @@ from chessllm.analytics.move_quality import (
     read_analysed_moves,
     read_validation,
 )
-from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
+from chessllm.game.llm_turn.prompt import prompt_file, side_template
 from chessllm.analytics.rating import RatedGame, Rating, ratings
+
+
+# How each turn gave the position: fen (the PGN and FEN) or described (also where every piece stands).
+PositionFormat = Literal["fen", "described"]
+
+
+def prompt_settings(file_name: str, template_id: str | None) -> tuple[str, PositionFormat | None]:
+    """The prompt and position of a Player configuration, which games are still grouped by until they are grouped by
+    their Prompt template's text: a default template's System prompt file name, and described for the Described
+    default; any other template's ID."""
+    if not file_name:
+        return template_id or "", None
+    described = template_id is not None and template_id.startswith("described")
+    return file_name, "described" if described else None
 
 
 class PlayerConfiguration(BaseModel):
@@ -43,9 +57,9 @@ class PlayerConfiguration(BaseModel):
     retry_feedback: RetryFeedback
     max_retries: int  # per turn, before the LLM forfeits
     sampling: Sampling  # from the config file; empty means the model's defaults
-    prompt: str  # the system prompt's file name, e.g. "system.txt"
-    # How each turn gives the position; None is the default, fen. Left out when it is fen, as in the game log, so
-    # the API's configurations and their ids stay as they were before the setting existed.
+    prompt: str  # the system prompt's file name, e.g. "system.txt", or the ID of a Prompt template that isn't a default
+    # How each turn gave the position; None is the default, fen. Left out when it is fen, so the API's configurations
+    # and their ids stay as they were before the setting existed.
     position: PositionFormat | None = Field(None, exclude_if=lambda position: position in (None, "fen"))
     # The Thinking level, None for plain thinking on or off. Set only by the benchmark's commands, so it is kept out
     # of the API's schema and output, which stay as they were (#67); it still gives the configuration its own id.
@@ -306,7 +320,7 @@ def read_sides(start: dict[str, Any], end: dict[str, Any]) -> tuple[dict[Color, 
 
 
 def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any]) -> PlayerConfiguration:
-    prompt_file = start.get("prompt_files", {}).get(color) or start.get("prompt_file") or ""
+    prompt, position = logged_prompt(start, color, side)
     sampling = start.get("sampling")
     return PlayerConfiguration(
         model=side["model"],
@@ -316,16 +330,27 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
         retry_feedback=side["retry_feedback"],
         max_retries=start["max_retries"],
         sampling=sampling if isinstance(sampling, dict) else {},
-        prompt=PurePath(prompt_file).name,
-        position=side.get("position"),
+        prompt=prompt,
+        position=position,
         thinking_level=side.get("thinking_level"),
         thinking_budget=side.get("thinking_budget"),
     )
 
 
+def logged_prompt(start: dict[str, Any], color: Color, side: dict[str, Any]) -> tuple[str, PositionFormat | None]:
+    """The prompt and position of the LLM side at color as game_start logs it (prompt_settings). Logs from before
+    Prompt templates have no template, and position: described for a described position."""
+    file = start.get("prompt_files", {}).get(color) or start.get("prompt_file") or ""
+    prompt, position = prompt_settings(PurePath(file).name, side.get("prompt_template", {}).get("id"))
+    return prompt, side.get("position", position)
+
+
 def settings_configuration(settings: Settings, color: Color) -> PlayerConfiguration:
     """The Player configuration the LLM at color plays a game with these settings in, as its log will record it."""
     side = settings.llm_sides()[color]
+    template = side_template(side)
+    file = prompt_file(template, side.llm_constraints)
+    prompt, position = prompt_settings(file.name if file is not None else "", template.id)
     return PlayerConfiguration(
         model=side.model,
         thinking=side.thinking,
@@ -334,8 +359,8 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         retry_feedback=side.retry_feedback,
         max_retries=settings.max_attempts - 1,
         sampling=dict(settings.sampling),
-        prompt=SYSTEM_PROMPT_FILES[side.llm_constraints].name,
-        position=side.position,
+        prompt=prompt,
+        position=position,
         thinking_level=side.thinking_level if isinstance(side, BenchmarkLlmSide) else None,
         thinking_budget=side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None,
     )

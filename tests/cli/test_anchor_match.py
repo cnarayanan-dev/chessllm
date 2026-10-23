@@ -23,6 +23,11 @@ def events(games_dir) -> list[dict]:
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
 
 
+def without_template(side: dict) -> dict:
+    """An LLM side as game_start logs it, without its Prompt template (tests/game/test_prompt_templates.py)."""
+    return {key: value for key, value in side.items() if key != "prompt_template"}
+
+
 def pgn_game(games_dir) -> chess.pgn.Game:
     [pgn_file] = sorted(games_dir.glob("*.pgn"))
     game = chess.pgn.read_game(io.StringIO(pgn_file.read_text(encoding="utf-8")))
@@ -66,7 +71,7 @@ def test_the_command_plays_one_game_against_dragon_and_logs_the_anchor_side(anch
     assert start["type"] == "game_start"
     assert (start["log_version"], start["mode"]) == (2, "anchor_match")
     assert start["white"] == {"player": "anchor", "engine": "dragon", "skill": 3}
-    assert start["black"] == {
+    assert without_template(start["black"]) == {
         "player": "llm", "model": "llama3:8b", "thinking": False, "llm_constraints": "free", "retry_feedback": "explained",
     }
     assert "rules" not in start and start["prompt_file"].endswith("system.txt")
@@ -89,7 +94,7 @@ def test_the_llms_retries_and_forfeit_are_logged_as_in_a_faceoff_and_the_anchor_
 
     assert code == 0
     start, *moves, end = events(tmp_path / "games")
-    assert start["white"] == {
+    assert without_template(start["white"]) == {
         "player": "llm", "model": "qwen3.5:9b", "thinking": True, "llm_constraints": "listed", "retry_feedback": "bare",
     }
     assert start["black"] == {"player": "anchor", "engine": "dragon", "skill": 1}

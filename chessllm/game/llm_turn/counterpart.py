@@ -3,15 +3,17 @@ Listed enforced whatever its side's own LLM constraints, in one attempt without 
 and its failure never ends the game."""
 
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass
+from string import Template
 
 import chess
 
 from chessllm.core.types import Color
 from chessllm.game.llm_turn.judging import answered, judge, no_answer
-from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES, describe_position, turn_messages
+from chessllm.game.llm_turn.prompt import TurnPosition, default_template, fresh_prompt, move_record
 from chessllm.game.records import LegalCounterpart, PromptMessage
-from chessllm.game.sides import LlmConstraints, LlmSide
+from chessllm.game.sides import LlmConstraints, LlmSide, PromptTemplate
 from chessllm.llm.players import LlmPlayer, LlmReply
 
 # The constraints it is asked under: the legal moves shown, and the answer held to them.
@@ -30,12 +32,21 @@ class CounterpartAnswer:
     pgn: str
 
 
+def counterpart_template(template: PromptTemplate) -> PromptTemplate:
+    """The Prompt template a Legal counterpart is asked with: the side's own if it places the Legal-move list, else
+    the default one under Listed enforced, Described if the side's places the position's description."""
+    if "legal_moves" in Template(template.turn_template).get_identifiers():
+        return template
+    described = "description" in Template(template.turn_template).get_identifiers()
+    return default_template(COUNTERPART_CONSTRAINTS, "described" if described else "default")
+
+
 def ask_legal_counterpart(
-    player: LlmPlayer, side: LlmSide, color: Color, board: chess.Board, pgn: str, last_move: str | None
+    player: LlmPlayer, side: LlmSide, template: PromptTemplate, color: Color, board: chess.Board, moves: Sequence[str]
 ) -> CounterpartAnswer:
-    """Ask the side's LLM for a legal move in the position its chaos move was made in, with a fresh Prompt: the
-    Listed enforced System prompt and the position as a fresh Listed enforced turn shows it, in the side's position
-    format. board is that position, pgn the Move record before the chaos move and last_move its last ply.
+    """Ask the side's LLM for a legal move in the position its chaos move was made in, with a fresh Prompt built
+    from counterpart_template of the side's Prompt template, as a fresh Listed enforced turn shows the position.
+    board is that position, and moves every ply before the chaos move as written in the Move record.
 
     The legal moves are shuffled by an order of the position's own, so asking never moves on the game's random
     order of the Listed sides' lists."""
@@ -43,9 +54,8 @@ def ask_legal_counterpart(
     allowed_moves = list(legal_moves)
     random.Random(board.fen()).shuffle(legal_moves)
     listed_moves = " ".join(legal_moves)
-    description = describe_position(board, last_move) if side.position == "described" else None
-    prompt_file = SYSTEM_PROMPT_FILES[COUNTERPART_CONSTRAINTS]
-    messages = turn_messages(pgn, board.fen(), color, prompt_file, listed_moves, description)
+    messages = fresh_prompt(counterpart_template(template), color, TurnPosition(board, moves, listed_moves))
+    pgn = move_record(moves)
     prompt = [PromptMessage(role=message.role, content=message.content) for message in messages]
     fen = board.fen()
     try:

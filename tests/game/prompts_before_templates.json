@@ -1,0 +1,514 @@
+{
+ "free/fen": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
+    ]
+   ]
+  ]
+ },
+ "free/described": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nLast move: e5\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLast move: e4\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nLast move: Nf3\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, f3; Pawns a2, b2, c2, d2, e4, f2, g2, h2"
+    ]
+   ]
+  ]
+ },
+ "listed/fen": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nLegal moves: a4 c3 g4 Qe2 Qg4 Qf3 Na3 Ba6 Nf3 Qh5 g3 f4 Bd3 b3 Bb5 Bc4 Nc3 h4 b4 h3 f3 a3 Ke2 Be2 Ne2 Nh3 d4 c4 d3"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: Na6 b6 a5 Nc6 c5 g5 e5 Nf6 Nh6 h6 h5 c6 b5 d5 d6 f5 g6 e6 f6 a6"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nLegal moves: h6 Na6 Qe7 d5 Qg5 Bb4 Ne7 Bd6 b6 g6 Ke7 Nc6 Nh6 a5 Qh4 f6 c5 Be7 d6 f5 b5 a6 Qf6 Nf6 g5 Bc5 h5 c6 Ba3"
+    ]
+   ]
+  ]
+ },
+ "listed/described": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nLast move: e5\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nLegal moves: a4 c3 g4 Qe2 Qg4 Qf3 Na3 Ba6 Nf3 Qh5 g3 f4 Bd3 b3 Bb5 Bc4 Nc3 h4 b4 h3 f3 a3 Ke2 Be2 Ne2 Nh3 d4 c4 d3"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLast move: e4\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nLegal moves: Na6 b6 a5 Nc6 c5 g5 e5 Nf6 Nh6 h6 h5 c6 b5 d5 d6 f5 g6 e6 f6 a6"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nLast move: Nf3\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, f3; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nLegal moves: h6 Na6 Qe7 d5 Qg5 Bb4 Ne7 Bd6 b6 g6 Ke7 Nc6 Nh6 a5 Qh4 f6 c5 Be7 d6 f5 b5 a6 Qf6 Nf6 g5 Bc5 h5 c6 Ba3"
+    ]
+   ]
+  ]
+ },
+ "blind_enforced/fen": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
+    ]
+   ]
+  ]
+ },
+ "blind_enforced/described": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nLast move: e5\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLast move: e4\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN and the current position in FEN.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nLast move: Nf3\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, f3; Pawns a2, b2, c2, d2, e4, f2, g2, h2"
+    ]
+   ]
+  ]
+ },
+ "listed_enforced/fen": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nLegal moves: a4 c3 g4 Qe2 Qg4 Qf3 Na3 Ba6 Nf3 Qh5 g3 f4 Bd3 b3 Bb5 Bc4 Nc3 h4 b4 h3 f3 a3 Ke2 Be2 Ne2 Nh3 d4 c4 d3"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: Na6 b6 a5 Nc6 c5 g5 e5 Nf6 Nh6 h6 h5 c6 b5 d5 d6 f5 g6 e6 f6 a6"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nLegal moves: h6 Na6 Qe7 d5 Qg5 Bb4 Ne7 Bd6 b6 g6 Ke7 Nc6 Nh6 a5 Qh4 f6 c5 Be7 d6 f5 b5 a6 Qf6 Nf6 g5 Bc5 h5 c6 Ba3"
+    ]
+   ]
+  ]
+ },
+ "listed_enforced/described": {
+  "white": [
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e2, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nLegal moves: c4 d4 a3 f3 Nf3 h3 a4 Nh3 e3 d3 Na3 g3 Nc3 b3 h4 g4 f4 c3 b4 e4"
+    ],
+    [
+     "assistant",
+     "{\"move\": \"Ke2\"}"
+    ],
+    [
+     "user",
+     "Your move \"Ke2\" is illegal in this position (kind: illegal move). Attempt 1 of 5. Reply with a different legal move."
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as White against a human playing Black.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: (no moves yet)\nFEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nLegal moves: b3 b4 d4 f4 Nh3 c4 a3 Nc3 Na3 c3 g3 e3 h3 a4 f3 e4 d3 Nf3 g4 h4\nAnswer: {\"move\": \"e4\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nLast move: e5\nYour pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nOpponent's pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nLegal moves: a4 c3 g4 Qe2 Qg4 Qf3 Na3 Ba6 Nf3 Qh5 g3 f4 Bd3 b3 Bb5 Bc4 Nc3 h4 b4 h3 f3 a3 Ke2 Be2 Ne2 Nh3 d4 c4 d3"
+    ]
+   ]
+  ],
+  "black": [
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLast move: e4\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e7, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nLegal moves: Na6 b6 a5 Nc6 c5 g5 e5 Nf6 Nh6 h6 h5 c6 b5 d5 d6 f5 g6 e6 f6 a6"
+    ]
+   ],
+   [
+    [
+     "system",
+     "You are playing chess as Black against a human playing White.\nEach turn you get the game so far in PGN, the current position in FEN, and the list of legal moves in SAN.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\nPGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: b6 b5 d5 f5 Nh6 c5 a6 Nc6 Na6 c6 g6 e6 h6 a5 f6 e5 d6 Nf6 g5 h5\nAnswer: {\"move\": \"e5\"}\n"
+    ],
+    [
+     "user",
+     "PGN: 1. e4 e5 2. Nf3\nFEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nLast move: Nf3\nYour pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; Pawns a7, b7, c7, d7, e5, f7, g7, h7\nOpponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, f3; Pawns a2, b2, c2, d2, e4, f2, g2, h2\nLegal moves: h6 Na6 Qe7 d5 Qg5 Bb4 Ne7 Bd6 b6 g6 Ke7 Nc6 Nh6 a5 Qh4 f6 c5 Be7 d6 f5 b5 a6 Qf6 Nf6 g5 Bc5 h5 c6 Ba3"
+    ]
+   ]
+  ]
+ }
+}

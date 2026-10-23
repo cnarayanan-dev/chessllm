@@ -12,7 +12,7 @@ import pytest
 from chessllm.llm.models import LLM_MODELS
 from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 from chessllm.llm.players import MoveAnswer
-from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, turn_messages
+from chessllm.game.llm_turn.prompt import turn_messages
 
 pytestmark = pytest.mark.ollama
 
@@ -37,7 +37,7 @@ def test_a_budgeted_listed_enforced_move_is_forced_and_from_the_list(installed, 
         pytest.skip(f"{model} is not installed in Ollama")
     board = chess.Board(FEN)
     allowed = [board.san(move) for move in board.legal_moves]
-    messages = turn_messages(PGN, FEN, "white", LISTED_SYSTEM_PROMPT_FILE, " ".join(allowed))
+    messages = turn_messages(PGN, FEN, "white", "listed_enforced", " ".join(allowed))
     speed = next(llm.tokens_per_s for llm in LLM_MODELS if llm.name == model)
     player = OllamaPlayer(model, thinking=True, timeout_s=time_limit_s(BUDGET, speed), budget=BUDGET)
 

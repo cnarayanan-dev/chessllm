@@ -15,3 +15,4 @@ The human writes the prompts: a **System prompt** and a **Turn template** with p
 - Grouping the leaderboard by prompt comes later; until then, games under different prompts still pool into one Rating, but their logs already hold the text to separate them by.
 - A probe never runs alongside a real turn: asking for one in a game whose LLMs move on their own **Pauses** it after the turn running, so **Time used** stays the game's own.
 - The described position (`position: described`) is no longer a setting: it is the `$description` placeholder, chosen by the Turn template. The **LLM constraints** still decide the Legal-move list, and a template must agree with them.
+- The default Prompt templates live in editable files, so a default's ID carries a version taken from its text (`default@1a2b3c4d`, `described-listed@…`): editing a default file makes a new ID, as saving an edit does, and an ID always means one text.

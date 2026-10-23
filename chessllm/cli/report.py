@@ -33,7 +33,7 @@ from chessllm.core.config import GAMES_DIR, VALIDATION_FILE
 from chessllm.core.types import COLORS, Color, opponent
 from chessllm.game.modes import mode_named
 from chessllm.game.records import ILLEGAL_RESULTS
-from chessllm.analytics.leaderboard import read_sides, side_outcome
+from chessllm.analytics.leaderboard import logged_prompt, read_sides, side_outcome
 from chessllm.analytics.move_quality import ConfigurationMoves, move_quality, read_analysed_moves, read_validation
 from chessllm.game.sides import ENFORCED
 
@@ -170,7 +170,7 @@ def llm_sides(game: Game) -> list[LlmSide]:
             thinking=bool(side["thinking"]),
             rules=game.rules,
             retry_feedback=str(side["retry_feedback"]),
-            position=str(side.get("position") or "fen"),
+            position=logged_prompt(game.start, color, side)[1] or "fen",
             thinking_level=side.get("thinking_level"),
             thinking_budget=side.get("thinking_budget"),
         )

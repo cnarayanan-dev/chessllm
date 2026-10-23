@@ -27,9 +27,10 @@ from chessllm.game.sides import (
     BenchmarkLlmSide,
     LlmConstraints,
     LlmSide,
-    PositionFormat,
+    PromptTemplate,
     RetryFeedback,
 )
+from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
 from chessllm.llm.models import LLM_MODELS, load_sampling
 
 if TYPE_CHECKING:
@@ -41,15 +42,16 @@ def add_thinking_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def add_prompt_arguments(parser: argparse.ArgumentParser) -> None:
-    """The LLM constraints, Retry feedback and position format of the Player configuration."""
+    """The LLM constraints, Retry feedback and Prompt template of the Player configuration."""
     defaults = LlmSide()
     parser.add_argument("--llm-constraints", choices=get_args(LlmConstraints), default=defaults.llm_constraints)
     parser.add_argument("--retry-feedback", choices=get_args(RetryFeedback), default=defaults.retry_feedback)
     parser.add_argument(
-        "--position",
-        choices=get_args(PositionFormat),
-        default=defaults.position,
-        help="how each turn gives the position: fen, or described (also the pieces, last move and check)",
+        "--prompt-template",
+        choices=get_args(DefaultTemplate),
+        default="default",
+        help="the default Prompt template: default (the PGN and FEN), or described (also the last move, every "
+        "piece's square and check)",
     )
 
 
@@ -62,6 +64,12 @@ def add_rules_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="under Chaos rules, don't ask the LLM for a legal move after each chaos move (one call fewer each)",
     )
+
+
+def prompt_template(args: argparse.Namespace) -> PromptTemplate | None:
+    """The Prompt template --prompt-template asks for: None for the Default, read when each game starts."""
+    kind: DefaultTemplate = args.prompt_template
+    return None if kind == "default" else default_template(args.llm_constraints, kind)
 
 
 def add_games_dir_argument(parser: argparse.ArgumentParser) -> None:
@@ -122,7 +130,7 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         thinking_budget=args.thinking_budget,
         llm_constraints=args.llm_constraints,
         retry_feedback=args.retry_feedback,
-        position=args.position,
+        prompt_template=prompt_template(args),
     )
     anchor_side = AnchorSide(engine=args.engine, skill=skill)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)

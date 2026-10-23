@@ -3,7 +3,7 @@ move is played or it forfeits. The game plays the move the turn ends with (GameS
 
 import random
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,13 +12,7 @@ import chess
 from chessllm.core.types import Color
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer, ask_legal_counterpart
 from chessllm.game.llm_turn.judging import answered, judge, no_answer
-from chessllm.game.llm_turn.prompt import (
-    SYSTEM_PROMPT_FILES,
-    cut_off_feedback,
-    describe_position,
-    retry_feedback,
-    turn_messages,
-)
+from chessllm.game.llm_turn.prompt import TurnPosition, cut_off_feedback, fresh_prompt, move_record, retry_feedback
 from chessllm.game.records import (
     ILLEGAL_RESULTS,
     Attempt,
@@ -30,7 +24,7 @@ from chessllm.game.records import (
 )
 from chessllm.game.rules import Rules
 from chessllm.game.rules.chaos import ResolvedMove
-from chessllm.game.sides import ENFORCED, LISTED, LlmConstraints, LlmSide
+from chessllm.game.sides import ENFORCED, LISTED, LlmConstraints, LlmSide, PromptTemplate
 from chessllm.llm.players import LlmPlayer, LlmReply, Message
 from chessllm.logs.game_log import GameLog
 
@@ -102,6 +96,7 @@ class LlmTurns:
         self,
         color: Color,
         side: LlmSide,
+        template: PromptTemplate,
         player: LlmPlayer,
         rules: Rules,
         max_attempts: int,
@@ -109,10 +104,11 @@ class LlmTurns:
         abandoned: threading.Event,
         clock: Callable[[], float],
     ) -> None:
-        """abandoned is the game's: once it is set, a running turn makes no further attempts. clock is the game's,
-        which times each turn."""
+        """template is the Prompt template the side plays the game with. abandoned is the game's: once it is set, a
+        running turn makes no further attempts. clock is the game's, which times each turn."""
         self._color = color
         self._side = side
+        self._template = template
         self._player = player
         self._rules = rules
         self._max_attempts = max_attempts
@@ -121,15 +117,16 @@ class LlmTurns:
         self._clock = clock
         self.stats = SideStats(side.llm_constraints, rules)
 
-    def play(self, board: chess.Board, pgn: str, last_move: str | None, ply: int, started: float) -> TurnOutcome:
+    def play(self, board: chess.Board, moves: Sequence[str], started: float) -> TurnOutcome:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
         illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on.
 
-        board is the position to move in, pgn the Move record so far, last_move the last ply as written there, and
-        ply the number of the ply the turn plays, and started when the turn started, by the game's clock. The board
-        is left as it is: the game plays the move."""
+        board is the position to move in, moves every ply so far as written in the Move record, and started when the
+        turn started, by the game's clock. The board is left as it is: the game plays the move."""
         color, side, player, stats = self._color, self._side, self._player, self.stats
         model = side.model
+        ply = len(moves) + 1
+        pgn = move_record(moves)
         fen = board.fen()
         legal_moves = [board.san(legal) for legal in board.legal_moves]
         # Enforced decoding holds the move to exactly the legal moves, rebuilt from the position every turn.
@@ -140,9 +137,7 @@ class LlmTurns:
             random.shuffle(legal_moves)
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
-        prompt_file = SYSTEM_PROMPT_FILES[side.llm_constraints]
-        description = describe_position(board, last_move) if side.position == "described" else None
-        messages = turn_messages(pgn, fen, color, prompt_file, listed_moves, description)
+        messages = fresh_prompt(self._template, color, TurnPosition(board, moves, listed_moves))
         first_messages = messages
         turn = LlmTurn(ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None)
         feedback = None
@@ -212,15 +207,15 @@ class LlmTurns:
         turn.time_s = round(self._clock() - started, 3)
         return turn.log_shape()
 
-    def legal_counterpart(self, board: chess.Board, pgn: str, last_move: str | None) -> CounterpartAnswer | None:
-        """Ask for the Legal counterpart of the chaos move a turn just ended in. board, pgn and last_move are as the
-        turn had them: the chaos move isn't played yet. None in an abandoned game, which asks for nothing more.
+    def legal_counterpart(self, board: chess.Board, moves: Sequence[str]) -> CounterpartAnswer | None:
+        """Ask for the Legal counterpart of the chaos move a turn just ended in. board and moves are as the turn had
+        them: the chaos move isn't played yet. None in an abandoned game, which asks for nothing more.
 
         It is asked apart from the turn, after it, so its call is none of the turn's attempts and its time none of
         the turn's (Time used), and nothing about it counts in the side's totals."""
         if self._abandoned.is_set():
             return None
-        return ask_legal_counterpart(self._player, self._side, self._color, board, pgn, last_move)
+        return ask_legal_counterpart(self._player, self._side, self._template, self._color, board, moves)
 
     def log_legal_counterpart(self, answer: CounterpartAnswer, ply: int) -> None:
         """Log the Legal counterpart of the chaos move of ply, once its turn has landed."""

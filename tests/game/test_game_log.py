@@ -52,7 +52,8 @@ def test_a_game_log_records_the_start_every_move_and_every_attempt(scripted, tmp
     [log] = logs(tmp_path / "games", ".jsonl")
     assert log.name.endswith("_human_vs_qwen3.5-9b.jsonl")
     start, human, attempt_1, attempt_2 = events(log)
-    assert without(start, "game_id", "started_at", "prompt_file") == {
+    black = without(start["black"], "prompt_template")
+    assert without(start, "game_id", "started_at", "prompt_file") | {"black": black} == {
         "type": "game_start",
         "log_version": 2,
         "mode": "play_llm",
@@ -198,7 +199,7 @@ def test_under_repeat_the_log_records_every_attempt_and_its_result_as_under_expl
     first, *retries = [event for event in repeat if event["type"] == "llm_attempt"]
     assert [event["result"] for event in (first, *retries)] == ["illegal", "invalid", "illegal", "illegal", "illegal"]
     assert [(retry["prompt"], retry["feedback_sent"]) for retry in retries] == [(first["prompt"], None)] * 4
-    assert repeat[0]["black"] == QWEN_THINKING | {"retry_feedback": "repeat"}
+    assert without(repeat[0]["black"], "prompt_template") == QWEN_THINKING | {"retry_feedback": "repeat"}
     assert without(repeat[-1], "ended_at") == without(explained[-1], "ended_at")
 
 
@@ -230,7 +231,7 @@ def test_each_attempt_with_an_answer_logs_its_tokens_and_why_generation_stopped(
         (1200, 8, 640, "stop", True),
         (3, 0, 700, "length", False),
     ]
-    assert start["black"] == QWEN_THINKING  # recording tokens changes no setting
+    assert without(start["black"], "prompt_template") == QWEN_THINKING  # recording tokens changes no setting
 
 
 def test_a_game_abandoned_with_new_game_keeps_its_log_so_far(scripted, tmp_path):
@@ -277,7 +278,8 @@ def test_with_the_human_as_black_the_llm_is_white_in_the_log_and_the_file_names(
     [log] = logs(tmp_path / "games", ".jsonl")
     assert log.name.endswith("_qwen3.5-9b_vs_human.jsonl")
     start, *moves, end = events(log)
-    assert (start["white"], start["black"]) == (QWEN_THINKING | {"llm_constraints": "listed"}, {"player": "human"})
+    assert without(start["white"], "prompt_template") == QWEN_THINKING | {"llm_constraints": "listed"}
+    assert start["black"] == {"player": "human"}
     assert [(event["type"], event["color"]) for event in moves] == [
         ("llm_attempt", "white"),
         ("human_move", "black"),

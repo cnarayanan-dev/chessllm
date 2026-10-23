@@ -16,8 +16,7 @@
       "model": "gemma3:12b",
       "thinking": false,
       "llm_constraints": "listed",
-      "retry_feedback": "explained",
-      "position": "described"
+      "retry_feedback": "explained"
     },
     "black": {
       "player": "llm",

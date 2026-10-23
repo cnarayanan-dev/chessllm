@@ -40,7 +40,9 @@ class Mode:
 
     def logged_prompt_files(self, prompt_files: dict[Color, str]) -> dict[str, Any]:
         """The system prompt files as game_start logs them: with one LLM side, its file; with two, the file of each
-        side, even when shared."""
+        side, even when shared. Only a side playing a default Prompt template has one; with none, nothing is logged."""
+        if not prompt_files:
+            return {}
         if self.sides["llm"] == 2:
             return {"prompt_files": prompt_files}
         return {"prompt_file": next(iter(prompt_files.values()))}

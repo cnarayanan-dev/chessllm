@@ -17,7 +17,7 @@ from chessllm.engines.evaluator import Evaluator
 from chessllm.exceptions import AnchorUnavailable, RefusedAnchorTurn, RefusedLlmTurn, RejectedHumanMove
 from chessllm.game.ending import GameEnd, check_end, position_key
 from chessllm.game.evaluation import judge
-from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
+from chessllm.game.llm_turn.prompt import move_record, prompt_file, side_template
 from chessllm.game.llm_turn.turn import LlmTurns
 from chessllm.game.records import EvaluationEngine, GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed
 from chessllm.game.rules.chaos import ResolvedMove, apply
@@ -103,21 +103,30 @@ class GameSession:
         # the clock it starts, or the reverse. Never held while a side thinks, so a running turn doesn't hold up the
         # state.
         self._landing = threading.Lock()
+        # The Prompt template of each LLM side, read once, so the game plays it unchanged whatever happens to its
+        # files (ADR 0010).
+        templates = {color: side_template(side) for color, side in self._llm_sides.items()}
         # The turns of each LLM side, which keep its totals.
         self._turns_of = {
             color: LlmTurns(
-                color, side, players[color], self._rules, settings.max_attempts, log, self._abandoned, clock
+                color, side, templates[color], players[color], self._rules, settings.max_attempts, log,
+                self._abandoned, clock,
             )
             for color, side in self._llm_sides.items()
         }
-        prompt_files = {color: str(SYSTEM_PROMPT_FILES[side.llm_constraints]) for color, side in self._llm_sides.items()}
+        # The System prompt file of each side playing a default template, which the leaderboard still groups by.
+        prompt_files = {
+            color: str(file)
+            for color, side in self._llm_sides.items()
+            if (file := prompt_file(templates[color], side.llm_constraints)) is not None
+        }
         log.write(
             "game_start",
             game_id=log.game_id,
             log_version=2,
             mode=settings.mode,
-            white=side_log_shape(settings.white),
-            black=side_log_shape(settings.black),
+            white=side_log_shape(settings.white, templates.get("white")),
+            black=side_log_shape(settings.black, templates.get("black")),
             sampling=settings.sampling or "model_default",
             max_retries=settings.max_attempts - 1,
             **self._mode.logged_prompt_files(prompt_files),
@@ -217,10 +226,9 @@ class GameSession:
             color = color_of(self._board.turn)
             if color not in self._llm_sides:
                 raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
-            last_move = self._moves[-1][1] if self._moves else None
-            turns, pgn, ply = self._turns_of[color], self._pgn(), len(self._moves) + 1
+            turns, moves = self._turns_of[color], [written for _, written in self._moves]
             self._move_started = started = self._clock()
-            outcome = turns.play(self._board, pgn, last_move, ply, started)
+            outcome = turns.play(self._board, moves, started)
             time_s = outcome.turn.time_s
             counterpart = None
             if outcome.chaos_move is not None and self._legal_counterparts:
@@ -229,7 +237,7 @@ class GameSession:
                 # its Time used, nor on its running clock.
                 with self._landing:
                     self._move_ended = started + time_s
-                counterpart = turns.legal_counterpart(self._board, pgn, last_move)
+                counterpart = turns.legal_counterpart(self._board, moves)
                 if counterpart is not None:
                     outcome.turn.legal_counterpart = counterpart.counterpart
             with self._ending:
@@ -250,7 +258,7 @@ class GameSession:
                     played = outcome.move is not None or outcome.chaos_move is not None
                     unjudged = self._ply_to_judge() if played else None
                 if counterpart is not None:  # logged only with its turn: an abandoned game's never is
-                    turns.log_legal_counterpart(counterpart, ply)
+                    turns.log_legal_counterpart(counterpart, len(moves) + 1)
                 if self._end is not None:
                     self._write_end(self._end)
             self._judge(unjudged)
@@ -392,9 +400,7 @@ class GameSession:
     def _pgn(self) -> str:
         """The Move record: the moves so far as PGN movetext, e.g. "1. e4 e5", a chaos move in the LLM's own
         spelling. Under Standard rules it is valid PGN."""
-        return " ".join(
-            f"{ply // 2 + 1}. {written}" if ply % 2 == 0 else written for ply, (_, written) in enumerate(self._moves)
-        )
+        return move_record([written for _, written in self._moves])
 
     def _play_legal(self, move: chess.Move, time_s: float) -> str:
         """Play a legal move, the human's, the Anchor's or the LLM's, which took time_s, and return its SAN."""

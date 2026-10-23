@@ -9,7 +9,7 @@ from tests.conftest import ScriptedPlayer
 
 from chessllm.cli.faceoff_batch import main
 from chessllm.analytics.leaderboard import llm_configuration
-from chessllm.game.llm_turn.prompt import describe_position, turn_messages
+from chessllm.game.llm_turn.prompt import TurnPosition, default_template, describe_position, turn_message
 
 
 def test_the_description_lists_the_last_move_both_sides_pieces_and_check():
@@ -36,19 +36,18 @@ def test_without_a_last_move_or_check_those_lines_are_left_out():
     assert "check" not in description and "Last move" not in description
 
 
-def test_the_description_goes_under_the_fen_in_the_turns_message():
-    board = chess.Board()
-    [_, user] = turn_messages("", board.fen(), "white", description=describe_position(board, None))
+def test_the_description_goes_under_the_fen_in_the_described_turns_message():
+    message = turn_message(default_template("free", "described"), TurnPosition(chess.Board(), []))
 
-    assert user.content.splitlines()[1].startswith("FEN: ")
-    assert user.content.splitlines()[2].startswith("Your pieces (White):")
+    assert message.splitlines()[1].startswith("FEN: ")
+    assert message.splitlines()[2].startswith("Your pieces (White):")
 
 
-def test_a_described_faceoff_logs_the_setting_and_is_its_own_player_configuration(tmp_path):
+def test_a_described_faceoff_logs_its_template_and_is_its_own_player_configuration(tmp_path):
     player = ScriptedPlayer(["f3", "e5", "g4", "Qh4#"])
 
     code = main(
-        ["--models", "gemma3:12b", "llama3:8b", "--games", "1", "--position", "described", "--games-dir",
+        ["--models", "gemma3:12b", "llama3:8b", "--games", "1", "--prompt-template", "described", "--games-dir",
          str(tmp_path), "--no-analysis"],
         player_for=player.for_settings,
         sampling_file=tmp_path / "no-sampling.toml",
@@ -57,17 +56,28 @@ def test_a_described_faceoff_logs_the_setting_and_is_its_own_player_configuratio
     assert code == 0
     [log] = tmp_path.glob("*.jsonl")
     start = json.loads(log.read_text().splitlines()[0])
-    assert start["white"]["position"] == "described" and start["black"]["position"] == "described"
+    assert start["white"]["prompt_template"]["name"] == start["black"]["prompt_template"]["name"] == "Described"
+    assert "position" not in start["white"]
     # Black's prompt at ply 4 described the position after 2. g4.
     last_prompt = player.prompts[-1][-1].content
     assert "Last move: g4" in last_prompt and "Your pieces (Black):" in last_prompt
     described = llm_configuration(start, "white", start["white"])
-    plain = llm_configuration(start, "white", {k: v for k, v in start["white"].items() if k != "position"})
+    plain = llm_configuration(start, "white", {k: v for k, v in start["white"].items() if k != "prompt_template"})
     assert described.position == "described" and plain.position is None
     assert described.id() != plain.id()
 
 
-def test_the_default_isnt_logged_so_older_games_keep_their_configuration(tmp_path):
+def test_an_old_log_with_the_position_described_keeps_its_player_configuration():
+    side = {"player": "llm", "model": "llama3:8b", "thinking": False, "llm_constraints": "free",
+            "retry_feedback": "explained", "position": "described"}
+    start = {"log_version": 2, "white": side, "max_retries": 4, "prompt_file": "chessllm/game/prompts/system.txt"}
+
+    configuration = llm_configuration(start, "white", side)
+
+    assert (configuration.prompt, configuration.position) == ("system.txt", "described")
+
+
+def test_the_default_logs_no_position_so_older_games_keep_their_configuration(tmp_path):
     player = ScriptedPlayer(["f3", "e5", "g4", "Qh4#"])
 
     main(
@@ -86,7 +96,7 @@ def test_a_described_attempt_logs_its_prompt_with_the_description(tmp_path):
     player = ScriptedPlayer(["f3", "e5", "g4", "Qh4#"])
 
     main(
-        ["--models", "gemma3:12b", "llama3:8b", "--games", "1", "--position", "described", "--games-dir",
+        ["--models", "gemma3:12b", "llama3:8b", "--games", "1", "--prompt-template", "described", "--games-dir",
          str(tmp_path), "--no-analysis"],
         player_for=player.for_settings,
         sampling_file=tmp_path / "no-sampling.toml",

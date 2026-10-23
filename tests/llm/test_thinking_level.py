@@ -11,8 +11,9 @@ from chessllm.cli.faceoff_batch import main
 from chessllm.analytics.leaderboard import llm_configuration
 
 FOOLS_MATE = ["f3", "e5", "g4", "Qh4#"]
-# How an LLM side's game_start entry has looked since log version 2 with the default position (ADR 0004).
-PLAIN_SIDE_KEYS = {"player", "model", "thinking", "llm_constraints", "retry_feedback"}
+# How an LLM side's game_start entry has looked since log version 2 with the default position (ADR 0004), with its
+# Prompt template since ADR 0010.
+PLAIN_SIDE_KEYS = {"player", "model", "thinking", "llm_constraints", "retry_feedback", "prompt_template"}
 
 
 def faceoff(tmp_path, *args: str) -> tuple[int, ScriptedPlayer]:
