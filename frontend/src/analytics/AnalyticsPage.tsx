@@ -22,6 +22,7 @@ import {
   type Sort,
 } from '@/analytics/leaderboard'
 import { leaderboardQuery } from '@/api/leaderboard'
+import { ByModelPrototype, byModelActive } from '@/analytics/ByModel.prototype' // PROTOTYPE, throwaway
 import { TopBar } from '@/components/top-bar/TopBar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
@@ -201,6 +202,7 @@ export function AnalyticsPage() {
       <div className="min-h-svh text-sm">
         <TopBar current="analytics" />
         <main className="mx-auto max-w-[1400px] px-6 pt-4 pb-10">
+          {byModelActive() ? <ByModelPrototype /> : <>
           <h1 className="text-2xl font-semibold tracking-tight">Leaderboard</h1>
           <p className="mt-1 mb-5 text-muted-foreground">
             Every Player configuration, ranked by Rating on the chess.com Rapid scale. Click a column to sort.
@@ -217,6 +219,7 @@ export function AnalyticsPage() {
           ) : (
             <Leaderboard entries={entries} />
           )}
+          </>}
         </main>
       </div>
     </TooltipProvider>
