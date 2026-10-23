@@ -10,7 +10,7 @@ from chess.engine import Cp, Score
 from chessllm.core.types import Color
 from chessllm.exceptions import StockfishUnavailable
 from chessllm.game.settings import Settings
-from chessllm.llm.players import LlmReply, Message
+from chessllm.llm.players import LlmReply, Message, Tools
 
 
 class FakeClock:
@@ -48,6 +48,7 @@ class ScriptedPlayer:
         self.reply_s: list[float] = []
         self.prompts: list[list[Message]] = []
         self.allowed_moves: list[list[str] | None] = []
+        self.tools: list[Tools | None] = []  # the Tools each reply was asked with, never called
         self.built_for: list[Settings] = []
         self.colors: list[Color] = []  # the side each build was for
 
@@ -56,9 +57,12 @@ class ScriptedPlayer:
         self.colors.append(color)
         return self
 
-    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+    def reply(
+        self, messages: list[Message], allowed_moves: list[str] | None = None, tools: Tools | None = None
+    ) -> LlmReply:
         self.prompts.append(messages)
         self.allowed_moves.append(allowed_moves)
+        self.tools.append(tools)
         if self.clock is not None and self.reply_s:
             self.clock.advance(self.reply_s.pop(0))
         move = self.replies.pop(0)

@@ -7,7 +7,7 @@ from httpx import Response
 from chessllm.api.app import create_app
 from chessllm.core.types import Color
 from chessllm.game.settings import Settings
-from chessllm.llm.players import LlmReply, Message
+from chessllm.llm.players import LlmReply, Message, Tools
 from tests.fakes import FakeClock, Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
 
 
@@ -41,10 +41,12 @@ class BlockingPlayer(ScriptedPlayer):
         self.asked = threading.Event()
         self.release = threading.Event()
 
-    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+    def reply(
+        self, messages: list[Message], allowed_moves: list[str] | None = None, tools: Tools | None = None
+    ) -> LlmReply:
         self.asked.set()
         assert self.release.wait(timeout=5)
-        return super().reply(messages, allowed_moves)
+        return super().reply(messages, allowed_moves, tools)
 
 @pytest.fixture
 def scripted(tmp_path):

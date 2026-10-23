@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import get_args
 
 from chessllm.exceptions import InvalidSettings
-from chessllm.game.llm_turn.prompt import DefaultTemplate, check_prompt_template, default_template
+from chessllm.game.llm_turn.prompt import DefaultTemplate, check_prompt_template, default_template, tools_template
 from chessllm.game.sides import LISTED, LlmConstraints, PromptTemplate
 
 LLM_CONSTRAINTS: tuple[LlmConstraints, ...] = get_args(LlmConstraints)
@@ -55,8 +55,8 @@ class PromptLibrary:
 
 def default_entries() -> list[LibraryEntry]:
     """The default Prompt templates as their files say now: Default, Described and Moves without the Legal-move list,
-    then with it. Moves fits no LLM constraints here, where fits is for fresh Turn memory, the only one the app
-    plays: it is played under chat_moves, as that Turn memory's default (side_template)."""
+    then with it, then the Tools template. Moves fits no LLM constraints here, where fits is for fresh Turn memory, the
+    only one the app plays: it is played under chat_moves, as that Turn memory's default (side_template)."""
     templates: dict[str, PromptTemplate] = {}
     default_for: dict[str, list[LlmConstraints]] = {}
     for llm_constraints in sorted(LLM_CONSTRAINTS, key=lambda constraints: constraints in LISTED):
@@ -66,7 +66,13 @@ def default_entries() -> list[LibraryEntry]:
             default_for.setdefault(template.id, [])
             if kind == "default":
                 default_for[template.id].append(llm_constraints)
-    return [LibraryEntry(template, fits(template), default_for[template_id]) for template_id, template in templates.items()]
+    defaults = [
+        LibraryEntry(template, fits(template), default_for[template_id]) for template_id, template in templates.items()
+    ]
+    # The Tools template, the default of a side with Tools: hidden, as the app can't give a side tools to call
+    # (ADR 0011), yet it resolves for a game that played it.
+    tools = tools_template()
+    return defaults + [LibraryEntry(tools, fits(tools), default_for=[], hidden=True)]
 
 
 def fits(template: PromptTemplate) -> list[LlmConstraints]:

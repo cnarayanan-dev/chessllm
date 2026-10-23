@@ -1,7 +1,6 @@
 """Tools as a setting of the Player configuration (ADR 0011): an LLM side's tool set and Tool-call cap, set only from
 the benchmark's commands, refused where v1 doesn't allow them, logged in game_start and kept apart wherever games are
-grouped by configuration. No tool is called yet, so until #119 every side with tools is refused; these tests play
-them as if they were called (tools_called)."""
+grouped by configuration. Calling them is tested in test_tool_calls.py."""
 
 import json
 
@@ -21,12 +20,6 @@ from chessllm.llm.models import LLM_MODELS
 
 FOOLS_MATE = ["f3", "e5", "g4", "Qh4#"]
 QWEN_TOOLS = BenchmarkLlmSide(model="qwen3.5:9b", thinking=True, tools=frozenset({"legal_moves", "board"}))
-
-
-@pytest.fixture(autouse=True)
-def tools_called(monkeypatch):
-    """Play tools as if the LLM players could call them (#119)."""
-    monkeypatch.setattr("chessllm.game.settings.TOOLS_CALLED", True)
 
 
 def events(games_dir) -> list[dict]:
@@ -208,21 +201,6 @@ def test_a_command_refuses_tools_before_any_game_with_the_reason(tmp_path, capsy
     assert not list(tmp_path.glob("*.jsonl"))
 
 
-def test_until_the_players_can_call_tools_a_command_refuses_them_before_any_game(tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr("chessllm.game.settings.TOOLS_CALLED", False)
-
-    code = anchor_match(
-        ["--model", "qwen3.5:9b", "--thinking", "--tools", "board", "--games-dir", str(tmp_path)],
-        player_for=ScriptedPlayer([]).for_settings,
-        anchor_for=no_anchor,
-        sampling_file=tmp_path / "no-sampling.toml",
-    )
-
-    assert code == 1
-    assert "qwen3.5:9b (white) has tools, which can't be called until #119" in capsys.readouterr().err
-    assert not list(tmp_path.glob("*.jsonl"))
-
-
 def test_the_api_refuses_tools_and_its_output_has_none(scripted):
     client, _ = scripted([])
 
@@ -246,11 +224,14 @@ def test_the_tool_set_and_cap_are_part_of_the_player_configuration_and_none_keep
     assert (with_tools.tools, with_tools.tool_call_cap) == (("board", "legal_moves"), 10)
     assert (without.tools, without.tool_call_cap) == (None, None)
     assert with_tools.id() != without.id()
-    # No tools gives the id the side had before tools existed.
-    before = {k: v for k, v in tools_start["white"].items() if k not in ("tools", "tool_call_cap")}
-    assert without.id() == llm_configuration(tools_start, "white", before).id()
+    # A side with tools plays the Tools template by default, so its prompt differs too; with the same prompt, the
+    # tools alone make another configuration, and no tools gives the id the side had before tools existed.
+    assert with_tools.prompt.startswith("tools@") and without.prompt == "system.txt"
+    same_prompt = llm_configuration(none_start, "white", none_start["white"] | {"tools": ["board"], "tool_call_cap": 10})
+    assert same_prompt.id() != without.id()
+    assert without.id() == llm_configuration(none_start, "white", none_start["white"] | {"tools": []}).id()
     # Out of the API's output, like the Thinking level: only the id tells them apart.
-    assert "tool" not in json.dumps(with_tools.model_dump())
+    assert not {"tools", "tool_call_cap"} & set(with_tools.model_dump())
     # Another cap, or another tool set, is another configuration; the order the tools are given in is not.
     other_cap = llm_configuration(tools_start, "white", tools_start["white"] | {"tool_call_cap": 4})
     other_set = llm_configuration(tools_start, "white", tools_start["white"] | {"tools": ["board"]})

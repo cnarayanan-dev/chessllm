@@ -130,7 +130,22 @@ class BenchmarkLlmSide(LlmSide):
         return f"{self.model} ({thinking}{budget})"
 
 
-AnchorEngine = Literal["dragon", "stockfish", "random"]
+@dataclass(frozen=True)
+class SideTools:
+    """The Tools an LLM side may call and its Tool-call cap (ADR 0011)."""
+
+    tools: frozenset[Tool]
+    cap: int
+
+
+def side_tools(side: LlmSide) -> SideTools | None:
+    """The side's Tools and Tool-call cap; None for a side without tools, which every side from the API is."""
+    if isinstance(side, BenchmarkLlmSide) and side.tools:
+        return SideTools(side.tools, side.tool_call_cap)
+    return None
+
+
+AnchorEngine =Literal["dragon", "stockfish", "random"]
 # The engines whose Skill 1-7 an Anchor match batch's ladder climbs, above the random mover at Skill 0.
 LadderEngine = Literal["dragon", "stockfish"]
 

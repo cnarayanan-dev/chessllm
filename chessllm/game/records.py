@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_seri
 
 from chessllm.core.types import Color, GameResult, ModeKey, RulesKey, Sampling
 from chessllm.game.sides import AnchorSide, HumanSide, LlmSide
-from chessllm.llm.players import MessageRole
+from chessllm.llm.players import Message, MessageRole, ToolCall
 
 # How the resolver read a move under Chaos rules: legal as it stands, a chaos move, a spawn, or not a move it can play
 # (ADR 0006).
@@ -64,6 +64,19 @@ class PromptMessage(BaseModel):
 
     role: MessageRole
     content: str
+    # With Tools only (ADR 0011): an assistant message's tool calls, by the name called, and a tool message's tool.
+    # The calls' arguments and the thinking with them are the attempt's tool_calls.
+    tool_calls: list[str] | None = Field(default=None, exclude_if=is_none)
+    tool_name: str | None = Field(default=None, exclude_if=is_none)
+
+    @classmethod
+    def of(cls, message: Message) -> "PromptMessage":
+        return cls(
+            role=message.role,
+            content=message.content,
+            tool_calls=list(message.tool_calls) or None,
+            tool_name=message.tool_name,
+        )
 
 
 class AttemptSummary(BaseModel):
@@ -84,7 +97,7 @@ class AttemptSummary(BaseModel):
 # its own: the summary's fields come first in the class, not where they always were.
 ATTEMPT_FIELD_ORDER = (
     "move", "san", "notation_slip", "result", "feedback_sent", "raw_reply", "thinking", "reasoning", "error",
-    "latency_s", "prompt", "resolution",
+    "latency_s", "prompt", "tool_calls", "tool_call_as_text", "resolution",
 )
 
 
@@ -102,6 +115,11 @@ class Attempt(AttemptSummary):
     # of the side's earlier turns this attempt's Prompt still held, fewer than its turn's remembered. Its llm_attempt
     # logs it as the turn's remembered (log_shape leaves it out).
     remembered: int | None = Field(default=None, exclude_if=is_none)
+    # With Tools only (ADR 0011): the attempt's tool calls in the order made, left out when it made none, the calls
+    # and their results also being in its prompt; and true when its tool phase ended in a tool call written as text
+    # instead of made, which wasn't run, left out otherwise. latency_s adds up all the attempt's calls.
+    tool_calls: list[ToolCall] | None = Field(default=None, exclude_if=is_none)
+    tool_call_as_text: Literal[True] | None = Field(default=None, exclude_if=is_none)
 
     # Unannotated, as pydantic would take an annotated return type for the record's schema in the API description.
     @model_serializer(mode="wrap")
@@ -245,6 +263,15 @@ class IllegalMoves(BaseModel):
     ambiguous: int
 
 
+class ToolUse(BaseModel):
+    """How an LLM side with Tools used them over its game (ADR 0011), over its attempts that answered."""
+
+    tool_calls: dict[str, int]  # by tool, each of the side's tools included, and any other name it called
+    attempts_without_tool_calls: int
+    attempts_at_cap: int  # whose tool phase ended at the Tool-call cap
+    tool_calls_as_text: int  # attempts whose tool phase ended in a tool call written as text
+
+
 class LlmSideStats(BaseModel):
     """The totals of one LLM side. Under Enforced decoding the illegal-move metrics are None (ADR 0003)."""
 
@@ -255,6 +282,8 @@ class LlmSideStats(BaseModel):
     # Only under Chaos rules: the chaos moves played, spawns included, and the spawns among them.
     chaos_moves: int | None = Field(default=None, exclude_if=is_none)
     spawns: int | None = Field(default=None, exclude_if=is_none)
+    # Only for a side with Tools.
+    tool_use: ToolUse | None = Field(default=None, exclude_if=is_none)
 
 
 class Stats(BaseModel):

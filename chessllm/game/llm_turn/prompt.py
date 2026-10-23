@@ -18,11 +18,21 @@ from chessllm.core.config import PROMPTS_DIR
 from chessllm.core.types import Color, opponent
 from chessllm.exceptions import InvalidSettings
 from chessllm.game.records import Ply
-from chessllm.game.sides import LISTED, LlmConstraints, LlmSide, PromptTemplate, RetryFeedback, TurnMemory
+from chessllm.game.sides import (
+    LISTED,
+    LlmConstraints,
+    LlmSide,
+    PromptTemplate,
+    RetryFeedback,
+    TurnMemory,
+    side_tools,
+)
 from chessllm.llm.players import Message
 
 SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system.txt"
 LISTED_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_listed.txt"
+# The System prompt of the Tools template, the default of a side with Tools (ADR 0011).
+TOOLS_SYSTEM_PROMPT_FILE = PROMPTS_DIR / "system_tools.txt"
 # The System prompt file of the default Prompt templates for each kind of LLM constraints, as prompt_file logs it for
 # a side playing one.
 SYSTEM_PROMPT_FILES: dict[LlmConstraints, Path] = {
@@ -70,6 +80,8 @@ PGN_AND_FEN = "PGN: $moves\nFEN: $fen"
 DESCRIPTION = "\n$description"
 LEGAL_MOVES = "\nLegal moves: $legal_moves"
 OPPONENT_PLAYED = "$opponent_played"
+# The Tools template's turn message: only whose move it is and the opponent's last move, the rest left to the tools.
+TOOLS_TURN_TEMPLATE = "Opponent's last move: $last_move\nYour move."
 
 # The default Prompt templates that show the position, which --prompt-template chooses from: Default, the PGN and
 # FEN, and Described, which adds where every piece stands.
@@ -102,11 +114,27 @@ def default_system_prompt_file(llm_constraints: LlmConstraints, kind: DefaultTem
     return (MOVES_SYSTEM_PROMPT_FILES if kind == "moves" else SYSTEM_PROMPT_FILES)[llm_constraints]
 
 
+def tools_template() -> PromptTemplate:
+    """The Tools template, the default of a side with Tools (ADR 0011): a short System prompt read from its file now,
+    and a turn message without the position, which the tools give. Its ID carries a version from its text, as a
+    default template's does, e.g. "tools@1a2b3c4d"."""
+    system_prompt = TOOLS_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
+    version = hashlib.sha256(f"{system_prompt}\0{TOOLS_TURN_TEMPLATE}".encode("utf-8")).hexdigest()[:8]
+    return PromptTemplate(
+        id=f"tools@{version}", name="Tools", system_prompt=system_prompt, turn_template=TOOLS_TURN_TEMPLATE
+    )
+
+
 def side_template(side: LlmSide) -> PromptTemplate:
-    """The Prompt template the side plays with: its own, or else the default for its LLM constraints and Turn
-    memory, Moves under chat_moves and Default under the others."""
+    """The Prompt template the side plays with: its own, or else the Tools template for a side with Tools, and the
+    default for its LLM constraints and Turn memory for any other, Moves under chat_moves and Default under the
+    others."""
+    if side.prompt_template is not None:
+        return side.prompt_template
+    if side_tools(side) is not None:
+        return tools_template()
     kind: DefaultTemplate = "moves" if side.turn_memory == "chat_moves" else "default"
-    return side.prompt_template or default_template(side.llm_constraints, kind)
+    return default_template(side.llm_constraints, kind)
 
 
 def prompt_file(template: PromptTemplate, llm_constraints: LlmConstraints) -> Path | None:

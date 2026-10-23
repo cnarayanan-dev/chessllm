@@ -29,19 +29,21 @@ from chessllm.game.records import (
     LlmSideStats,
     LlmTurn,
     Ply,
+    ToolUse,
 )
+from chessllm.game.llm_turn.tools import PositionTools
 from chessllm.game.rules import Rules
 from chessllm.game.rules.chaos import ResolvedMove
-from chessllm.game.sides import ENFORCED, LISTED, LlmConstraints, LlmSide, PromptTemplate
-from chessllm.llm.players import LlmPlayer, LlmReply
+from chessllm.game.sides import ENFORCED, LISTED, TOOLS, LlmSide, PromptTemplate, side_tools
+from chessllm.llm.players import LlmPlayer, LlmReply, Tools
 from chessllm.logs.game_log import GameLog
 
 
 class SideStats:
     """The totals of one LLM side."""
 
-    def __init__(self, llm_constraints: LlmConstraints, rules: Rules) -> None:
-        self.enforced = llm_constraints in ENFORCED
+    def __init__(self, side: LlmSide, rules: Rules) -> None:
+        self.enforced = side.llm_constraints in ENFORCED
         self.rules = rules
         self.legal_move_streak = 0
         self.streak_broken = False
@@ -50,14 +52,44 @@ class SideStats:
         self.notation_slips = 0
         self.chaos_moves = 0  # spawns included, as a spawn is a chaos move
         self.spawns = 0
+        # The side's Tools and Tool-call cap, and how it used them; None for a side without.
+        self.tools = side_tools(side)
+        self.tool_use = (
+            ToolUse(
+                tool_calls={tool: 0 for tool in TOOLS if tool in self.tools.tools},
+                attempts_without_tool_calls=0,
+                attempts_at_cap=0,
+                tool_calls_as_text=0,
+            )
+            if self.tools is not None
+            else None
+        )
+
+    def count_tool_use(self, attempt: Attempt) -> None:
+        """Count an attempt's tool calls, for a side with Tools: one that answered, or that failed after a tool call
+        or one written as text. An attempt that failed before either isn't counted, as it couldn't use the tools."""
+        use, tools = self.tool_use, self.tools
+        if use is None or tools is None:
+            return
+        calls = attempt.tool_calls or []
+        if attempt.raw_reply is None and not calls and not attempt.tool_call_as_text:
+            return
+        for call in calls:
+            use.tool_calls[call.tool] = use.tool_calls.get(call.tool, 0) + 1
+        use.attempts_without_tool_calls += not calls
+        use.attempts_at_cap += len(calls) >= tools.cap
+        use.tool_calls_as_text += bool(attempt.tool_call_as_text)
 
     def record(self) -> LlmSideStats:
         """Under Enforced decoding the illegal-move metrics are None, not applicable: they would be true by
         construction (ADR 0003). Notation slips can't happen there, so they need no special case. The chaos
-        counts are only given under Chaos rules, which Enforced decoding never plays under."""
+        counts are only given under Chaos rules, which Enforced decoding never plays under, and the tool use only
+        for a side with Tools."""
+        tool_use = self.tool_use.model_copy(deep=True) if self.tool_use is not None else None
         if self.enforced:
             return LlmSideStats(
-                legal_move_streak=None, illegal_moves=None, recovered_turns=None, notation_slips=self.notation_slips
+                legal_move_streak=None, illegal_moves=None, recovered_turns=None, notation_slips=self.notation_slips,
+                tool_use=tool_use,
             )
         chaos_moves, spawns = self.rules.chaos_counts(self.chaos_moves, self.spawns)
         return LlmSideStats(
@@ -67,6 +99,7 @@ class SideStats:
             notation_slips=self.notation_slips,
             chaos_moves=chaos_moves,
             spawns=spawns,
+            tool_use=tool_use,
         )
 
 
@@ -123,7 +156,7 @@ class LlmTurns:
         self._log = log
         self._abandoned = abandoned
         self._clock = clock
-        self.stats = SideStats(side.llm_constraints, rules)
+        self.stats = SideStats(side, rules)
         # What the side's turns send: one conversation for the game, or a new one every turn (Turn memory).
         self._conversation = Conversation(side.turn_memory, color, template)
         # How many plies of the game the side's conversation has been told of: those before its last turn, so the
@@ -151,6 +184,9 @@ class LlmTurns:
             random.shuffle(legal_moves)
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
+        # A side's Tools answer about this position (ADR 0011); each attempt gets the whole Tool-call cap.
+        given = side_tools(side)
+        tools = Tools(PositionTools(board, moves, color).functions(given.tools), given.cap) if given else None
         conversation = self._conversation
         position = TurnPosition(board, moves, listed_moves)
         # Under Chaos rules, in a conversation, the Chaos move report opens the turn: what the chaos moves since the
@@ -183,11 +219,12 @@ class LlmTurns:
             trimmed = conversation.remembered if conversation.remembered != remembered else None
             logged_remembered = {"remembered": conversation.remembered} if remembered is not None else {}
             try:
-                reply = player.reply(messages, allowed_moves)
+                reply = player.reply(messages, allowed_moves, tools)
             except Exception as error:
                 attempt = no_answer(model, error, prompt, feedback)
                 attempt.remembered = trimmed
                 turn.attempts.append(attempt)
+                stats.count_tool_use(attempt)
                 self._log.write(
                     "llm_attempt", color=color, ply=ply, attempt=number, pgn=pgn, fen=fen, **logged_list,
                     **self._rules.attempt_log_shape(attempt.log_shape()), **logged_remembered, **logged_context,
@@ -204,6 +241,7 @@ class LlmTurns:
             attempt = answered(board, reply, written, move, result, side.thinking, prompt, feedback, recorded)
             attempt.remembered = trimmed
             turn.attempts.append(attempt)
+            stats.count_tool_use(attempt)
             chaos = move is None and resolution is not None and resolution.kind in ("chaos", "spawn")
             last = move is not None or chaos or number == max_attempts  # it is played, or the turn forfeits
             self._log.write(

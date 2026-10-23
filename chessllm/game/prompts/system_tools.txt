@@ -1,0 +1,3 @@
+You are playing chess as $color against $opponent. Win the game.
+You have tools to look at the game; use them before you move. Keep it short.
+When asked for your move, reply with it in SAN (e.g. Nf6, exd5, O-O, e8=Q).

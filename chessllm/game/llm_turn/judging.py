@@ -8,7 +8,14 @@ from pydantic import ValidationError
 
 from chessllm.exceptions import LlmTimeout
 from chessllm.game.records import Attempt, AttemptResult, IllegalResult, PromptMessage, Resolution
-from chessllm.llm.players import LlmReply, MoveAnswer, ReasonedMoveAnswer
+from chessllm.llm.players import (
+    FailedAfterToolCalls,
+    LlmReply,
+    Message,
+    MoveAnswer,
+    ReasonedMoveAnswer,
+    ToolCall,
+)
 
 
 def judge(board: chess.Board, raw: str) -> tuple[str, chess.Move | None, Literal["legal", IllegalResult]]:
@@ -42,7 +49,13 @@ def reasoning(raw: str) -> str | None:
 
 
 def no_answer(model: str, error: Exception, prompt: list[PromptMessage], feedback: str | None) -> Attempt:
-    """The attempt of a call that gave no answer, with why: it timed out, or it failed."""
+    """The attempt of a call that gave no answer, with why: it timed out, or it failed. With Tools, a failure after
+    tool calls keeps them, in the attempt's tool_calls and its prompt (ADR 0011)."""
+    calls: tuple[ToolCall, ...] = ()
+    added: tuple[Message, ...] = ()
+    as_text = False
+    if isinstance(error, FailedAfterToolCalls):
+        calls, added, as_text, error = error.tool_calls, error.tool_messages, error.tool_call_as_text, error.error
     if isinstance(error, LlmTimeout):
         minutes = error.timeout_s / 60
         failed: AttemptResult = "timeout"
@@ -51,7 +64,9 @@ def no_answer(model: str, error: Exception, prompt: list[PromptMessage], feedbac
         failed, why = "error", f"{model} did not reply: {error}"
     return Attempt(
         move=None, san=None, notation_slip=False, result=failed, feedback_sent=feedback, raw_reply=None,
-        thinking=None, reasoning=None, error=why, latency_s=None, prompt=prompt,
+        thinking=None, reasoning=None, error=why, latency_s=None,
+        prompt=prompt + [PromptMessage.of(message) for message in added], tool_calls=list(calls) or None,
+        tool_call_as_text=True if as_text else None,
     )
 
 
@@ -68,11 +83,13 @@ def answered(
 ) -> Attempt:
     """The attempt of an answer judged as written, move and result: with thinking on its Thinking, with it off the
     Reasoning written in the answer instead; a slip if the legal move isn't written exactly as its standard SAN
-    (ADR 0002)."""
+    (ADR 0002). With Tools, its tool calls, and its prompt followed by the messages its tool phase added (ADR 0011)."""
     thinking, reasoned = (reply.thinking, None) if thinks else (None, reasoning(reply.raw))
     san = board.san(move) if move is not None else None
     return Attempt(
         move=written, san=san, notation_slip=san is not None and written != san, result=result,
         feedback_sent=feedback, raw_reply=reply.raw, thinking=thinking, reasoning=reasoned, error=None,
-        latency_s=reply.latency_s, prompt=prompt, resolution=resolution,
+        latency_s=reply.latency_s, prompt=prompt + [PromptMessage.of(message) for message in reply.tool_messages],
+        tool_calls=list(reply.tool_calls) or None, tool_call_as_text=True if reply.tool_call_as_text else None,
+        resolution=resolution,
     )

@@ -21,9 +21,6 @@ from chessllm.llm.models import CONTEXT_TOKENS, THINKING_BUDGET_RANGE, LlmModel
 
 # How many illegal moves an LLM may make in one turn before it forfeits: one attempt, the rest retries.
 MAX_ATTEMPTS_RANGE = range(1, 26)
-# Whether the LLM players can call Tools yet. Until they can (#119, which removes this), a side with tools is refused
-# like chat_moves until #105: a game played without them would be logged and grouped as one with them.
-TOOLS_CALLED = False
 
 
 @dataclass(frozen=True)
@@ -155,6 +152,4 @@ def tools_refusal(side: BenchmarkLlmSide, model: LlmModel, rules: RulesKey) -> s
         return "has tools, so thinking must be on"
     if side.thinking_budget is not None:
         return "has tools, so it can't have a Thinking budget"
-    if not TOOLS_CALLED:
-        return "has tools, which can't be called until #119"
     return None

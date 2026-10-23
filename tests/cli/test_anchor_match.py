@@ -285,11 +285,11 @@ class FirstLegalMovePlayer(ScriptedPlayer):
     def __init__(self) -> None:
         super().__init__([])
 
-    def reply(self, messages, allowed_moves=None):
+    def reply(self, messages, allowed_moves=None, tools=None):
         [fen] = re.findall(r"^FEN: (.+)$", messages[-1].content, flags=re.MULTILINE)
         board = chess.Board(fen)
         self.replies.append(board.san(min(board.legal_moves, key=chess.Move.uci)))
-        return super().reply(messages, allowed_moves)
+        return super().reply(messages, allowed_moves, tools)
 
 
 def replays(log_events: list[dict], seed: int) -> bool:

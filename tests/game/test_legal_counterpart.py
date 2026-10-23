@@ -12,7 +12,7 @@ from chessllm.exceptions import LlmTimeout
 from chessllm.game.llm_turn.prompt import LISTED_SYSTEM_PROMPT_FILE, system_prompt
 from chessllm.game.session import GameSession
 from chessllm.game.settings import Settings
-from chessllm.llm.players import LlmReply, Message
+from chessllm.llm.players import LlmReply, Message, Tools
 from chessllm.logs.game_log import GameLog
 from tests.conftest import Raw, ScriptedPlayer, play_llm, play_move
 from tests.fakes import FakeClock
@@ -177,11 +177,13 @@ class HeldPlayer(ScriptedPlayer):
         self.asked = threading.Event()
         self.release = threading.Event()
 
-    def reply(self, messages: list[Message], allowed_moves: list[str] | None = None) -> LlmReply:
+    def reply(
+        self, messages: list[Message], allowed_moves: list[str] | None = None, tools: Tools | None = None
+    ) -> LlmReply:
         if len(self.prompts) + 1 == self.held:
             self.asked.set()
             assert self.release.wait(timeout=5)
-        return super().reply(messages, allowed_moves)
+        return super().reply(messages, allowed_moves, tools)
 
 
 def abandon_during_call(tmp_path, held: int) -> tuple[HeldPlayer, dict, list]:
