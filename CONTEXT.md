@@ -41,7 +41,7 @@ The combination of whether the **Legal-move list** is shown and whether **Enforc
 _Avoid_: Play mode, mode, game type, variant
 
 **Legal-move list**:
-The list of every legal move in the current position, shown to the LLM in its prompt.
+The list of every legal move in the current position, shown to the LLM in its prompt. Shown only when the **LLM constraints** say so: a **Turn template** must place it then, and must not otherwise, so the constraints are always what the LLM was actually given.
 _Avoid_: Move options, candidate moves
 
 **Enforced decoding**:
@@ -145,12 +145,40 @@ The short explanation an LLM writes in its answer, before its move, when thinkin
 _Avoid_: Explanation, thinking, justification
 
 **Prompt**:
-Everything sent to the LLM in a **Turn**, exactly as it received it: the **System prompt**, the position (with the **Legal-move list** when shown), and for each **Retry** its previous answer and the **Retry feedback**. Under a conversation kept by **Turn memory** it also holds the earlier turns the LLM still remembers, and its system prompt is the one read at the side's first turn, fixed for the game. Recorded as sent, since the system prompt file can change between turns; in a conversation each attempt records only what it added, and the whole prompt is rebuilt from the game's earlier records.
+Everything sent to the LLM in a **Turn**, exactly as it received it: the **System prompt**, the **Turn template** filled in for the position, the **Answer format**, and for each **Retry** its previous answer and the **Retry feedback**. Under a conversation kept by **Turn memory** it also holds the earlier turns the LLM still remembers. A side's **Prompt template** is fixed for the whole game: a changed one is played only from a new game. Recorded as sent; in a conversation each attempt records only what it added, and the whole prompt is rebuilt from the game's earlier records.
 _Avoid_: Input, context, query
 
 **System prompt**:
-The fixed instructions that open every **Prompt**: the rules of the answer and a worked example, the same for every turn of a side unless its file is edited.
+The instructions that open every **Prompt**, written as text by the human for each LLM side, or the default one when they write none. It is identified by its text, never by a file name.
 _Avoid_: Instructions, template (for the text sent)
+
+**Turn template**:
+The text, written by the human for each LLM side, that becomes the message of every **Turn** after the **System prompt**, with placeholders filled in from the game, such as the moves so far, the FEN, where every piece stands or the **Legal-move list**. Which of these the LLM is given is the template's choice, except the Legal-move list, which the **LLM constraints** decide. A default one is used when they write none. Identified by its text.
+_Avoid_: User message, position message
+
+**Prompt template**:
+A **System prompt** and a **Turn template** written for each other and kept together in the **Prompt library**, which an LLM side plays with. It fits the **LLM constraints** that show the **Legal-move list** only if its Turn template places it.
+_Avoid_: Preset, saved prompt, prompt pair
+
+**Prompt library**:
+The Prompt templates the human has saved, each with an ID given on saving and an optional name, together with the default ones. A saved Prompt template never changes: saving an edit makes a new one with a new ID, and an old one can only be hidden. A game records the full text of the Prompt template each side played with, not only its ID.
+_Avoid_: Prompt store, prompt collection
+
+**Prompt lab**:
+The tools for experimenting with prompts: choosing a side's **Prompt template**, **Probes** and **Pause**. Switched on in the app's preferences, off by default; it changes which tools are shown, never how a game is played. With it off, every side plays with a default Prompt template.
+_Avoid_: Prompt mode (a **Mode** is a kind of game), prompt editor, playground
+
+**Pause**:
+Holding a game in which LLMs move on their own (an **LLM faceoff** or an **Anchor match**) after the **Turn** running, so no new turn starts until it is resumed. Asking for a **Probe** while such a game runs pauses it first, so a probe never runs alongside a real turn. Nothing in the game changes, and **Time used** does not grow while it is paused.
+_Avoid_: Stop, suspend, break
+
+**Probe**:
+One question to an LLM about the position of a past **Turn**, asked outside the game with any **Prompt template**, by the same model and settings as the side that played it, and judged as an attempt would be. Always a fresh prompt for that position, even for a side whose **Turn memory** keeps a conversation. Never part of the game: it changes no move, record of play or **Rating**. Kept apart from the game's record, with the full text of its Prompt template and its answer, so probes can be added up across games later.
+_Avoid_: Try (in records; "Try" is only the button's name), retry, replay, rerun
+
+**Answer format**:
+The shape the LLM's answer must take: its move, and its **Reasoning** when thinking is off. Set by the benchmark, not by the human, and added to every **Prompt** whatever its System prompt and Turn template say.
+_Avoid_: Output format, schema
 
 **Illegal move**:
 A move proposed by the LLM that cannot be played in the current position: badly formed notation, a rule-breaking move, or an ambiguous move all count, each recorded with its kind.
@@ -165,11 +193,11 @@ One try within an LLM's **Turn**: the **Prompt** sent, the model's answer, and h
 _Avoid_: Try (in code and records), request, call
 
 **Retry**:
-A further attempt the LLM gets after an illegal move, told why the previous move was rejected, or after a forced answer that was itself cut off before it gave a move (with a **Thinking budget** only; not an illegal move). The attempts per turn, retries included, are set for the whole game, 1 to 25 and 5 by default, the same for every LLM in it; a Player configuration includes them.
+A further attempt the LLM gets after an illegal move, told about it as its **Retry feedback** says, or after a forced answer that was itself cut off before it gave a move (with a **Thinking budget** only; not an illegal move). The attempts per turn, retries included, are set for the whole game, 1 to 25 and 5 by default, the same for every LLM in it; a Player configuration includes them.
 _Avoid_: Re-prompt, second chance
 
 **Retry feedback**:
-What the LLM is told after an illegal move. One of three levels: *explained* (the move and the kind of failure, the default), *bare* (only that it was illegal), or *hinted* (also the list of legal moves).
+What the LLM is told after an illegal move. One of four levels: *explained* (the move and the kind of failure, the default), *bare* (only that it was illegal), *hinted* (also the list of legal moves), or *repeat* (nothing: the turn's first **Prompt** is sent again unchanged, so the LLM never sees its rejected move; in a conversation kept by **Turn memory** the rejected attempt is left out of it, though the game still records it).
 _Avoid_: Error message, hint mode
 
 **Forfeit**:
@@ -187,7 +215,7 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, sampling and prompt. Games count towards the same rating only if their player configurations are identical.
+An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, sampling and **Prompt template**, chosen per LLM side when a game starts. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Rating**:
