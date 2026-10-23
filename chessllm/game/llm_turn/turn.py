@@ -13,7 +13,14 @@ from chessllm.core.types import Color
 from chessllm.game.llm_turn.conversation import Conversation, reply_reserve
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer, ask_legal_counterpart
 from chessllm.game.llm_turn.judging import answered, judge, no_answer
-from chessllm.game.llm_turn.prompt import TurnPosition, cut_off_feedback, move_record, retry_feedback, turn_message
+from chessllm.game.llm_turn.prompt import (
+    TurnPosition,
+    cut_off_feedback,
+    move_record,
+    reported_turn_message,
+    retry_feedback,
+    turn_message,
+)
 from chessllm.game.records import (
     ILLEGAL_RESULTS,
     Attempt,
@@ -21,6 +28,7 @@ from chessllm.game.records import (
     IllegalMoves,
     LlmSideStats,
     LlmTurn,
+    Ply,
 )
 from chessllm.game.rules import Rules
 from chessllm.game.rules.chaos import ResolvedMove
@@ -118,15 +126,19 @@ class LlmTurns:
         self.stats = SideStats(side.llm_constraints, rules)
         # What the side's turns send: one conversation for the game, or a new one every turn (Turn memory).
         self._conversation = Conversation(side.turn_memory, color, template)
+        # How many plies of the game the side's conversation has been told of: those before its last turn, so the
+        # Chaos move report of its next turn covers the plies since, its own move and its opponent's.
+        self._plies_seen = 0
 
-    def play(self, board: chess.Board, moves: Sequence[str], started: float) -> TurnOutcome:
+    def play(self, board: chess.Board, plies: Sequence[Ply], started: float) -> TurnOutcome:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
         illegal moves, or at once when the call fails or times out: then there is no answer to give feedback on.
 
-        board is the position to move in, moves every ply so far as written in the Move record, and started when the
-        turn started, by the game's clock. The board is left as it is: the game plays the move."""
+        board is the position to move in, plies every ply so far as played, and started when the turn started, by the
+        game's clock. The board is left as it is: the game plays the move."""
         color, side, player, stats = self._color, self._side, self._player, self.stats
         model = side.model
+        moves = [played.written for played in plies]  # as written in the Move record
         ply = len(moves) + 1
         pgn = move_record(moves)
         fen = board.fen()
@@ -140,7 +152,15 @@ class LlmTurns:
         listed_moves = " ".join(legal_moves) if listed else None
         logged_list = {"legal_moves": listed_moves} if listed else {}
         conversation = self._conversation
-        conversation.start_turn(turn_message(self._template, TurnPosition(board, moves, listed_moves)))
+        position = TurnPosition(board, moves, listed_moves)
+        # Under Chaos rules, in a conversation, the Chaos move report opens the turn: what the chaos moves since the
+        # side's last turn did on the board. A fresh turn's position already shows it.
+        if conversation.kept and self._rules.plays_illegal_moves:
+            message = reported_turn_message(self._template, position, plies[self._plies_seen :], color)
+        else:
+            message = turn_message(self._template, position)
+        self._plies_seen = len(plies)
+        conversation.start_turn(message)
         remembered = conversation.remembered
         logged_remembered = {"remembered": remembered} if remembered is not None else {}
         turn = LlmTurn(

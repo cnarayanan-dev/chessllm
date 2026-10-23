@@ -242,8 +242,10 @@ class GameSession:
             if color not in self._llm_sides:
                 raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
             turns, moves = self._turns_of[color], [written for _, written in self._moves]
+            with self._landing:
+                plies = list(self._plies)  # as the turn starts: an Evaluation may still land on the last
             self._move_started = started = self._clock()
-            outcome = turns.play(self._board, moves, started)
+            outcome = turns.play(self._board, plies, started)
             time_s = outcome.turn.time_s
             counterpart, baselines = None, None
             if outcome.chaos_move is not None:

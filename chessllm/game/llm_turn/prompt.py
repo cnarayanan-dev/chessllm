@@ -7,7 +7,7 @@ import hashlib
 import random
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from string import Template
 from typing import Literal, get_args
@@ -17,6 +17,7 @@ import chess
 from chessllm.core.config import PROMPTS_DIR
 from chessllm.core.types import Color, opponent
 from chessllm.exceptions import InvalidSettings
+from chessllm.game.records import Ply
 from chessllm.game.sides import LISTED, LlmConstraints, LlmSide, PromptTemplate, RetryFeedback, TurnMemory
 from chessllm.llm.players import Message
 
@@ -211,6 +212,34 @@ def opponent_played(moves: Sequence[str], llm_color: Color) -> str:
     return f"Opponent played {moves[-1]}."
 
 
+def chaos_move_line(played: Ply, llm_color: Color) -> str | None:
+    """A ply's line of the Chaos move report: what a chaos move or spawn did on the board, in the resolver's words
+    (ADR 0006), e.g. "Your Bd3 was played as: bishop c1→d3 (no bishop can reach d3 by its movement; c1 is nearest)."
+    or "Opponent played Qxh7 as: queen spawned on h7.". None for any other ply: legal moves get no report."""
+    resolution = played.resolution
+    if resolution is None or resolution.kind not in ("chaos", "spawn"):
+        return None
+    assert resolution.to is not None and resolution.piece is not None
+    piece = chess.piece_name(chess.Piece.from_symbol(resolution.piece).piece_type)
+    if resolution.from_square is None:
+        what = f"{piece} spawned on {resolution.to}"
+    else:
+        moved = chess.Board(played.fen_before).piece_at(chess.parse_square(resolution.from_square))
+        mover = chess.piece_name(moved.piece_type) if moved is not None else piece
+        what = f"{mover} {resolution.from_square}→{resolution.to}"
+        what += f", becoming a {piece}" if mover != piece else ""
+        what += f" ({resolution.reason})"
+    own = played.color == llm_color
+    whose = f"Your {played.written} was played" if own else f"Opponent played {played.written}"
+    return f"{whose} as: {what}."
+
+
+def chaos_move_report(plies: Sequence[Ply], llm_color: Color) -> str | None:
+    """The Chaos move report of the plies since the side's last turn, its own and its opponent's: a line for each
+    chaos move or spawn among them. None when there is none."""
+    return "\n".join(line for played in plies if (line := chaos_move_line(played, llm_color))) or None
+
+
 def move_record(moves: Sequence[str], first_ply: int = 1) -> str:
     """Plies as PGN movetext, each as written, e.g. "1. e4 e5". first_ply is the number of the first (1 for White's
     first move), so plies from the middle of a game keep their move numbers, e.g. "3... Nc6 4. Bb5"."""
@@ -227,11 +256,13 @@ def move_record(moves: Sequence[str], first_ply: int = 1) -> str:
 @dataclass(frozen=True)
 class TurnPosition:
     """What a Turn template is filled in with: the position to move in, every ply that led to it as written in the
-    Move record, and the Legal-move list (space-separated SAN) as shown, under Listed only."""
+    Move record, and the Legal-move list (space-separated SAN) as shown, under Listed only. opponent_played, when
+    set, is what $opponent_played says in place of the opponent's plain last move: its Chaos move report line."""
 
     board: chess.Board
     moves: Sequence[str]
     legal_moves: str | None = None
+    opponent_played: str | None = None
 
 
 def turn_message(template: PromptTemplate, position: TurnPosition) -> str:
@@ -247,11 +278,25 @@ def turn_message(template: PromptTemplate, position: TurnPosition) -> str:
         "description": lambda: describe_position(board, last_move),
         "last_move": lambda: last_move or NO_MOVES_YET,
         "legal_moves": lambda: position.legal_moves,
-        "opponent_played": lambda: opponent_played(moves, "white" if board.turn == chess.WHITE else "black"),
+        "opponent_played": lambda: position.opponent_played
+        or opponent_played(moves, "white" if board.turn == chess.WHITE else "black"),
     }
     parsed = Template(template.turn_template)
     # Only the placeholders the template places are worked out.
     return parsed.substitute({name: values[name]() for name in parsed.get_identifiers()})
+
+
+def reported_turn_message(
+    template: PromptTemplate, position: TurnPosition, plies: Sequence[Ply], llm_color: Color
+) -> str:
+    """A turn's message in a conversation under Chaos rules: the Chaos move report of the plies since the side's
+    last turn opens it, then the Turn template filled in. When the template places $opponent_played (chat_moves),
+    an opponent's last move that was a chaos move is said once, its report line standing in for the plain one."""
+    lines = {played.ply: line for played in plies if (line := chaos_move_line(played, llm_color))}
+    places_opponent = "opponent_played" in Template(template.turn_template).get_identifiers()
+    if places_opponent and plies and plies[-1].color != llm_color and plies[-1].ply in lines:
+        position = replace(position, opponent_played=lines.pop(plies[-1].ply))
+    return "\n".join([*lines.values(), turn_message(template, position)])
 
 
 def fresh_prompt(template: PromptTemplate, llm_color: Color, position: TurnPosition) -> list[Message]:
