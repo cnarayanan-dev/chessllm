@@ -1,7 +1,7 @@
 """Who plays a side of a game: a human, an LLM with the settings it plays under, or an Anchor."""
 
 from dataclasses import asdict, dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import Field
 from pydantic.json_schema import SkipJsonSchema
@@ -16,6 +16,11 @@ LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]
 # the default), chat_position (one conversation, each turn adding its message as a fresh turn has it) or chat_moves
 # (one conversation, each turn adding only the opponent's last move; not playable until #105).
 TurnMemory = Literal["fresh", "chat_position", "chat_moves"]
+# The Tools an LLM may ask the benchmark during its Turn, each answering about the current position (ADR 0011).
+Tool = Literal["board", "move_history", "legal_moves", "material"]
+TOOLS: tuple[Tool, ...] = get_args(Tool)
+# The most Tool calls in one Attempt by default (the Tool-call cap).
+DEFAULT_TOOL_CALL_CAP = 10
 LISTED: set[LlmConstraints] = {"listed", "listed_enforced"}
 ENFORCED: set[LlmConstraints] = {"blind_enforced", "listed_enforced"}
 
@@ -95,12 +100,22 @@ class BenchmarkLlmSide(LlmSide):
     # The Thinking budget: the most tokens of thinking and answer per attempt before the model is made to answer
     # (ADR 0007); needs thinking on. None is no budget.
     thinking_budget: int | None = None
+    # The Tools it may call during an attempt, none by default, and the Tool-call cap on them (ADR 0011); both fixed
+    # for the game. Settings.check refuses them where v1 doesn't allow tools (settings.tools_refusal).
+    tools: frozenset[Tool] = frozenset()
+    tool_call_cap: int = DEFAULT_TOOL_CALL_CAP
 
     def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
+        """As a plain LlmSide's, with the Thinking level and budget when set, and the tools, sorted, and their cap
+        when it has tools, so a side without tools logs as before them."""
         shape = super().log_shape(template)
         for setting in ("thinking_level", "thinking_budget"):
             if shape[setting] is None:
                 del shape[setting]
+        if self.tools:
+            shape["tools"] = sorted(self.tools)
+        else:
+            del shape["tools"], shape["tool_call_cap"]
         return shape
 
     def think(self) -> bool | str:

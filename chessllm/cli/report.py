@@ -7,9 +7,10 @@ Run:
     uv run games-report --include-unfinished --json                  # the same report as JSON
 
 A Player configuration is grouped here by model, LLM constraints, thinking and its Thinking level and Thinking budget,
-rules, retry feedback, position and Turn memory (the leaderboard also splits by sampling, prompt and retries). Each
-LLM side of a game is counted, so an LLM faceoff counts once for each side. Both log versions are read (ADR 0004) through chessllm.analytics.leaderboard.read_sides; a file that isn't a
-readable game log is skipped and counted.
+rules, retry feedback, position, Turn memory and Tools with their Tool-call cap (the leaderboard also splits by
+sampling, prompt and retries). Each LLM side of a game is counted, so an LLM faceoff counts once for each side. Both
+log versions are read (ADR 0004) through chessllm.analytics.leaderboard.read_sides; a file that isn't a readable game
+log is skipped and counted.
 
 Phases: an illegal move at ply 20 or earlier is in the opening; later, it is in the endgame when the queens, rooks,
 bishops and knights left on the board are worth at most ENDGAME_MATERIAL together (Q 9, R 5, B/N 3; 62 at the start),
@@ -35,7 +36,7 @@ from chessllm.game.modes import mode_named
 from chessllm.game.records import ILLEGAL_RESULTS
 from chessllm.analytics.leaderboard import logged_prompt, read_sides, side_outcome
 from chessllm.analytics.move_quality import ConfigurationMoves, move_quality, read_analysed_moves, read_validation
-from chessllm.game.sides import ENFORCED
+from chessllm.game.sides import DEFAULT_TOOL_CALL_CAP, ENFORCED
 
 OPENING_PLIES = 20
 ENDGAME_MATERIAL = 26
@@ -97,6 +98,8 @@ class Configuration:
     turn_memory: str = "fresh"
     thinking_level: str | None = None  # None for plain thinking on or off
     thinking_budget: int | None = None  # in tokens; None for no budget
+    tools: tuple[str, ...] = ()  # sorted; none by default
+    tool_call_cap: int | None = None  # None without tools
 
     def label(self) -> str:
         thinking = "thinking" if self.thinking else "no thinking"
@@ -106,6 +109,9 @@ class Configuration:
             thinking += f", budget {self.thinking_budget}"
         extra = " / described position" if self.position != "fen" else ""
         extra += f" / {self.turn_memory}" if self.turn_memory != "fresh" else ""
+        if self.tools:
+            extra += f" / tools {'+'.join(self.tools)}"
+            extra += f", cap {self.tool_call_cap}" if self.tool_call_cap != DEFAULT_TOOL_CALL_CAP else ""
         return (
             f"{self.model} / {self.llm_constraints} / {thinking} / {self.rules} / {self.retry_feedback} feedback"
             f"{extra}"
@@ -176,6 +182,8 @@ def llm_sides(game: Game) -> list[LlmSide]:
             turn_memory=str(side.get("turn_memory") or "fresh"),
             thinking_level=side.get("thinking_level"),
             thinking_budget=side.get("thinking_budget"),
+            tools=tuple(sorted(side.get("tools") or ())),
+            tool_call_cap=side.get("tool_call_cap"),
         )
         other = game.sides[opponent(color)]
         outcome = None if game.end is None else side_outcome(str(game.end.get("result")), color)

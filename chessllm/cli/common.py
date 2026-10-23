@@ -5,7 +5,7 @@ never from one another."""
 import argparse
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, get_args
+from typing import TYPE_CHECKING, cast, get_args
 
 from chessllm.analytics.analysis import analyse_game
 from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH_VARIABLE
@@ -18,10 +18,12 @@ from chessllm.engines.anchors import (
 )
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
-from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
+from chessllm.exceptions import InvalidSettings, Maia2Unavailable, StockfishUnavailable
 from chessllm.core.types import Color, RulesKey
 from chessllm.game.settings import Settings
 from chessllm.game.sides import (
+    DEFAULT_TOOL_CALL_CAP,
+    TOOLS,
     AnchorEngine,
     AnchorSide,
     BenchmarkLlmSide,
@@ -29,6 +31,7 @@ from chessllm.game.sides import (
     LlmSide,
     PromptTemplate,
     RetryFeedback,
+    Tool,
     TurnMemory,
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
@@ -75,6 +78,18 @@ def warn_of_turn_memory(args: argparse.Namespace) -> None:
         )
 
 
+def tool_set(value: str) -> frozenset[Tool]:
+    """A list of Tools as the commands take it, comma-separated, e.g. "board,legal_moves". Only a flag given bare
+    means all four: an empty list is refused, like an unknown tool."""
+    names = [name.strip() for name in value.split(",")]
+    if not any(names):
+        raise argparse.ArgumentTypeError(f"no tools in {value!r}: give the flag bare for all four")
+    if unknown := sorted(set(names) - set(TOOLS)):
+        given = ", ".join(repr(name) for name in unknown)
+        raise argparse.ArgumentTypeError(f"no tool {given}: the tools are {', '.join(TOOLS)}")
+    return frozenset(cast(list[Tool], names))
+
+
 def add_rules_arguments(parser: argparse.ArgumentParser) -> None:
     """The Rules, part of the Player configuration, and under Chaos rules whether Legal counterparts are asked
     for, which is not."""
@@ -119,6 +134,22 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         "(needs thinking on)",
     )
     add_prompt_arguments(parser)
+    parser.add_argument(
+        "--tools",
+        nargs="?",
+        type=tool_set,
+        const=frozenset(TOOLS),
+        default=frozenset(),
+        metavar="LIST",
+        help=f"the Tools the LLM may call during an attempt, comma-separated, of {', '.join(TOOLS)}; bare for all "
+        "four (needs a model that calls tools, thinking on, Free or Blind enforced, Standard rules)",
+    )
+    parser.add_argument(
+        "--tool-call-cap",
+        type=int,
+        metavar="N",
+        help=f"the most Tool calls per attempt (default {DEFAULT_TOOL_CALL_CAP}; needs --tools)",
+    )
     # Chaos rules only with the Stockfish Anchor, which copes with chaos positions.
     add_rules_arguments(parser)
     parser.add_argument(
@@ -152,7 +183,11 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         retry_feedback=args.retry_feedback,
         prompt_template=prompt_template(args),
         turn_memory=args.turn_memory,
+        tools=args.tools,
+        tool_call_cap=DEFAULT_TOOL_CALL_CAP if args.tool_call_cap is None else args.tool_call_cap,
     )
+    if args.tool_call_cap is not None and not args.tools:
+        raise InvalidSettings(f"--tool-call-cap {args.tool_call_cap} needs --tools: there are no tools to cap")
     anchor_side = AnchorSide(engine=args.engine, skill=skill)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)
     settings = Settings(

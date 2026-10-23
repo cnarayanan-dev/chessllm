@@ -5,7 +5,8 @@
 Colours alternate game by game, the first model as White in the first game. Both sides share the LLM's settings
 (thinking, LLM constraints, Retry feedback, rules, attempts per turn), as a faceoff started in the app does by default;
 --thinking-for MODEL turns thinking on for one model only, and --thinking-for MODEL=LEVEL at one of the Thinking levels
-it offers, e.g. qwen3.8:latest=xhigh; --thinking-budget-for MODEL=TOKENS gives one model a Thinking budget (ADR 0007).
+it offers, e.g. qwen3.8:latest=xhigh; --thinking-budget-for MODEL=TOKENS gives one model a Thinking budget (ADR 0007);
+--tools-for MODEL[=LIST] gives one model Tools, and --tool-call-cap-for MODEL=N their cap (ADR 0011).
 Each game is analysed as it ends, with Maia-2 and Stockfish (--no-analysis to skip). Ctrl-C stops it, leaving every
 finished game's log complete."""
 
@@ -25,6 +26,7 @@ from chessllm.cli.common import (
     default_move_model,
     fail,
     prompt_template,
+    tool_set,
     warn_of_turn_memory,
 )
 from chessllm.cli.common import player_for as default_player_for
@@ -35,7 +37,7 @@ from chessllm.core.types import COLORS, Color
 from chessllm.exceptions import InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
-from chessllm.game.sides import BenchmarkLlmSide, LlmSide
+from chessllm.game.sides import DEFAULT_TOOL_CALL_CAP, TOOLS, BenchmarkLlmSide, LlmSide, Tool
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
@@ -71,6 +73,24 @@ def parser() -> argparse.ArgumentParser:
         "qwen3.8:latest=3072",
     )
     add_prompt_arguments(parser)
+    parser.add_argument(
+        "--tools-for",
+        action="append",
+        type=model_tools,
+        default=[],
+        metavar="MODEL[=LIST]",
+        help="give this model Tools to call during an attempt (repeatable): all four, or =LIST of them, "
+        f"comma-separated, of {', '.join(TOOLS)}, e.g. qwen3.5:9b=board,legal_moves (needs its thinking on)",
+    )
+    parser.add_argument(
+        "--tool-call-cap-for",
+        action="append",
+        type=model_cap,
+        default=[],
+        metavar="MODEL=N",
+        help=f"the most Tool calls per attempt for this model (repeatable; default {DEFAULT_TOOL_CALL_CAP}; needs "
+        "its --tools-for)",
+    )
     add_rules_arguments(parser)
     parser.add_argument(
         "--max-attempts",
@@ -97,6 +117,22 @@ def model_budget(value: str) -> tuple[str, int]:
     return model, int(tokens)
 
 
+def model_tools(value: str) -> tuple[str, frozenset[Tool]]:
+    """A --tools-for value: the model, and the Tools after "=", all four without one."""
+    model, equals, tools = value.partition("=")
+    if not model:
+        raise argparse.ArgumentTypeError(f"not MODEL[=LIST]: {value!r}")
+    return model, tool_set(tools) if equals else frozenset(TOOLS)
+
+
+def model_cap(value: str) -> tuple[str, int]:
+    """A --tool-call-cap-for value: the model, and its Tool-call cap after "="."""
+    model, _, cap = value.partition("=")
+    if not model or not cap.isdigit():
+        raise argparse.ArgumentTypeError(f"not MODEL=N: {value!r}")
+    return model, int(cap)
+
+
 def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_file: Path) -> Settings:
     """The settings of a faceoff of model white against model black. Raises InvalidSettings when they can't be
     played, and InvalidSamplingConfig for a broken config."""
@@ -112,6 +148,19 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
             two = f"two Thinking budgets, {budgets[model]} and {budget}"
             raise InvalidSettings(f"--thinking-budget-for gives {model} {two}")
         budgets[model] = budget
+    tools: dict[str, frozenset[Tool]] = {}
+    for model, given in args.tools_for:
+        if tools.get(model, given) != given:
+            two = f"two tool sets, {'+'.join(sorted(tools[model]))} and {'+'.join(sorted(given))}"
+            raise InvalidSettings(f"--tools-for gives {model} {two}")
+        tools[model] = given
+    caps: dict[str, int] = {}
+    for model, cap in args.tool_call_cap_for:
+        if caps.get(model, cap) != cap:
+            raise InvalidSettings(f"--tool-call-cap-for gives {model} two Tool-call caps, {caps[model]} and {cap}")
+        caps[model] = cap
+    if capped := sorted(set(caps) - set(tools)):
+        raise InvalidSettings(f"--tool-call-cap-for gives {', '.join(capped)} a cap but --tools-for no tools to cap")
 
     def side(model: str) -> LlmSide:
         return BenchmarkLlmSide(
@@ -123,6 +172,8 @@ def faceoff_settings(args: argparse.Namespace, white: str, black: str, sampling_
             retry_feedback=args.retry_feedback,
             prompt_template=prompt_template(args),
             turn_memory=args.turn_memory,
+            tools=tools.get(model, frozenset()),
+            tool_call_cap=caps.get(model, DEFAULT_TOOL_CALL_CAP),
         )
 
     settings = Settings(
