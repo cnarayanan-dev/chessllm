@@ -6,23 +6,30 @@ from collections.abc import Iterable
 from typing import Any
 
 from chessllm.core.types import COLORS
-from chessllm.game.records import Attempt, LlmTurn
+from chessllm.game.records import Attempt, LegalCounterpart, LlmTurn
 
 
 def logged_llm_turns(events: Iterable[dict[str, Any]]) -> list[LlmTurn]:
     """The LLM turns of a version 2 game log, in the order played, from its llm_attempt events: each attempt as its
     record has it, the log's thinking being the Reasoning when the side's thinking is off (Attempt.log_shape), and
     each turn's Time used and remembered as its attempts log them: the turn's as its first attempt logs it, and a
-    retry's own when it held fewer earlier turns. Legal counterparts are left out."""
+    retry's own when it held fewer earlier turns. Each Legal counterpart is read from its legal_counterpart event,
+    with the remembered it logs; its Evaluation is left out."""
     thinks: dict[str, bool] = {}
     turns: dict[int, LlmTurn] = {}
     for event in events:
         if event["type"] == "game_start":
             thinks = {color: bool(event[color]["thinking"]) for color in COLORS if event[color]["player"] == "llm"}
-        if event["type"] != "llm_attempt":
+        if event["type"] not in ("llm_attempt", "legal_counterpart"):
             continue
         thinking, reasoning = (event["thinking"], None) if thinks[event["color"]] else (None, event["thinking"])
         attempt = Attempt.model_validate(event | {"thinking": thinking, "reasoning": reasoning, "remembered": None})
+        if event["type"] == "legal_counterpart":  # logged after its chaos move's turn
+            attempt.remembered = event.get("remembered")
+            turns[event["ply"]].legal_counterpart = LegalCounterpart(
+                move=event["uci"], san=attempt.san, fen_after=event["fen_after"], attempt=attempt
+            )
+            continue
         turn = turns.setdefault(
             event["ply"],
             LlmTurn(

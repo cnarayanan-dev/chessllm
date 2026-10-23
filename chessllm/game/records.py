@@ -96,10 +96,12 @@ class Attempt(AttemptSummary):
     thinking: str | None  # the Thinking, with thinking on
     reasoning: str | None  # the Reasoning in the answer, with thinking off
     # The messages sent for this try; None in games from before it was kept. In a conversation kept by Turn memory
-    # (its turn's remembered is set) only the messages it added, the whole Prompt rebuilt by full_prompt (ADR 0009).
+    # (its turn's remembered is set) only the messages it added, the whole Prompt rebuilt by full_prompt (ADR 0009);
+    # a Legal counterpart's there only its request, rebuilt by counterpart_prompt.
     prompt: list[PromptMessage] | None = None
     # Only on a retry whose conversation had to drop more of the earlier turns than its turn's first attempt, to fit
-    # the context: how many it still held (LlmTurn.remembered), so full_prompt can rebuild it.
+    # the context: how many it still held (LlmTurn.remembered), so full_prompt can rebuild it. On every Legal
+    # counterpart asked in a conversation: how many its Prompt held, so counterpart_prompt can rebuild it.
     remembered: int | None = Field(default=None, exclude_if=is_none)
 
     # Unannotated, as pydantic would take an annotated return type for the record's schema in the API description.

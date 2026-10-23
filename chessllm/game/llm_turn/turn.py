@@ -247,7 +247,9 @@ class LlmTurns:
         the turn's (Time used), and nothing about it counts in the side's totals."""
         if self._abandoned.is_set():
             return None
-        return ask_legal_counterpart(self._player, self._side, self._template, self._color, board, moves)
+        return ask_legal_counterpart(
+            self._player, self._side, self._template, self._color, board, moves, self._conversation
+        )
 
     def probe(self, board: chess.Board, moves: Sequence[str], template: PromptTemplate) -> Attempt:
         """Ask a Probe about the position of one of the side's turns, with the template: board is that position, and
@@ -258,8 +260,13 @@ class LlmTurns:
     def log_legal_counterpart(self, answer: CounterpartAnswer, ply: int) -> None:
         """Log the Legal counterpart of the chaos move of ply, once its turn has landed."""
         counterpart = answer.counterpart
+        # Asked in a conversation, it logs how many earlier turns its Prompt held, so it can be rebuilt (ADR 0009).
+        remembered = counterpart.attempt.remembered
+        logged_remembered = {"remembered": remembered} if remembered is not None else {}
+        logged_context = {} if answer.fits else {"context_may_be_cut": True}
         self._log.write(
             "legal_counterpart", color=self._color, ply=ply, pgn=answer.pgn, fen=answer.fen,
             legal_moves=answer.listed_moves, **counterpart.attempt.log_shape(), uci=counterpart.move,
-            fen_after=counterpart.fen_after, **(token_accounting(answer.reply) if answer.reply is not None else {}),
+            fen_after=counterpart.fen_after, **logged_remembered, **logged_context,
+            **(token_accounting(answer.reply) if answer.reply is not None else {}),
         )

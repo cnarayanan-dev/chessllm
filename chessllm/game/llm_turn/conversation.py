@@ -8,10 +8,14 @@ full_prompt rebuilds the whole Prompt of any attempt from the records (ADR 0009)
 
 A conversation that outgrows the model's context is trimmed by us, never silently by Ollama: before each attempt
 the oldest whole earlier turns are dropped, every attempt and its feedback together, until it fits with room left
-for the reply. The System prompt and the turn being played always stay."""
+for the reply. The System prompt and the turn being played always stay.
+
+A question asked at the end of the conversation so far and then dropped from it, as the Legal counterpart is, is
+asked aside: it never enters the conversation, nor sizes it."""
 
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from chessllm.core.types import Color
 from chessllm.game.llm_turn.prompt import fill_system_prompt
@@ -34,6 +38,16 @@ def reply_reserve(side: LlmSide) -> int:
     if isinstance(side, BenchmarkLlmSide) and side.thinking_budget is not None:
         return side.thinking_budget + FORCED_ANSWER_TOKENS + math.ceil(len(BUDGET_SENTENCE) / CHARS_PER_TOKEN)
     return 4096 if side.thinking else 512
+
+
+@dataclass(frozen=True)
+class Aside:
+    """A question asked aside from a conversation: the whole Prompt to send, how many earlier turns it holds, and
+    whether it fits the context."""
+
+    messages: list[Message]
+    remembered: int
+    fits: bool
 
 
 class Conversation:
@@ -79,8 +93,7 @@ class Conversation:
 
     def messages(self) -> list[Message]:
         """The whole Prompt to send for the next attempt, as a new list."""
-        assert self._system is not None, "a turn has started"
-        return [self._system, *(message for turn in self._earlier for message in turn), *self._turn]
+        return self._sent(self._earlier, self._turn)
 
     def record(self) -> list[PromptMessage]:
         """The next attempt's Prompt as its record has it: the whole Prompt for a fresh turn, and in a conversation
@@ -109,9 +122,30 @@ class Conversation:
         estimated conservatively at CHARS_PER_TOKEN. A dropped turn takes its share of the tokens with it."""
         if not self.kept:
             return True
-        while self._size() + reserve > CONTEXT_TOKENS and self._earlier:
-            del self._earlier[0]
-        return self._size() + reserve <= CONTEXT_TOKENS
+        return self._trim(self._earlier, self._turn, reserve)
+
+    def aside(self, question: str, reserve: int) -> Aside:
+        """A question asked at the end of a kept conversation so far, its last answer included, which is dropped from
+        it once answered: the conversation is left as it is, and the call is never measured into it, so its next
+        turn is sent as though the question was never asked. Its Prompt leaves out the oldest whole earlier turns
+        until it fits the context with reserve tokens for the reply, as fit does, for itself alone."""
+        assert self.kept, "a kept conversation"
+        asked = Message("user", question)
+        earlier = list(self._earlier)
+        fits = self._trim(earlier, [*self._turn, asked], reserve)
+        return Aside([*self._sent(earlier, self._turn), asked], len(earlier), fits)
+
+    def _trim(self, earlier: list[list[Message]], last: list[Message], reserve: int) -> bool:
+        """Drop the oldest whole turns of earlier, in place, until the System prompt, earlier and last fit the
+        context with reserve tokens left for the reply, and say whether they fit."""
+        while self._size(self._sent(earlier, last)) + reserve > CONTEXT_TOKENS and earlier:
+            del earlier[0]
+        return self._size(self._sent(earlier, last)) + reserve <= CONTEXT_TOKENS
+
+    def _sent(self, earlier: list[list[Message]], last: list[Message]) -> list[Message]:
+        """The System prompt, then the earlier turns' messages, then last."""
+        assert self._system is not None, "a turn has started"
+        return [self._system, *(message for turn in earlier for message in turn), *last]
 
     def measured(self, sent: list[Message], prompt_tokens: int | None) -> None:
         """The prompt_tokens Ollama reported for the messages sent, which size the conversation from then on (fit).
@@ -126,11 +160,11 @@ class Conversation:
             shares[id(message)] = rest * len(message.content) / characters
         self._measured = [(message, shares[id(message)]) for message in sent]
 
-    def _size(self) -> float:
-        """The tokens of the conversation to send: each message's share of a call's prompt_tokens once measured,
-        before that its characters at CHARS_PER_TOKEN."""
+    def _size(self, messages: list[Message]) -> float:
+        """The tokens of messages to send: each message's share of a call's prompt_tokens once measured, before that
+        its characters at CHARS_PER_TOKEN."""
         shares = self._shares()
-        return sum(shares.get(id(message), len(message.content) / CHARS_PER_TOKEN) for message in self.messages())
+        return sum(shares.get(id(message), len(message.content) / CHARS_PER_TOKEN) for message in messages)
 
     def _shares(self) -> dict[int, float]:
         """Each measured message's share of the last call's prompt_tokens, by the message's identity."""
@@ -154,12 +188,31 @@ def full_prompt(llm_turns: Sequence[LlmTurn], ply: int, attempt: int) -> list[Pr
         return list(turn.attempts[attempt - 1].prompt or [])
     remembered = turn.held(attempt)
     assert remembered is not None, "a turn of a conversation"
-    side = [earlier for earlier in llm_turns if earlier.color == turn.color and earlier.ply <= ply]
+    return held(llm_turns, turn, remembered) + kept(turn.attempts[:attempt], ended=False)
+
+
+def counterpart_prompt(llm_turns: Sequence[LlmTurn], ply: int) -> list[PromptMessage]:
+    """The whole Prompt of the Legal counterpart of the chaos move at ply, rebuilt from the game's LLM turns, as the
+    LLM received it. A fresh side's has it recorded whole. In a conversation it was asked aside, at the end of the
+    conversation so far: the side's System prompt, the earlier turns it held (its attempt's remembered), the chaos
+    move's turn to its last answer, then its request, the one message it recorded (ADR 0009)."""
+    turn = next(turn for turn in llm_turns if turn.ply == ply)
+    assert turn.legal_counterpart is not None, "a chaos move with its Legal counterpart"
+    attempt = turn.legal_counterpart.attempt
+    if attempt.remembered is None:
+        return list(attempt.prompt or [])
+    return held(llm_turns, turn, attempt.remembered) + kept(turn.attempts, ended=True) + list(attempt.prompt or [])
+
+
+def held(llm_turns: Sequence[LlmTurn], turn: LlmTurn, remembered: int) -> list[PromptMessage]:
+    """What a conversation sent before a turn of it: the side's System prompt and the last remembered of its
+    earlier turns, each as it ended."""
+    side = [earlier for earlier in llm_turns if earlier.color == turn.color and earlier.ply <= turn.ply]
     [system, *_] = side[0].attempts[0].prompt or []
     prompt = [system]
     for earlier in side[len(side) - 1 - remembered : -1]:
         prompt += kept(earlier.attempts, ended=True)
-    return prompt + kept(turn.attempts[:attempt], ended=False)
+    return prompt
 
 
 def kept(attempts: Sequence[Attempt], ended: bool) -> list[PromptMessage]:
