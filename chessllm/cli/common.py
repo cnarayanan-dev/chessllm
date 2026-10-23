@@ -173,20 +173,7 @@ def anchor_match_settings(
     """The settings of an Anchor match of the LLM in args at llm_color against the engine at skill, or at Skill 0
     against the random mover with the seed, a new one each game when None. Raises InvalidSettings with the reason
     when they can't be played, and InvalidSamplingConfig for a broken config."""
-    llm = BenchmarkLlmSide(
-        model=args.model,
-        thinking=args.thinking or args.thinking_level is not None,
-        thinking_level=args.thinking_level,
-        thinking_budget=args.thinking_budget,
-        llm_constraints=args.llm_constraints,
-        retry_feedback=args.retry_feedback,
-        prompt_template=prompt_template(args),
-        turn_memory=args.turn_memory,
-        tools=args.tools,
-        tool_call_cap=DEFAULT_TOOL_CALL_CAP if args.tool_call_cap is None else args.tool_call_cap,
-    )
-    if args.tool_call_cap is not None and not args.tools:
-        raise InvalidSettings(f"--tool-call-cap {args.tool_call_cap} needs --tools: there are no tools to cap")
+    llm = benchmark_llm_side(args)
     anchor_side = anchor_side_at(args.engine, skill, seed)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)
     settings = Settings(
@@ -202,6 +189,26 @@ def anchor_match_settings(
     return settings
 
 
+def benchmark_llm_side(args: argparse.Namespace) -> BenchmarkLlmSide:
+    """The LLM side of the Player configuration in args (add_configuration_arguments). Raises InvalidSettings for a
+    Tool-call cap without tools; the rest is checked with the game's settings."""
+    llm = BenchmarkLlmSide(
+        model=args.model,
+        thinking=args.thinking or args.thinking_level is not None,
+        thinking_level=args.thinking_level,
+        thinking_budget=args.thinking_budget,
+        llm_constraints=args.llm_constraints,
+        retry_feedback=args.retry_feedback,
+        prompt_template=prompt_template(args),
+        turn_memory=args.turn_memory,
+        tools=args.tools,
+        tool_call_cap=DEFAULT_TOOL_CALL_CAP if args.tool_call_cap is None else args.tool_call_cap,
+    )
+    if args.tool_call_cap is not None and not args.tools:
+        raise InvalidSettings(f"--tool-call-cap {args.tool_call_cap} needs --tools: there are no tools to cap")
+    return llm
+
+
 def anchor_side_at(engine: LadderEngine, skill: int, seed: int | None = None) -> AnchorSide:
     """The Anchor at a Skill of the engine's ladder: the engine at Skill 1-7, and the random mover at Skill 0
     (RANDOM_MOVER_SKILL), with the seed, or a new one drawn for the game, which game_start logs so the game can be
@@ -210,6 +217,16 @@ def anchor_side_at(engine: LadderEngine, skill: int, seed: int | None = None) ->
         return AnchorSide(engine=engine, skill=skill)
     seed = secrets.randbits(32) if seed is None else seed
     return AnchorSide(engine="random", skill=RANDOM_MOVER_SKILL, seed=seed, ladder=engine)
+
+
+def rung(skill: int) -> str:
+    """A Skill of the ladder as the commands print it: "Random mover" for Skill 0, else e.g. "Skill 3"."""
+    return "Random mover" if skill == RANDOM_MOVER_SKILL else f"Skill {skill}"
+
+
+def score_word(score: float) -> str:
+    """A game's score for a side in words: win, draw or loss."""
+    return {1.0: "win", 0.5: "draw", 0.0: "loss"}[score]
 
 
 def player_for(settings: Settings, color: Color) -> "OllamaPlayer":

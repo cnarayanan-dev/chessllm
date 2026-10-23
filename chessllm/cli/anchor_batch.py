@@ -44,9 +44,11 @@ from chessllm.cli.common import (
     default_evaluator,
     default_move_model,
     fail,
+    rung,
+    score_word,
 )
 from chessllm.cli.common import player_for as default_player_for
-from chessllm.engines.anchors import RANDOM_MOVER_SKILL, Anchor
+from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
 from chessllm.core.config import SAMPLING_FILE
 from chessllm.core.types import Color, opponent, score_for
@@ -150,13 +152,7 @@ def main(
 
 
 def outcome(game: AnchoredGame, state: GameState) -> str:
-    word = {1.0: "win", 0.5: "draw", 0.0: "loss"}[game.score]
-    return f"{word} ({state.result}, {state.end_reason})"
-
-
-def rung(skill: int) -> str:
-    """A Skill of the ladder as the batch prints it: "Random mover" for Skill 0, else e.g. "Skill 3"."""
-    return "Random mover" if skill == RANDOM_MOVER_SKILL else f"Skill {skill}"
+    return f"{score_word(game.score)} ({state.result}, {state.end_reason})"
 
 
 def summary(played: list[AnchoredGame], history: list[AnchoredGame]) -> None:
