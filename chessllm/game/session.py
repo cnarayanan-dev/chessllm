@@ -232,7 +232,7 @@ class GameSession:
                 raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
             turns, moves = self._turns_of[color], [written for _, written in self._moves]
             self._move_started = started = self._clock()
-            outcome = turns.play(self._board, moves, started)
+            outcome = turns.play(self._board, moves, self._plies, started)
             time_s = outcome.turn.time_s
             counterpart, baselines = None, None
             if outcome.chaos_move is not None:

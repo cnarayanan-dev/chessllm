@@ -16,6 +16,7 @@ import chess
 from chessllm.core.config import PROMPTS_DIR
 from chessllm.core.types import Color, opponent
 from chessllm.exceptions import InvalidSettings
+from chessllm.game.records import Ply
 from chessllm.game.sides import LISTED, LlmConstraints, LlmSide, PromptTemplate, RetryFeedback
 from chessllm.llm.players import Message
 
@@ -212,6 +213,29 @@ def opponent_move(moves: Sequence[str]) -> str:
     """The opponent's last move as a turn of a conversation tells it, e.g. "Opponent played Nf6.": before any move,
     White is told to make the first."""
     return f"Opponent played {moves[-1]}." if moves else "You play White. Make the first move."
+
+
+def chaos_move_report(plies: Sequence[Ply], llm_color: Color) -> str | None:
+    """The Chaos move report that opens a turn of llm_color in a conversation: one line for each Chaos move since its
+    last turn, its own and its opponent's, in the resolver's words, e.g. "Your Bd3 was played as: bishop c1→d3 (no
+    bishop can reach d3 by its movement; c1 is nearest)." plies are every ply so far; the side's last turn played
+    the last but one. None when neither was a chaos move: legal moves get no report."""
+    lines = []
+    for ply in plies[-2:]:
+        resolution = ply.resolution
+        if resolution is None or resolution.piece is None or resolution.to is None:
+            continue
+        piece = chess.piece_name(chess.Piece.from_symbol(resolution.piece).piece_type)  # as it ends on its square
+        played = f"Your {ply.written} was played as" if ply.color == llm_color else f"Opponent played {ply.written} as"
+        if resolution.kind == "spawn" or resolution.from_square is None:  # its reason says no more than that
+            lines.append(f"{played}: {piece} spawned on {resolution.to}.")
+            continue
+        # The piece that moved, as the reason names it: a pawn that promotes says what it became.
+        moved = chess.Board(ply.fen_before).piece_type_at(chess.parse_square(resolution.from_square))
+        mover = chess.piece_name(moved) if moved is not None else piece
+        promotion = f", promoted to a {piece}" if mover != piece else ""
+        lines.append(f"{played}: {mover} {resolution.from_square}→{resolution.to}{promotion} ({resolution.reason}).")
+    return "\n".join(lines) or None
 
 
 def move_record(moves: Sequence[str], first_ply: int = 1) -> str:
