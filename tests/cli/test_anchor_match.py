@@ -6,16 +6,15 @@ import json
 import chess.pgn
 import pytest
 
-from fastapi.testclient import TestClient
-
 from tests.conftest import ScriptedAnchor, ScriptedPlayer
 from tests.analytics.test_analysis import PeakedMoveModel
 from tests.game.test_move_cap import MOVE_CAP_PLIES, long_game, sans
 
 from chessllm.analytics.analysis import analyse_game
+from chessllm.analytics.ranking import ranking
 from chessllm.cli.anchor_match import main
 from chessllm.engines.anchors import ANCHOR_RATINGS, anchor_name
-from chessllm.api.app import create_app
+from tests.analytics.test_leaderboard import configurations as leaderboard_configurations
 
 
 def events(games_dir) -> list[dict]:
@@ -132,9 +131,8 @@ def test_with_retry_feedback_repeat_each_retry_is_sent_the_turns_first_prompt(an
 def test_the_leaderboard_counts_an_anchor_match_against_the_anchor_and_only_the_llms_attempts(anchor_match, tmp_path):
     # 1. Nf3 e5 2. Ke3 (illegal) Nd4 Qg5, then the LLM forfeits its third turn: with no reply left, the call fails.
     anchor_match(["Nf3", "Ke3", "Nd4"], ["e5", "Qg5"], "--color", "white", "--skill", "3")
-    client = TestClient(create_app(lambda settings, color: None, games_dir=tmp_path / "games"))
 
-    [entry] = client.get("/api/leaderboard").json()["configurations"]
+    [entry] = leaderboard_configurations(tmp_path / "games")
 
     assert entry["configuration"]["model"] == "llama3:8b"
     assert (entry["games"], entry["wins"], entry["losses"], entry["forfeits"]) == (1, 0, 1, 1)
@@ -142,6 +140,16 @@ def test_the_leaderboard_counts_an_anchor_match_against_the_anchor_and_only_the_
     assert entry["opponents"] == [
         {"opponent": "anchor:dragon:3", "games": 1, "wins": 0, "draws": 0, "losses": 1}
     ]
+
+
+def test_an_anchor_match_with_the_defaults_counts_in_the_ranking(anchor_match, tmp_path):
+    # The command's defaults are the Reference configuration (ADR 0011).
+    anchor_match(["Nf3", "Ke3", "Nd4"], ["e5", "Qg5"], "--color", "white", "--skill", "3")
+
+    [entry] = ranking(tmp_path / "games").models
+
+    assert (entry.model, entry.games, entry.losses, entry.forfeits) == ("llama3:8b", 1, 1, 1)
+    assert entry.rating is not None and entry.rating.high is not None and entry.rank == 1
 
 
 def test_analysis_scores_only_the_llms_moves_and_leaves_the_anchor_side_null(anchor_match, tmp_path):

@@ -1,5 +1,5 @@
 // The game endpoints, typed with the generated API types.
-import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo } from '@/api/types'
+import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo, Ranking } from '@/api/types'
 
 /** A response other than 2xx, with the backend's detail as its message. */
 export class ApiError extends Error {
@@ -54,3 +54,6 @@ export const askProbe = (request: ProbeRequest, signal?: AbortSignal) =>
 /** A game's Probes, in the order they were asked, from its probe log. */
 export const getProbes = (gameId: string, signal?: AbortSignal) =>
   api<Probe[]>('GET', `/api/games/${gameId}/probes`, undefined, signal)
+
+/** The Ranking, from the games of the Modes its path names (rankingPath). */
+export const getRanking = (path: string, signal?: AbortSignal) => api<Ranking>('GET', path, undefined, signal)

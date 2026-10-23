@@ -16,6 +16,7 @@ from chessllm.game.runner import play_anchor_match as play_game
 from chessllm.game.settings import Settings
 from chessllm.game.sides import BenchmarkLlmSide, LlmSide
 from chessllm.logs.game_log import GameLog
+from tests.analytics.test_leaderboard import configurations as leaderboard_configurations
 
 QWEN = "qwen3.5:9b"
 # A faceoff of a thinking Qwen 3.5 as White against Gemma 3, which can neither think nor call tools.
@@ -229,12 +230,11 @@ def test_tools_and_their_cap_are_part_of_the_player_configuration_and_no_tools_k
         assert logged == settings_configuration(built.built_for[0], "white")
 
 
-def test_the_leaderboard_shows_a_configuration_with_tools_without_them_under_its_own_id(scripted, tmp_path):
+def test_the_leaderboard_shows_a_configuration_with_tools_without_them_under_its_own_id(tmp_path):
     play_faceoff(tmp_path / "games", *THINKING_QWEN, "--tools-for", QWEN)
     play_faceoff(tmp_path / "games", *THINKING_QWEN)
-    client, _ = scripted([], games_dir=tmp_path / "games")
 
-    configurations = client.get("/api/leaderboard").json()["configurations"]
+    configurations = leaderboard_configurations(tmp_path / "games")
 
     qwen = [entry for entry in configurations if entry["configuration"]["model"] == QWEN]
     assert len(qwen) == 2 and qwen[0]["id"] != qwen[1]["id"]

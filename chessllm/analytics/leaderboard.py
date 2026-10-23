@@ -1,7 +1,10 @@
 """The leaderboard: every finished game in the game logs, its results grouped by Player configuration.
 
 Read from the logs on every request, so there is no stored state to keep in step with them. Both log versions are
-read (ADR 0004); a missing `rules` means Standard rules."""
+read (ADR 0004); a missing `rules` means Standard rules.
+
+The API no longer serves it: the analytics page shows the Ranking of models (chessllm.analytics.ranking, ADR 0011),
+which reads the logs with the functions here. The leaderboard stays the view of every Player configuration."""
 
 import hashlib
 import json
@@ -266,8 +269,8 @@ def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
     """The game as the Rating counts it, if it does: a game whose Mode and Rules are rated, an Anchor match or LLM
     faceoff under Standard rules (version 1 logs are all Play LLM). A Forfeit is a loss like any other."""
     start, end = events[0], events[-1]
-    mode, rules = mode_named(start.get("mode")), rules_named(start.get("rules", "standard"))
-    if "log_version" not in start or mode is None or not mode.rated or rules is None or not rules.rated:
+    mode, rules = mode_named(logged_mode(start)), rules_named(start.get("rules", "standard"))
+    if mode is None or not mode.rated or rules is None or not rules.rated:
         return []
     sides, _ = read_sides(start, end)
     players = []
@@ -312,6 +315,11 @@ def add_centipawn_loss_and_accuracy(
         for move in analysed.get("moves", []):
             tally.centipawn_losses.append(move["centipawn_loss"])
             tally.accuracies.append(move["accuracy"])
+
+
+def logged_mode(start: dict[str, Any]) -> object:
+    """The Mode key a game_start gives; version 1 logs, from before Modes, are all Play LLM (read_sides)."""
+    return start.get("mode") if "log_version" in start else "play_llm"
 
 
 def read_sides(start: dict[str, Any], end: dict[str, Any]) -> tuple[dict[Color, dict[str, Any]], dict[str, Any]]:

@@ -291,10 +291,10 @@ def other_responses(samples: Samples) -> None:
     samples.refused(client, "POST", "/api/games/current/llm-turn")  # the human's turn
 
 
-def leaderboard(game_logs: Path) -> dict[str, Any]:
-    """The leaderboard of the sample games, read from their fixed logs."""
+def ranking(game_logs: Path) -> dict[str, Any]:
+    """The Ranking of the sample games, read from their fixed logs."""
     app = create_app(lambda settings, color: ScriptedPlayer([]), games_dir=game_logs)
-    response = TestClient(app).get("/api/leaderboard")
+    response = TestClient(app).get("/api/ranking")
     assert response.status_code == 200, response.text
     data: dict[str, Any] = response.json()
     return data
@@ -312,8 +312,8 @@ def write_samples(out: Path = SAMPLES_DIR) -> None:
         for play_game in games:
             play_game(samples)
         samples.write(out)
-    board = leaderboard(out / "game-logs")
-    (out / "api" / "leaderboard.json").write_text(json.dumps(board, indent=2, ensure_ascii=False) + "\n", "utf-8")
+    board = ranking(out / "game-logs")
+    (out / "api" / "ranking.json").write_text(json.dumps(board, indent=2, ensure_ascii=False) + "\n", "utf-8")
 
 
 def main() -> None:

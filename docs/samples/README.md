@@ -22,6 +22,6 @@ running the command twice changes nothing.
 - `api/`: the API's responses, formatted for reading: the game state after each request of the Play LLM and Chaos
   games (numbered in order), the Play LLM game's Probes and their list, the models (`models.json`, with one model Ollama can't show), the Prompt library's defaults
   (`prompt-templates.json`), the new game's defaults,
-  the leaderboard of these four games, and the requests the API refuses with their status (`errors.json`). The Anchor
+  the Ranking of these four games (`ranking.json`; none of them is under the Reference configuration), and the requests the API refuses with their status (`errors.json`). The Anchor
   match and the Thinking budget game are played as the benchmark's commands play them, which no route serves, so they
   have logs only.

@@ -5,19 +5,18 @@ import threading
 
 import chess
 import pytest
-from fastapi.testclient import TestClient
 
 from tests.analytics.test_analysis import PeakedMoveModel
 from tests.conftest import BlockingPlayer, ScriptedAnchor, ScriptedPlayer, play_llm, play_move
 from tests.fakes import FakeClock
 
 from chessllm.analytics.analysis import analyse_game
-from chessllm.api.app import create_app
 from chessllm.exceptions import AnchorUnavailable, LlmTimeout
 from chessllm.game.session import GameSession
 from chessllm.game.settings import Settings
 from chessllm.game.sides import AnchorSide, LlmSide
 from chessllm.logs.game_log import GameLog
+from tests.analytics.test_leaderboard import configurations as leaderboard_configurations
 
 
 def events(log: GameLog, event_type: str) -> list[dict]:
@@ -256,13 +255,12 @@ def test_a_log_from_before_time_used_reads_as_one_with_it_in_the_leaderboard_and
     untimed.write_text("".join(json.dumps(line) + "\n" for line in stripped), encoding="utf-8")
 
     def read(log):
-        app = create_app(lambda settings, color: ScriptedPlayer([]), games_dir=log.parent)
-        board = TestClient(app).get("/api/leaderboard").json()
+        board = leaderboard_configurations(log.parent)
         analyse_game(log, PeakedMoveModel())
         return board, json.loads(log.with_name(f"{log.stem}.analysis.json").read_text(encoding="utf-8"))
 
     timed_board, timed_analysis = read(timed)
-    assert timed_board["configurations"]
+    assert timed_board
     assert read(untimed) == (timed_board, timed_analysis)
 
 

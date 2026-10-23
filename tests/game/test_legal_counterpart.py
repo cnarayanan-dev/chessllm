@@ -16,6 +16,7 @@ from chessllm.llm.players import LlmReply, Message
 from chessllm.logs.game_log import GameLog
 from tests.conftest import Raw, ScriptedPlayer, play_llm, play_move
 from tests.fakes import FakeClock
+from tests.analytics.test_leaderboard import configurations as leaderboard_configurations
 
 CHAOS = {"rules": "chaos"}
 AFTER_E4_E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
@@ -246,11 +247,11 @@ def test_the_sides_clock_stands_still_while_its_legal_counterpart_is_asked(tmp_p
     assert landed.running_s == 0.0  # the human's move has just started
 
 
-def test_the_switch_is_not_part_of_the_player_configuration(scripted):
+def test_the_switch_is_not_part_of_the_player_configuration(scripted, tmp_path):
     client, _ = scripted(["Qe1", "e5", "Qe1"])  # each game ends at once in a King capture
     for switch in (True, False):
         client.post("/api/games", json=play_llm() | CHAOS | {"legal_counterpart": switch})
         assert play_move(client, "e2e4").json()["status"] == "over"
 
-    [configuration] = client.get("/api/leaderboard").json()["configurations"]
+    [configuration] = leaderboard_configurations(tmp_path / "games")
     assert configuration["games"] == 2

@@ -8,7 +8,7 @@ it; each game's LLM plays its own copy of the script, from the start (a Scripted
 thinking off each reply carries a Reasoning, "Reasoning for <san>.", as Ollama's answers do. Every ply is judged by
 material alone (tests/fakes.py's MaterialEvaluator), a stand-in for Stockfish, so a faceoff shows its Evaluation bar.
 
-POST /e2e/leaderboard-games replaces every game log with the synthetic games of tests/e2e/leaderboard.py, for the
+POST /e2e/ranking-games replaces every game log with the synthetic games of tests/e2e/ranking.py, for the
 analytics page.
 
 POST /e2e/restart stands in for restarting the server: the app is built afresh, with no current game, as on a first
@@ -29,7 +29,7 @@ from chessllm.core.types import Color
 from chessllm.game.settings import Settings
 from tests.conftest import Raw, ScriptedPlayer
 from tests.fakes import MaterialEvaluator
-from tests.e2e.leaderboard import write_leaderboard_games
+from tests.e2e.ranking import write_ranking_games
 
 
 class Script(BaseModel):
@@ -68,9 +68,9 @@ def main() -> None:
             nonlocal script
             script = new
 
-        @app.post("/e2e/leaderboard-games", include_in_schema=False)
-        def set_leaderboard_games() -> None:
-            write_leaderboard_games(games_dir)
+        @app.post("/e2e/ranking-games", include_in_schema=False)
+        def set_ranking_games() -> None:
+            write_ranking_games(games_dir)
 
         @app.post("/e2e/restart", include_in_schema=False)
         def restart() -> None:

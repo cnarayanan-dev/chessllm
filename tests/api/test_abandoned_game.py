@@ -46,7 +46,7 @@ def test_an_abandoned_games_failed_turn_does_not_end_it_or_count_on_the_leaderbo
     events = log_events(tmp_path, old["game_id"])
     assert [event["type"] for event in events] == ["game_start", "llm_attempt"]
     assert events[-1]["result"] == "error"
-    assert client.get("/api/leaderboard").json() == {"configurations": []}
+    assert client.get("/api/ranking").json()["models"] == []
     [response] = responses
     assert response.status_code == 200
     assert response.json()["status"] == "playing"

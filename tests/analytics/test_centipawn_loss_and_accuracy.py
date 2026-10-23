@@ -18,6 +18,7 @@ from tests.fakes import FixedEvaluator, UnavailableEvaluator
 from chessllm.analytics.analysis import analyse_game, analyse_games
 from chessllm.cli.anchor_match import main as anchor_match
 from chessllm.exceptions import Maia2Unavailable
+from tests.analytics.test_leaderboard import configurations as leaderboard_configurations
 
 
 def fen_after(*sans: str) -> str:
@@ -191,12 +192,6 @@ def test_re_analysing_all_games_recomputes_them(scripted, tmp_path):
     assert read(analysis_file)["centipawn_loss_and_accuracy"]["sides"]["black"]["average_centipawn_loss"] == 1100 / 3
 
 
-def leaderboard_entries(client):
-    response = client.get("/api/leaderboard")
-    assert response.status_code == 200, response.text
-    return response.json()["configurations"]
-
-
 def test_the_leaderboard_averages_centipawn_loss_and_accuracy_over_all_analysed_moves(scripted, tmp_path):
     client = scholars_mate(scripted, replies=["e5", "Nc6", "Nf6", "e5", "Ke3", "Qh6", "Nf3", "Rh5"])
     client.post("/api/games", json=play_llm(model="qwen3.5:9b"))  # 1...e5, then a forfeit before a second move
@@ -206,7 +201,7 @@ def test_the_leaderboard_averages_centipawn_loss_and_accuracy_over_all_analysed_
     analyse_game(first, None, FixedEvaluator(SCHOLARS_MATE_SCORES))
     analyse_game(second, None, FixedEvaluator())
 
-    [qwen] = leaderboard_entries(client)
+    [qwen] = leaderboard_configurations(tmp_path / "games")
 
     # Pooled over the four moves, not averaged over the two games (which would give 1100 / 6).
     assert qwen["average_centipawn_loss"] == pytest.approx(1100 / 4)
@@ -218,7 +213,7 @@ def test_a_configuration_without_analysed_moves_has_no_centipawn_loss_or_accurac
     [log] = (tmp_path / "games").glob("*.jsonl")
     analyse_game(log, FlatMoveModel(), None)  # Maia-2 ran, Stockfish didn't
 
-    [qwen] = leaderboard_entries(client)
+    [qwen] = leaderboard_configurations(tmp_path / "games")
 
     assert qwen["average_centipawn_loss"] is None
     assert qwen["average_accuracy"] is None
@@ -229,7 +224,7 @@ def test_a_game_analysed_by_stockfish_alone_has_no_move_quality_estimate_on_the_
     [log] = (tmp_path / "games").glob("*.jsonl")
     analyse_game(log, None, FixedEvaluator(SCHOLARS_MATE_SCORES))  # Stockfish ran, Maia-2 didn't
 
-    [qwen] = leaderboard_entries(client)
+    [qwen] = leaderboard_configurations(tmp_path / "games")
 
     assert qwen["move_quality"] is None
     assert qwen["average_centipawn_loss"] == pytest.approx(1100 / 3)

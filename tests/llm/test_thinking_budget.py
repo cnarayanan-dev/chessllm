@@ -16,6 +16,7 @@ from chessllm.game.settings import Settings
 from chessllm.game.sides import BenchmarkLlmSide, LlmSide
 from chessllm.analytics.leaderboard import llm_configuration
 from chessllm.llm.ollama_player import OllamaPlayer
+from tests.analytics.test_leaderboard import configurations as leaderboard_configurations
 
 FOOLS_MATE = ["f3", "e5", "g4", "Qh4#"]
 # How an LLM side's game_start entry has looked since log version 2 with the default position (ADR 0004), with its
@@ -176,13 +177,12 @@ def test_the_api_refuses_a_budget(scripted):
     assert not player.built_for
 
 
-def test_the_leaderboard_shows_a_budgets_configuration_without_the_budget_under_its_own_id(scripted, tmp_path):
+def test_the_leaderboard_shows_a_budgets_configuration_without_the_budget_under_its_own_id(tmp_path):
     faceoff(tmp_path / "games", "--models", QWEN, "gemma3:12b", "--thinking-for", QWEN,
             "--thinking-budget-for", f"{QWEN}=3072")
     faceoff(tmp_path / "games", "--models", QWEN, "gemma3:12b", "--thinking-for", QWEN)
-    client, _ = scripted([], games_dir=tmp_path / "games")
 
-    configurations = client.get("/api/leaderboard").json()["configurations"]
+    configurations = leaderboard_configurations(tmp_path / "games")
 
     qwen = [entry for entry in configurations if entry["configuration"]["model"] == QWEN]
     assert len(qwen) == 2 and qwen[0]["id"] != qwen[1]["id"]

@@ -11,6 +11,7 @@ export type GameSettings = Omit<Schemas['GameSettings'], 'mode' | 'white' | 'bla
   white: PageSide
   black: PageSide
 }
+export type Ranking = Schemas['Ranking']
 export type GameState = Omit<Schemas['GameState'], 'settings'> & { settings: GameSettings }
 export type LlmTurn = Schemas['LlmTurn']
 export type Attempt = Schemas['Attempt']

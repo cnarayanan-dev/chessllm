@@ -6,7 +6,7 @@ import App from '@/App'
 import { AnalyticsPage } from '@/analytics/AnalyticsPage'
 
 const queryClient = new QueryClient()
-// Two pages, each a full page load: the game at /, the leaderboard at /analytics (FastAPI serves both).
+// Two pages, each a full page load: the game at /, the Ranking at /analytics (FastAPI serves both).
 const Page = window.location.pathname.replace(/\/$/, '') === '/analytics' ? AnalyticsPage : App
 
 createRoot(document.getElementById('root')!).render(
