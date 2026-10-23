@@ -31,7 +31,7 @@ class PromptTemplate:
     (ADR 0010). Both are templates with $placeholders, filled in by llm_turn.prompt; the Answer format is the
     benchmark's, never the template's. The default ones are in llm_turn.prompt."""
 
-    id: str
+    id: str | None  # None for text not saved in the Prompt library, which only a Probe asks with
     name: str | None  # optional, to recognise it by
     system_prompt: str
     turn_template: str

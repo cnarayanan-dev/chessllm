@@ -1,13 +1,13 @@
 // The Prompt tab's Prompt lab row: the Prompt template to Try, Try, and the Probes of the turn shown (CONTEXT.md).
 // A probe asks the turn's LLM again about the position before it, outside the game; the game never changes.
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, FlaskConical, PenLine } from 'lucide-react'
-import { probeTurn } from '@/api/client'
 import { probesQuery } from '@/api/probes'
 import { promptLibraryQuery } from '@/api/promptLibrary'
-import type { GameState, LlmTurn, Probe, ProbeRequest } from '@/api/types'
-import { decisionOf, prose, quiet, RESULT_NAMES } from '@/components/turn/attempt'
+import type { GameState, LlmTurn, Probe } from '@/api/types'
+import { decisionOf, prose, quiet, RESULT_NAMES, templateName } from '@/components/turn/attempt'
 import { PromptMessages } from '@/components/turn/PromptMessages'
+import { useProbeTurn } from '@/components/turn/useProbeTurn'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -17,6 +17,7 @@ import { fittingTemplates } from '@/settings/next-game'
 
 const TRY = "Ask the LLM again about the position before this turn, with the Prompt picked. The game doesn't change."
 const PICKER = 'The Prompt template to Try. Listed: those that fit what the LLM is given.'
+const EDIT = 'Open the Prompt in the editor under the board, to change it, try it and save it as a new version.'
 
 type ProbesProps = {
   game: GameState
@@ -26,9 +27,9 @@ type ProbesProps = {
   /** The template picked to Try, by its ID; null for the game's own. Kept by the panel from turn to turn. */
   picked: string | null
   onPick: (id: string) => void
+  /** Opens the dock on the template named, by its ID, from its name's button, which gets the focus back on close. */
+  onEdit?: (id: string, from: HTMLElement) => void
 }
-
-const templateName = (template: { id: string | null; name: string | null }) => template.name ?? template.id ?? 'Unsaved'
 
 /** The probes of the turn shown, in the order asked. */
 const probesOf = (probes: Probe[], turn: LlmTurn) =>
@@ -54,27 +55,11 @@ function tally(probes: Probe[]): Tally[] {
 const tallyLine = ({ name, legal, slips, total }: Tally) =>
   `${name}: ${legal} of ${total} legal${slips > 0 ? ` (${slips} ${slips === 1 ? 'slip' : 'slips'})` : ''}`
 
-/** The probes asked of one turn, so their wait and their error stay with that turn. */
-const probeKey = (game: GameState, turn: LlmTurn) => ['probe', game.game_id, turn.ply, turn.color]
-
-export function Probes({ game, turn, tryBlocked, picked, onPick }: ProbesProps) {
+export function Probes({ game, turn, tryBlocked, picked, onPick, onEdit }: ProbesProps) {
   const side = game.settings[turn.color]
   const library = useQuery(promptLibraryQuery)
   const probes = useQuery(probesQuery(game.game_id))
-  const queryClient = useQueryClient()
-  const mutationKey = probeKey(game, turn)
-  const asking = useMutation({
-    mutationKey,
-    mutationFn: (request: ProbeRequest) => probeTurn(request),
-    // By the game the probe answered for, never the game shown when it lands.
-    onSuccess: (probe) =>
-      queryClient.setQueryData(probesQuery(probe.game_id).queryKey, (asked = []) => [...asked, probe]),
-  })
-  // The last probe asked of this turn, wherever it was asked from: its wait, or its error.
-  const last = useMutationState({
-    filters: { mutationKey, exact: true },
-    select: (mutation) => ({ status: mutation.state.status, error: mutation.state.error }),
-  }).at(-1)
+  const { ask, last } = useProbeTurn(game, turn)
   if (side.player !== 'llm') return null
   // The template the game recorded for the side, by its versioned ID; offered first when the library no longer lists
   // it (an older version, or a hidden one), and asked for by no ID, so the backend uses the recorded text.
@@ -95,7 +80,7 @@ export function Probes({ game, turn, tryBlocked, picked, onPick }: ProbesProps) 
         : undefined)
   const tryChosen = () =>
     chosen &&
-    asking.mutate({
+    ask({
       ply: turn.ply,
       color: turn.color,
       prompt_template_id: chosen.id === inGame ? null : chosen.id,
@@ -105,19 +90,42 @@ export function Probes({ game, turn, tryBlocked, picked, onPick }: ProbesProps) 
     <div role="group" aria-label="Probes of this turn" className="mb-3 flex flex-col gap-2 border-b pb-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground">Prompt:</span>
-        <Select value={chosen?.id ?? null} onValueChange={(id) => id && onPick(id)}>
-          <SelectTrigger size="sm" aria-label="Prompt to try" aria-description={PICKER} className="min-w-0 bg-card">
-            <SelectValue>{() => (chosen ? templateName(chosen) : '…')}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {templates.map((entry) => (
-              <SelectItem key={entry.id} value={entry.id}>
-                {templateName(entry)}
-                {entry.id === inGame && <span className="text-muted-foreground"> (in the game)</span>}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* The name opens the dock; the arrow beside it drops down the library. */}
+        <div className="flex min-w-0 items-center rounded-3xl bg-card">
+          <Tooltip>
+            <TooltipTrigger render={<span className="min-w-0" />}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="max-w-full rounded-r-none pr-1.5"
+                aria-description={EDIT}
+                disabled={!onEdit || chosen === undefined}
+                onClick={(event) => chosen && onEdit?.(chosen.id, event.currentTarget)}
+              >
+                <span className="truncate">{chosen ? templateName(chosen) : '…'}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{EDIT}</TooltipContent>
+          </Tooltip>
+          <Select value={chosen?.id ?? null} onValueChange={(id) => id && onPick(id)}>
+            <SelectTrigger
+              size="sm"
+              aria-label="Prompt to try"
+              aria-description={PICKER}
+              className="rounded-l-none bg-transparent pl-1"
+            >
+              <SelectValue className="sr-only">{() => (chosen ? templateName(chosen) : '…')}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {templates.map((entry) => (
+                <SelectItem key={entry.id} value={entry.id}>
+                  {templateName(entry)}
+                  {entry.id === inGame && <span className="text-muted-foreground"> (in the game)</span>}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Tooltip>
           {/* The tooltip hangs on a wrapper, as a disabled button takes no hover. */}
           <TooltipTrigger render={<span />}>

@@ -11,7 +11,9 @@
     "default_for": [
       "free",
       "blind_enforced"
-    ]
+    ],
+    "saved": false,
+    "hidden": false
   },
   {
     "id": "described@24ad892a",
@@ -22,7 +24,9 @@
       "free",
       "blind_enforced"
     ],
-    "default_for": []
+    "default_for": [],
+    "saved": false,
+    "hidden": false
   },
   {
     "id": "moves@c15887a4",
@@ -30,7 +34,9 @@
     "system_prompt": "You are playing chess as $color against a human playing $opponent.\nThe game starts from the standard starting position. Each turn you get only your opponent's last move in SAN; as White, your first turn asks you for the first move.\nKeep track of the board yourself: no turn shows you the position.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\n$example_message\nAnswer: {\"move\": \"$example_move\"}\n$example_next_message\nAnswer: {\"move\": \"$example_next_move\"}\n",
     "turn_template": "$opponent_played",
     "fits": [],
-    "default_for": []
+    "default_for": [],
+    "saved": false,
+    "hidden": false
   },
   {
     "id": "default-listed@7d131053",
@@ -44,7 +50,9 @@
     "default_for": [
       "listed",
       "listed_enforced"
-    ]
+    ],
+    "saved": false,
+    "hidden": false
   },
   {
     "id": "described-listed@2dfc052c",
@@ -55,7 +63,9 @@
       "listed",
       "listed_enforced"
     ],
-    "default_for": []
+    "default_for": [],
+    "saved": false,
+    "hidden": false
   },
   {
     "id": "moves-listed@d079a5da",
@@ -63,6 +73,8 @@
     "system_prompt": "You are playing chess as $color against a human playing $opponent.\nThe game starts from the standard starting position. Each turn you get only your opponent's last move in SAN, and the list of legal moves in SAN; as White, your first turn asks you for the first move.\nKeep track of the board yourself: no turn shows you the position.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\n$example_message\nLegal moves: $example_legal_moves\nAnswer: {\"move\": \"$example_move\"}\n$example_next_message\nLegal moves: $example_next_legal_moves\nAnswer: {\"move\": \"$example_next_move\"}\n",
     "turn_template": "$opponent_played\nLegal moves: $legal_moves",
     "fits": [],
-    "default_for": []
+    "default_for": [],
+    "saved": false,
+    "hidden": false
   }
 ]

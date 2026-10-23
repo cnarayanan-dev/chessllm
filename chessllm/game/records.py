@@ -345,7 +345,8 @@ class GameState(BaseModel):
     # while an LLM's Turn or an Anchor's move hasn't been asked for: their time only runs once it has.
     running_s: float | None
     # The ID of the Prompt template each LLM side plays the game with (ADR 0010), the Default's version included, as
-    # game_start records it in full: the template a Probe of its turns asks with by default.
-    prompt_template_ids: dict[Color, str]
+    # game_start records it in full: the template a Probe of its turns asks with by default. None for a side the
+    # benchmark's commands gave text not saved in the Prompt library.
+    prompt_template_ids: dict[Color, str | None]
     # Only with an evaluator: the engine every ply's Evaluation comes from.
     evaluator: EvaluationEngine | None = Field(default=None, exclude_if=is_none)

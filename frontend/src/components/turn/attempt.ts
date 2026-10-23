@@ -11,6 +11,9 @@ export function decisionOf(kind: Decision, attempt: Attempt | undefined): { text
   return { text: why, quiet: true }
 }
 
+/** A Prompt template by its name, or else its ID; unsaved text has neither. */
+export const templateName = (template: { id: string | null; name: string | null }) => template.name ?? template.id ?? 'Unsaved'
+
 export const RESULT_NAMES: Record<NonNullable<Attempt['result']>, string> = {
   legal: 'Legal',
   invalid: 'Invalid',

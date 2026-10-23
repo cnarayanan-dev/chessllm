@@ -330,6 +330,46 @@ describe('with Prompt lab on', () => {
     await yourMove()
     expect(tryButton()).toBeEnabled()
   })
+
+  test("the prompt's name opens the dock under the board, the rest of the page set aside until it closes", async () => {
+    const library = [
+      { id: 'default@1', name: 'Default', system_prompt: '', turn_template: '$moves', fits: ['free'], default_for: ['free'] },
+    ]
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(afterE5()))
+      .on('GET /api/prompt-templates', Response.json(library))
+      .on('GET /api/games/game-1/probes', Response.json([]))
+    renderApp()
+    await yourMove()
+    const user = userEvent.setup()
+    await user.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
+    const name = await within(turnPanel()).findByRole('button', { name: 'Default' })
+    await waitFor(() => expect(name).toBeEnabled())
+
+    await user.click(name)
+
+    const dock = screen.getByRole('region', { name: 'Prompt editor' })
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('board-column')).queryAllByTestId(/^strip-/)).toEqual([])
+    expect(screen.getByTestId('game-column')).toHaveAttribute('inert')
+    expect(screen.getByTestId('moves-column')).toHaveAttribute('inert')
+    expect(theBoard()).toBeTruthy()
+    const page = screen.getByRole('main').parentElement!
+    expect(page).toHaveAttribute('data-docked')
+    expect(page).not.toHaveClass('min-h-svh') // the page shrinks into the top half
+    const viewed = theBoard().position
+    await user.click(within(dock).getByRole('button', { name: 'System prompt' }))
+    await user.keyboard('{ArrowLeft}')
+    expect(theBoard().position).toBe(viewed) // the arrows don't step the move history under the dock
+
+    await user.click(within(dock).getByRole('button', { name: 'Close the editor' }))
+
+    expect(screen.queryByRole('region', { name: 'Prompt editor' })).not.toBeInTheDocument()
+    expect(topBar()).toBeVisible()
+    expect(strips()).toEqual(['black', 'white'])
+    expect(screen.getByTestId('game-column')).not.toHaveAttribute('inert')
+    expect(screen.getByTestId('moves-column')).not.toHaveAttribute('inert')
+  })
 })
 
 test("a thinking LLM's move is timed too, and once its move lands its Thinking is shown", async () => {

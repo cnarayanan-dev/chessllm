@@ -1,5 +1,5 @@
 // The game endpoints, typed with the generated API types.
-import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo } from '@/api/types'
+import type { GameState, NewGame, NewPromptTemplate, Probe, ProbeRequest, PromptTemplateInfo } from '@/api/types'
 
 /** A response other than 2xx, with the backend's detail as its message. */
 export class ApiError extends Error {
@@ -37,6 +37,18 @@ export const getNewGameDefaults = (signal?: AbortSignal) => api<NewGame>('GET', 
 export const getPromptTemplates = (signal?: AbortSignal) =>
   api<PromptTemplateInfo[]>('GET', '/api/prompt-templates', undefined, signal)
 
+/** The Prompt template with this ID, hidden or not; refused (400) if the library has none. */
+export const getPromptTemplate = (id: string, signal?: AbortSignal) =>
+  api<PromptTemplateInfo>('GET', `/api/prompt-templates/${encodeURIComponent(id)}`, undefined, signal)
+
+/** Leaves a saved Prompt template out of the pickers; it still resolves for the games and probes that used it. */
+export const hidePromptTemplate = (id: string, signal?: AbortSignal) =>
+  api<PromptTemplateInfo>('POST', `/api/prompt-templates/${encodeURIComponent(id)}/hide`, undefined, signal)
+
+/** Saves a new Prompt template, with a new ID; refused (400), with the reason, if it doesn't fit its LLM constraints. */
+export const savePromptTemplate = (template: NewPromptTemplate, signal?: AbortSignal) =>
+  api<PromptTemplateInfo>('POST', '/api/prompt-templates', template, signal)
+
 /** Starts a game with these settings, or the backend's default settings with null. */
 export const startGame = (newGame: NewGame | null, signal?: AbortSignal) =>
   api<GameState>('POST', '/api/games', newGame ?? undefined, signal)
@@ -47,7 +59,8 @@ export const playMove = (uci: string, signal?: AbortSignal) =>
 export const playLlmTurn = (signal?: AbortSignal) =>
   api<GameState>('POST', '/api/games/current/llm-turn', undefined, signal)
 
-/** Probes a past LLM turn of the current game; refused (409) while an LLM turn runs. */
+/** Probes a past LLM turn of the current game, with a library template or unsaved text; refused (409) while an LLM
+ * turn runs. */
 export const probeTurn = (request: ProbeRequest, signal?: AbortSignal) =>
   api<Probe>('POST', '/api/games/current/probes', request, signal)
 

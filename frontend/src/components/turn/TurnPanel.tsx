@@ -1,10 +1,12 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
 import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, Eye, MessageSquareText, Scale, Undo2 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
-import type { Attempt, GameState, LlmTurn } from '@/api/types'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal, flushSync } from 'react-dom'
+import type { Attempt, Color, GameState, LlmTurn } from '@/api/types'
 import { decisionOf, mono, prose, quiet, RESULT_NAMES, type Decision } from '@/components/turn/attempt'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Probes } from '@/components/turn/Probes'
+import { PromptDock } from '@/components/turn/PromptDock'
 import { PromptMessages } from '@/components/turn/PromptMessages'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,7 +36,13 @@ type TurnPanelProps = {
   onPreview?: () => void
   /** Why Try can't probe now (an LLM turn runs), shown on hover; undefined when it can. Only with Prompt lab on. */
   tryBlocked?: string
+  /** Called with whether the dock is open, as the page sets itself aside under it, and gives it back once closed. */
+  onDock?: (open: boolean) => void
 }
+
+/** The dock opened from a turn's Prompt row: on that turn of that game, and the template its text starts from, by
+ * its ID. */
+type Docked = { gameId: string; ply: number; color: Color; baseId: string }
 
 /**
  * The LLM turn that goes with the position after `ply`: the LLM's move there, or its last move before it. Live after
@@ -83,7 +91,7 @@ function replyText(attempt: Attempt): string {
 const trigger = 'gap-1 px-1 @max-[17rem]:text-xs @max-[17rem]:[&_svg]:hidden'
 const pane = 'max-h-80 overflow-y-auto'
 
-export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryBlocked }: TurnPanelProps) {
+export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryBlocked, onDock }: TurnPanelProps) {
   const turn = turnShown(game, ply, live)
   const move = turn && moveName(game, turn)
   const gain = turn ? shownGain(game, turn) : undefined
@@ -91,6 +99,26 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
   const promptLab = usePromptLab()
   // The Prompt template picked to Try, kept from turn to turn; null for the game's own.
   const [tried, setTried] = useState<string | null>(null)
+  // The dock is kept here, not with the turn's tabs, so a new attempt or turn landing doesn't drop the text written.
+  const [docked, setDocked] = useState<Docked | null>(null)
+  const dockedTurn =
+    docked && promptLab && docked.gameId === game.game_id
+      ? game.llm_turns.find((shown) => shown.ply === docked.ply && shown.color === docked.color)
+      : undefined
+  const open = dockedTurn !== undefined
+  useEffect(() => {
+    onDock?.(open)
+    return () => onDock?.(false)
+  }, [open, onDock])
+  // The name's button the dock was opened from, which gets the focus back once the page is given back.
+  const openedFrom = useRef<HTMLElement | null>(null)
+  const closeDock = () => {
+    flushSync(() => {
+      setDocked(null)
+      onDock?.(false)
+    })
+    if (openedFrom.current?.isConnected) openedFrom.current.focus()
+  }
   const choose = (chosen: Tab) => {
     localStorage.setItem(TAB_KEY, chosen)
     setTab(chosen)
@@ -116,7 +144,17 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
             onTab={choose}
             probes={
               promptLab ? (
-                <Probes game={game} turn={turn} tryBlocked={tryBlocked} picked={tried} onPick={setTried} />
+                <Probes
+                  game={game}
+                  turn={turn}
+                  tryBlocked={tryBlocked}
+                  picked={tried}
+                  onPick={setTried}
+                  onEdit={(baseId, from) => {
+                    openedFrom.current = from
+                    setDocked({ gameId: game.game_id, ply: turn.ply, color: turn.color, baseId })
+                  }}
+                />
               ) : undefined
             }
           />
@@ -134,6 +172,23 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
         )}
         {turn?.ply === ply && gain && <ChaosGainLine gain={gain} />}
       </CardContent>
+      {/* Out of the page's columns, which are set aside (inert) while it is open. */}
+      {docked && dockedTurn &&
+        createPortal(
+          <PromptDock
+            key={`${docked.ply}-${docked.color}`}
+            game={game}
+            turn={dockedTurn}
+            baseId={docked.baseId}
+            tryBlocked={tryBlocked}
+            onSaved={(saved) => {
+              setTried(saved.id)
+              setDocked({ ...docked, baseId: saved.id })
+            }}
+            onClose={closeDock}
+          />,
+          document.body,
+        )}
     </Card>
   )
 }

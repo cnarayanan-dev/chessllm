@@ -75,3 +75,11 @@
   .moves-column > .moves-card > [data-slot="card-content"] { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; }
   .moves-column .move-scroll { flex: 1 1 0; min-height: 0; height: auto; }
 }
+
+/* The Prompt lab's dock open over the lower half: the page shrinks into the top half, the board as large as it
+   allows, the top bar, player strips and footer gone, and the side columns greyed out (and inert). */
+.page[data-docked] { height: 50svh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.page[data-docked] > footer { display: none; }
+.page[data-docked] > .game-layout { flex: 1 1 0; min-height: 0; width: 100%; padding-top: 12px; padding-bottom: 12px; }
+.page[data-docked] .board-stack { width: min(100%, calc(50svh - 24px)); }
+.page[data-docked] .game-column, .page[data-docked] .moves-column { opacity: 0.35; filter: grayscale(1); overflow: hidden; }

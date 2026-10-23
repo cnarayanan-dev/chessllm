@@ -63,6 +63,8 @@ const template = (id: string, name: string | null, fits: PromptTemplateInfo['fit
   turn_template: fits === LISTED ? '$moves $legal_moves' : '$moves',
   fits,
   default_for: isDefault ? fits : [],
+  saved: false,
+  hidden: false,
 })
 /** The Prompt library as GET /api/prompt-templates lists it: the defaults, then a saved template without a name. */
 const library: PromptTemplateInfo[] = [

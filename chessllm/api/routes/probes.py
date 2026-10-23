@@ -31,8 +31,11 @@ def probe_turn(request: ProbeRequest, session: CurrentGame, library: PromptLibra
 
 
 def probe_template(request: ProbeRequest, library: PromptLibrary) -> PromptTemplate | None:
-    """The Prompt template a probe asks with: the library's by its ID, or None for the one the game recorded for the
-    side. Raises InvalidSettings (unknown_prompt_template) if the library has no such ID."""
+    """The Prompt template a probe asks with: the unsaved text given, a template with no ID, the library's by its ID,
+    or None for the one the game recorded for the side. Raises InvalidSettings (unknown_prompt_template) if the
+    library has no such ID."""
+    if request.system_prompt is not None and request.turn_template is not None:
+        return PromptTemplate(id=None, name=None, system_prompt=request.system_prompt, turn_template=request.turn_template)
     if request.prompt_template_id is None:
         return None
     template = library.template(request.prompt_template_id)

@@ -19,6 +19,8 @@ const template = (id: string, name: string | null, fits: PromptTemplateInfo['fit
   turn_template: fits === LISTED ? '$moves $legal_moves' : '$moves',
   fits,
   default_for: isDefault ? fits : [],
+  saved: false,
+  hidden: false,
 })
 const library: PromptTemplateInfo[] = [
   template('default@1', 'Default', FREE, true),

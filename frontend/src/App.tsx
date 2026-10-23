@@ -46,6 +46,9 @@ export default function App() {
   const { game, error, history } = state
   const shown = shownPosition(state)
   const [sheetOpen, setSheetOpen] = useState(false)
+  // While the Prompt lab's dock is open over the lower half, the page shrinks into the top half: the board, the top
+  // bar and player strips hidden, the side columns greyed out and inert.
+  const [docked, setDocked] = useState(false)
   // Off, a Rematch plays every LLM's default Prompt template, as a new game does.
   const promptLab = usePromptLab()
   // Why Try can't probe now: only while an LLM turn is running, as the backend takes probes between turns. (Pause,
@@ -113,9 +116,9 @@ export default function App() {
     setSheetOpen(true)
   }, [game, state.noGame])
 
-  // ← and → step through the move history, unless a field or the New game sheet has the keys.
+  // ← and → step through the move history, unless a field, the New game sheet or the Prompt lab's dock has the keys.
   useEffect(() => {
-    if (sheetOpen) return
+    if (sheetOpen || docked) return
     const onKey = (event: KeyboardEvent) => {
       const by = ({ ArrowLeft: -1, ArrowRight: 1 } as const)[event.key as 'ArrowLeft' | 'ArrowRight']
       if (!by || keyTakenElsewhere(event)) return
@@ -124,16 +127,17 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sheetOpen, step])
+  }, [sheetOpen, docked, step])
 
   return (
-    <div className="page min-h-svh text-sm">
-      <TopBar onNewGame={openSheet} />
+    <div className={docked ? 'page text-sm' : 'page min-h-svh text-sm'} data-docked={docked || undefined}>
+      {!docked && <TopBar onNewGame={openSheet} />}
       {initial && (
         // It opens with the last game's settings each time, or with no game, the defaults.
         <NewGameSheet open={sheetOpen} onOpenChange={setSheetOpen} initial={initial} onStart={startGame} />
       )}
       <GameLayout
+        docked={docked}
         game={
           // The Turn panel follows the position on the board. (`shown` is set whenever `game` is.)
           game && shown ? (
@@ -146,6 +150,7 @@ export default function App() {
                 previewing={previewing}
                 onPreview={togglePreview}
                 tryBlocked={tryBlocked}
+                onDock={setDocked}
               />
             </>
           ) : (
@@ -160,7 +165,7 @@ export default function App() {
         board={
           game && shown ? (
             <>
-              {strip(game, orientation(game) === 'white' ? 'black' : 'white')}
+              {!docked && strip(game, orientation(game) === 'white' ? 'black' : 'white')}
               <BesideBoard bar={bar}>
                 <Board
                   // A preview shows the counterpart's position as if played from the Chaos move's position before.
@@ -182,7 +187,7 @@ export default function App() {
                   {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
                 </Board>
               </BesideBoard>
-              {strip(game, orientation(game))}
+              {!docked && strip(game, orientation(game))}
             </>
           ) : state.noGame ? (
             <Board fen={EMPTY_BOARD} orientation="white" />

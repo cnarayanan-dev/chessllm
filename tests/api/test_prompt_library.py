@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.conftest import llm_faceoff, play_llm, play_move
 
-from chessllm.game.llm_turn.prompt import MOVES_SYSTEM_PROMPT_FILES, SYSTEM_PROMPT_FILES
+from chessllm.game.llm_turn.prompt import MOVES_SYSTEM_PROMPT_FILES, SYSTEM_PROMPT_FILES, template_version
 
 FREE = ["free", "blind_enforced"]
 LISTED = ["listed", "listed_enforced"]
@@ -164,3 +164,172 @@ def test_a_new_game_takes_a_template_by_its_id_not_its_text(scripted, tmp_path):
         "code": "prompt_template_not_accepted",
     }
     assert not list((tmp_path / "games").glob("*.jsonl"))
+
+
+def save_request(**fields) -> dict:
+    """A Prompt template to save, written for Free unless llm_constraints says otherwise."""
+    return {
+        "name": "Terse", "system_prompt": "You are $color.", "turn_template": "$recent_moves", "llm_constraints": "free",
+    } | fields
+
+
+def files(folder: Path) -> dict[str, dict]:
+    """The library's saved files, by name."""
+    return {path.name: json.loads(path.read_text(encoding="utf-8")) for path in sorted(folder.glob("*.json"))}
+
+
+def test_saving_a_template_returns_its_new_id_and_writes_its_file(scripted, tmp_path):
+    client, _ = scripted([])
+
+    response = client.post("/api/prompt-templates", json=save_request())
+
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert re.fullmatch("terse@[0-9a-f]{8}", saved["id"])
+    assert (saved["name"], saved["fits"], saved["default_for"]) == ("Terse", FREE, [])
+    assert (saved["saved"], saved["hidden"]) == (True, False)
+    assert files(tmp_path / "prompt_library") == {
+        f"{saved['id']}.json": {
+            "id": saved["id"], "name": "Terse", "hidden": False,
+            "system_prompt": "You are $color.", "turn_template": "$recent_moves",
+        }
+    }
+    assert library(client)[saved["id"]] == saved
+
+
+def test_saving_an_edit_makes_another_id_and_leaves_the_first_unchanged(scripted, tmp_path):
+    client, player = scripted(["e5"])
+    folder = tmp_path / "prompt_library"
+    first = client.post("/api/prompt-templates", json=save_request()).json()
+    [(first_file, first_content)] = files(folder).items()
+
+    edited = client.post("/api/prompt-templates", json=save_request(turn_template="$recent_moves\n$fen")).json()
+    client.post("/api/games", json=play_llm(prompt_template_id=first["id"]))
+    play_move(client, "e2e4")
+
+    assert edited["id"] != first["id"] and edited["id"].startswith("terse@")
+    assert len(files(folder)) == 2 and files(folder)[first_file] == first_content
+    assert library(client)[first["id"]] == first
+    assert player.prompts[0][1].content == "1. e4"  # the first version, as it was saved
+
+
+def test_a_template_saved_without_a_name_gets_an_id_all_the_same(scripted):
+    client, _ = scripted([])
+
+    saved = client.post("/api/prompt-templates", json=save_request(name="  ")).json()
+
+    assert saved["name"] is None
+    assert re.fullmatch("saved@[0-9a-f]{8}", saved["id"])
+
+
+def test_saving_a_template_the_library_already_has_writes_nothing_new(scripted, tmp_path):
+    client, _ = scripted([])
+    first = client.post("/api/prompt-templates", json=save_request()).json()
+
+    again = client.post("/api/prompt-templates", json=save_request())
+
+    assert again.status_code == 200 and again.json() == first
+    assert len(files(tmp_path / "prompt_library")) == 1
+
+
+def test_an_invalid_template_is_refused_with_the_reason_and_nothing_is_written(scripted, tmp_path):
+    client, _ = scripted([])
+
+    refused = [
+        client.post("/api/prompt-templates", json=save_request(turn_template="$moves $board")),
+        client.post("/api/prompt-templates", json=save_request(llm_constraints="listed")),
+        client.post("/api/prompt-templates", json=save_request(turn_template="$moves $legal_moves")),
+    ]
+
+    assert [(response.status_code, response.json()["code"]) for response in refused] == [
+        (400, "invalid_prompt_template")
+    ] * 3
+    assert refused[0].json()["detail"] == "the Turn template has an unknown placeholder: $board"
+    assert "must place $legal_moves" in refused[1].json()["detail"]
+    assert "only Listed and Listed enforced show the Legal-move list" in refused[2].json()["detail"]
+    assert not (tmp_path / "prompt_library").exists()
+
+
+def test_a_hidden_template_is_left_out_of_the_list_but_still_resolves_for_a_game_that_used_it(scripted, tmp_path):
+    client, player = scripted(["e5", "Nc6", "d5"])
+    saved = client.post("/api/prompt-templates", json=save_request()).json()
+    client.post("/api/games", json=play_llm(prompt_template_id=saved["id"]))
+    play_move(client, "e2e4")
+
+    hidden = client.post(f"/api/prompt-templates/{saved['id']}/hide")
+    play_move(client, "g1f3")
+    probe = {"ply": 4, "color": "black", "prompt_template_id": saved["id"]}
+    probed = client.post("/api/games/current/probes", json=probe)
+    rematch = client.post("/api/games", json=play_llm(prompt_template_id=saved["id"]))
+
+    assert hidden.status_code == 200 and hidden.json() == saved | {"hidden": True}
+    assert saved["id"] not in library(client)
+    assert files(tmp_path / "prompt_library")[f"{saved['id']}.json"]["hidden"] is True
+    assert [prompt[1].content for prompt in player.prompts] == ["1. e4", "1. e4 e5 2. Nf3", "1. e4 e5 2. Nf3"]
+    assert probed.status_code == 200 and probed.json()["template"]["id"] == saved["id"]
+    assert rematch.status_code == 200, rematch.text
+
+
+def test_saving_a_hidden_templates_text_again_shows_it_again(scripted):
+    client, _ = scripted([])
+    saved = client.post("/api/prompt-templates", json=save_request()).json()
+    client.post(f"/api/prompt-templates/{saved['id']}/hide")
+
+    again = client.post("/api/prompt-templates", json=save_request()).json()
+
+    assert again == saved
+    assert saved["id"] in library(client)
+
+
+def test_a_default_or_unknown_template_cant_be_hidden(scripted):
+    client, _ = scripted([])
+    described = id_of(client, "Described")
+
+    default = client.post(f"/api/prompt-templates/{described}/hide")
+    unknown = client.post("/api/prompt-templates/nope@12345678/hide")
+
+    assert (default.status_code, default.json()["code"]) == (400, "default_prompt_template")
+    assert (unknown.status_code, unknown.json()["code"]) == (400, "unknown_prompt_template")
+    assert described in library(client)
+
+
+def test_saving_never_overwrites_a_file_even_one_named_like_the_new_id(scripted, tmp_path):
+    client, _ = scripted([])
+    folder = tmp_path / "prompt_library"
+    version = template_version("You are $color.", "$recent_moves")
+    stranger = {"id": "stranger@1", "hidden": False, "system_prompt": "$color", "turn_template": "$moves"}
+    save(folder, f"terse@{version}.json", **stranger)
+
+    saved = client.post("/api/prompt-templates", json=save_request()).json()
+
+    assert saved["id"] == f"terse-2@{version}"
+    assert files(folder)[f"terse@{version}.json"] == stranger
+    assert files(folder)[f"terse-2@{version}.json"]["name"] == "Terse"
+    assert not [path for path in folder.iterdir() if not path.name.endswith(".json")]  # no temporary file left
+
+
+def test_the_same_text_saved_under_another_name_of_the_same_slug_keeps_its_name_under_its_own_id(scripted):
+    client, _ = scripted([])
+    first = client.post("/api/prompt-templates", json=save_request()).json()
+
+    second = client.post("/api/prompt-templates", json=save_request(name="TERSE!")).json()
+    again = client.post("/api/prompt-templates", json=save_request(name="TERSE!")).json()
+
+    assert second["name"] == "TERSE!" and second["id"] != first["id"]
+    assert second["id"].startswith("terse-2@") and again == second
+    assert {first["id"], second["id"]} <= set(library(client))
+
+
+def test_a_template_is_fetched_by_its_id_hidden_or_not(scripted):
+    client, _ = scripted([])
+    saved = client.post("/api/prompt-templates", json=save_request()).json()
+    client.post(f"/api/prompt-templates/{saved['id']}/hide")
+    described = id_of(client, "Described")
+
+    hidden = client.get(f"/api/prompt-templates/{saved['id']}")
+    default = client.get(f"/api/prompt-templates/{described}")
+    unknown = client.get("/api/prompt-templates/nope@12345678")
+
+    assert hidden.status_code == 200 and hidden.json() == saved | {"hidden": True}
+    assert default.json() == library(client)[described] and default.json()["saved"] is False
+    assert (unknown.status_code, unknown.json()["code"]) == (400, "unknown_prompt_template")

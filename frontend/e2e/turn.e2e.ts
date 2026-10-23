@@ -123,6 +123,42 @@ test('with Prompt lab on, Try probes the turn shown with the Prompt picked; the 
   await expect(probes).toHaveCount(2)
 })
 
+test('with Prompt lab on, the prompt\'s name opens the dock under the board, to try and save an edit', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('chessllm.promptLab', 'on'))
+  await playLlm(page, ['e5', 'd5']) // the turn: e5; the probe: d5
+  await clickMove(page, 'e2e4')
+  await expect(badge(page)).toHaveText('1… e5')
+  await tab(page, 'Prompt').click()
+
+  await panel(page).getByRole('button', { name: 'Default', exact: true }).click()
+
+  const dock = page.getByRole('region', { name: 'Prompt editor' })
+  const viewport = page.viewportSize()!
+  const docked = (await dock.boundingBox())!
+  const board = (await page.locator('.chessboard').boundingBox())!
+  expect(Math.abs(docked.y - viewport.height / 2)).toBeLessThan(2)
+  expect(board.y + board.height).toBeLessThanOrEqual(docked.y)
+  const shrunk = (await page.locator('.page').boundingBox())!
+  expect(shrunk.height).toBeLessThanOrEqual(viewport.height / 2 + 1) // the page itself shrinks into the top half
+  await expect(dock.getByRole('textbox', { name: 'System prompt' })).toBeFocused()
+  await expect(page.getByRole('banner')).toHaveCount(0)
+  await expect(page.getByTestId('game-column')).toHaveAttribute('inert', '')
+
+  await dock.getByRole('button', { name: 'Turn template' }).click()
+  await dock.getByRole('textbox', { name: 'Turn template' }).fill('Moves: $recent_moves')
+  await dock.getByRole('button', { name: 'Try' }).click()
+  await expect(dock.getByTestId('this-version')).toContainText('This version: d5 Legal')
+  await dock.getByRole('textbox', { name: 'Name' }).fill('Recent e2e')
+  await dock.getByRole('button', { name: 'Save as new version' }).click()
+  await expect(dock).toContainText('based on Recent e2e')
+  await dock.getByRole('button', { name: 'Close the editor' }).click()
+
+  await expect(dock).toHaveCount(0)
+  await expect(page.getByRole('banner')).toBeVisible()
+  await expect(panel(page).getByRole('combobox', { name: 'Prompt to try' })).toContainText('Recent e2e')
+  await expect(panel(page).getByRole('list', { name: 'Probes' })).toContainText('Unsaved')
+})
+
 test("after a Forfeit, the last attempt's Reasoning, marked as forfeited, and every attempt one step away", async ({
   page,
 }) => {

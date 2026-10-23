@@ -90,6 +90,11 @@ PositionTemplate = Literal["default", "described"]
 DefaultTemplate = Literal["default", "described", "moves"]
 
 
+def template_version(system_prompt: str, turn_template: str) -> str:
+    """The version a Prompt template's ID carries after its @, from its text, so an ID always means one text."""
+    return hashlib.sha256(f"{system_prompt}\0{turn_template}".encode("utf-8")).hexdigest()[:8]
+
+
 def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "default") -> PromptTemplate:
     """A default Prompt template for the LLM constraints, placing the Legal-move list under Listed. Its System prompt
     is read from its file now, so an edit to the file is played from the next game.
@@ -100,9 +105,8 @@ def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "d
     system_prompt = default_system_prompt_file(llm_constraints, kind).read_text(encoding="utf-8")
     shown = OPPONENT_PLAYED if kind == "moves" else PGN_AND_FEN + (DESCRIPTION if kind == "described" else "")
     turn_template = shown + (LEGAL_MOVES if listed else "")
-    version = hashlib.sha256(f"{system_prompt}\0{turn_template}".encode("utf-8")).hexdigest()[:8]
     return PromptTemplate(
-        id=f"{kind}{'-listed' * listed}@{version}",
+        id=f"{kind}{'-listed' * listed}@{template_version(system_prompt, turn_template)}",
         name=f"{kind.capitalize()}{' listed' * listed}",
         system_prompt=system_prompt,
         turn_template=turn_template,
@@ -119,7 +123,7 @@ def tools_template() -> PromptTemplate:
     and a turn message without the position, which the tools give. Its ID carries a version from its text, as a
     default template's does, e.g. "tools@1a2b3c4d"."""
     system_prompt = TOOLS_SYSTEM_PROMPT_FILE.read_text(encoding="utf-8")
-    version = hashlib.sha256(f"{system_prompt}\0{TOOLS_TURN_TEMPLATE}".encode("utf-8")).hexdigest()[:8]
+    version = template_version(system_prompt, TOOLS_TURN_TEMPLATE)
     return PromptTemplate(
         id=f"tools@{version}", name="Tools", system_prompt=system_prompt, turn_template=TOOLS_TURN_TEMPLATE
     )

@@ -86,6 +86,45 @@ def test_a_template_that_doesnt_fit_the_sides_llm_constraints_is_refused(scripte
     assert len(player.prompts) == 2
 
 
+def test_a_probe_with_unsaved_text_sends_it_and_records_it_as_unsaved_with_its_text(scripted, tmp_path):
+    client, player = two_moves_in(scripted, "d5")
+    game_id = client.get("/api/games/current").json()["game_id"]
+    unsaved = {"system_prompt": "You play $color. Be bold.", "turn_template": "Moves so far: $recent_moves"}
+
+    response = client.post("/api/games/current/probes", json={"ply": 2, "color": "black"} | unsaved)
+
+    assert response.status_code == 200, response.text
+    assert [message.content for message in player.prompts[-1]] == ["You play Black. Be bold.", "Moves so far: 1. e4"]
+    assert response.json()["template"] == {"id": None, "name": None} | unsaved
+    [logged] = probe_log(tmp_path, game_id)
+    assert logged["template"] == {"id": None, "name": None} | unsaved
+    assert client.get("/api/prompt-templates").json() == list(library(client).values())  # nothing saved
+    assert not (tmp_path / "prompt_library").exists()
+
+
+def test_unsaved_text_that_doesnt_fit_the_side_is_refused_with_the_reason(scripted):
+    client, player = two_moves_in(scripted)
+    turn = {"ply": 2, "color": "black"}
+
+    unknown = client.post("/api/games/current/probes", json=turn | {"system_prompt": "$colour", "turn_template": "$moves"})
+    listed = client.post(
+        "/api/games/current/probes", json=turn | {"system_prompt": "$color", "turn_template": "$legal_moves"}
+    )
+    half = client.post("/api/games/current/probes", json=turn | {"system_prompt": "$color"})
+    both = client.post(
+        "/api/games/current/probes",
+        json=turn | {"prompt_template_id": library(client)["Default"]["id"], "system_prompt": "$color",
+                     "turn_template": "$moves"},
+    )
+
+    assert (unknown.status_code, unknown.json()) == (
+        400, {"detail": "the System prompt has an unknown placeholder: $colour", "code": "invalid_prompt_template"}
+    )
+    assert (listed.status_code, listed.json()["code"]) == (400, "invalid_prompt_template")
+    assert half.status_code == 422 and both.status_code == 422
+    assert len(player.prompts) == 2
+
+
 def test_without_a_template_id_a_probe_asks_with_the_template_the_game_recorded_for_the_side(scripted, tmp_path):
     client, player = two_moves_in(scripted, "d5")
     state = client.get("/api/games/current").json()
