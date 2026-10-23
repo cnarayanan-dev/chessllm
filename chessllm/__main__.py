@@ -1,5 +1,6 @@
 """Start the app locally: uv run python -m chessllm"""
 
+import os
 import shutil
 
 import uvicorn
@@ -18,7 +19,7 @@ def main() -> None:
     if evaluator is None:
         print("Stockfish isn't installed (`brew install stockfish`), so games get no centipawn loss or accuracy")
     app = create_app(player_for, sampling_defaults=sampling_defaults, move_model=Maia2MoveModel(), evaluator=evaluator)
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("CHESSLLM_PORT", "8000")))
 
 
 if __name__ == "__main__":

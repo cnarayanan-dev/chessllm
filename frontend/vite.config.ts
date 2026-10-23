@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
-// FastAPI (uv run python -m chessllm) serves the API, the pieces and the sounds.
-const backend = 'http://127.0.0.1:8000'
+// FastAPI (uv run python -m chessllm) serves the API, the pieces and the sounds. CHESSLLM_BACKEND points at another one.
+const backend = process.env.CHESSLLM_BACKEND ?? 'http://127.0.0.1:8000'
 
 // Writes the fingerprint of the API description src/api/schema.ts was generated from (its first line) into the
 // build as api-fingerprint.txt. FastAPI refuses to serve a build whose fingerprint isn't that of its own API.
