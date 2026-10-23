@@ -5,8 +5,10 @@ import {
   gameLoop,
   initialGameLoop,
   orientation,
+  pauseState,
   phase,
   shownPosition,
+  tryDue,
   type GameLoop,
   type GameLoopAction,
 } from '@/game/gameLoop'
@@ -373,6 +375,133 @@ describe('an LLM faceoff', () => {
     expect(state.moveSounds).toBe(before.moveSounds)
     expect(phase(state)).toBe('over')
     expect(state.request).toBeNull()
+  })
+
+  describe('paused', () => {
+    const midGame = gameLoop(playing, received(playing, after(1)))
+    const pausing = gameLoop(midGame, { type: 'pause' })
+    /** The turn running lands `at` ms after the clock's epoch. */
+    const lands = (state: GameLoop, game: GameState, at: number): GameLoopAction => ({ ...received(state, game), at }) as GameLoopAction
+    const paused = gameLoop(pausing, lands(pausing, after(2), 1000))
+
+    test('is playing until paused', () => {
+      expect(pauseState(midGame)).toBe('playing')
+    })
+
+    test('pausing during a turn lets it finish, then no next turn is asked for', () => {
+      expect(pauseState(pausing)).toBe('pausing')
+      expect(pausing.request).toBe(midGame.request)
+
+      expect(paused.game).toEqual(after(2))
+      expect(paused.moveSounds).toBe(midGame.moveSounds + 1)
+      expect(paused.request).toBeNull()
+      expect(pauseState(paused)).toBe('paused')
+    })
+
+    test('Resume asks for the next turn', () => {
+      const resumed = gameLoop(paused, { type: 'resume', at: 5000 })
+
+      expect(resumed.request).toMatchObject({ kind: 'llm-turn', game: after(2) })
+      expect(pauseState(resumed)).toBe('playing')
+    })
+
+    test('Resume while the turn still runs takes the pause back: the next turn is asked for as it lands', () => {
+      const resumed = gameLoop(pausing, { type: 'resume', at: 500 })
+      const next = gameLoop(resumed, received(resumed, after(2)))
+
+      expect(resumed.request).toBe(pausing.request)
+      expect(next.request).toMatchObject({ kind: 'llm-turn', game: after(2) })
+    })
+
+    test('Time used shows no time for a pause: nobody ticks until Resume, then the side to move from then', () => {
+      const totals = { white: 2, black: 4 }
+      const stood = gameLoop(pausing, lands(pausing, after(2, { time_used: totals, running_s: null }), 1000))
+
+      expect(stood.clock!.ticking).toBeNull()
+      expect([liveTotal(stood.clock!, 'white', 61_000), liveTotal(stood.clock!, 'black', 61_000)]).toEqual([2, 4])
+
+      const resumed = gameLoop(stood, { type: 'resume', at: 61_000 })
+      expect(liveTotal(resumed.clock!, 'white', 62_500)).toBe(3.5)
+      expect(liveTotal(resumed.clock!, 'black', 62_500)).toBe(4)
+    })
+
+    test('Try in a running game pauses it first, and is due only once paused', () => {
+      const trying = gameLoop(midGame, { type: 'try' })
+
+      expect(pauseState(trying)).toBe('pausing')
+      expect(tryDue(trying)).toBe(false)
+
+      const due = gameLoop(trying, received(trying, after(2)))
+      expect(due.request).toBeNull()
+      expect(tryDue(due)).toBe(true)
+
+      const tried = gameLoop(due, { type: 'tried' })
+      expect(tryDue(tried)).toBe(false)
+      expect(pauseState(tried)).toBe('paused') // the game stays paused until Resume
+    })
+
+    test('Try in a paused game is due at once', () => {
+      expect(tryDue(gameLoop(paused, { type: 'try' }))).toBe(true)
+    })
+
+    test('Try keeps the view on the turn it was pressed for, though the turn running lands', () => {
+      const one = gameLoop(playing, received(playing, after(1, { plies: plies(E4) })))
+      const trying = gameLoop(one, { type: 'try' })
+      const due = gameLoop(trying, received(trying, after(2, { plies: plies(E4, E5) })))
+
+      expect(due.history).toEqual({ ply: 1 })
+      expect(shownPosition(due)!.ply).toBe(1)
+    })
+
+    test('Resume drops a Try still waiting for the pause', () => {
+      const trying = gameLoop(midGame, { type: 'try' })
+
+      expect(gameLoop(trying, { type: 'resume', at: 0 }).tryFor).toBeNull()
+    })
+
+    test('a New game plays on: once it arrives it is not paused, and a Try waiting for the old one is dropped', () => {
+      const starting = gameLoop(gameLoop(pausing, { type: 'try' }), { type: 'new-game', newGame: null })
+      expect(tryDue(starting)).toBe(false)
+
+      const started = gameLoop(starting, received(starting, { ...after(0), game_id: 'game-2' }))
+
+      expect(pauseState(started)).toBe('playing')
+      expect(started.tryFor).toBeNull()
+      expect(started.request).toMatchObject({ kind: 'llm-turn' })
+    })
+
+    test('a New game that cannot start leaves the old game paused, asking for no turn', () => {
+      const starting = gameLoop(paused, { type: 'new-game', newGame: null })
+      const failed = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'no', at: 0 })
+
+      expect(failed.request).toBeNull()
+      expect(pauseState(failed)).toBe('paused')
+    })
+
+    test('another game arriving is not paused: its turn is asked for', () => {
+      const other = gameLoop(gameLoop(pausing, { type: 'try' }), received(pausing, { ...after(0), game_id: 'game-2' }))
+
+      expect(pauseState(other)).toBe('playing')
+      expect(other.tryFor).toBeNull()
+      expect(other.request).toMatchObject({ kind: 'llm-turn' })
+    })
+  })
+})
+
+describe('Pause in Play LLM', () => {
+  test('there is none: the game waits for the human anyway', () => {
+    const asked = run(received(initialGameLoop, afterE4()))
+
+    expect(pauseState(asked)).toBeNull()
+    expect(gameLoop(asked, { type: 'pause' })).toBe(asked)
+  })
+
+  test('Try is due as soon as no LLM turn runs', () => {
+    const asked = run(received(initialGameLoop, afterE4()))
+    const trying = gameLoop(asked, { type: 'try' })
+
+    expect(tryDue(trying)).toBe(false)
+    expect(tryDue(gameLoop(trying, received(trying, afterE5())))).toBe(true)
   })
 })
 

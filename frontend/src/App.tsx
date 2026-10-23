@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useIsMutating, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getNewGameDefaults } from '@/api/client'
 import { modelsQuery } from '@/api/models'
@@ -17,7 +17,7 @@ import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, counterpartAt } from '@/game/chaos'
 import { evaluationBar, previewBar } from '@/game/evaluation'
-import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
+import { boardInput, orientation, pauseState, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
@@ -30,6 +30,8 @@ const NO_ARROWS: readonly [string, string][] = []
 const EMPTY_BOARD = '8/8/8/8/8/8/8/8 w - - 0 1'
 // Why Try can't probe while an LLM turn runs: a probe never runs alongside a real turn.
 const TRY_BLOCKED = 'An LLM turn is running. Try once it has ended.'
+// Why a paused game can't be resumed while a probe runs: the turn would wait behind it.
+const RESUME_BLOCKED = 'A probe is running. Resume once it has ended.'
 
 /** Whether a key press belongs to a field or a dialog rather than to the move history. */
 const keyTakenElsewhere = (event: KeyboardEvent) =>
@@ -42,7 +44,7 @@ const keyTakenElsewhere = (event: KeyboardEvent) =>
     (event.target.isContentEditable || !!event.target.closest('input, textarea, select, [role="dialog"]')))
 
 export default function App() {
-  const { state, newGame, humanMove, viewPly, step } = useGameLoop()
+  const { state, newGame, humanMove, viewPly, step, pause, resume, pausedForTry } = useGameLoop()
   const { game, error, history } = state
   const shown = shownPosition(state)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -51,9 +53,20 @@ export default function App() {
   const [docked, setDocked] = useState(false)
   // Off, a Rematch plays every LLM's default Prompt template, as a new game does.
   const promptLab = usePromptLab()
-  // Why Try can't probe now: only while an LLM turn is running, as the backend takes probes between turns. (Pause,
-  // #116, decides here when a running game may be probed.)
-  const tryBlocked = waitingForLlm(state) ? TRY_BLOCKED : undefined
+  // Pause, with Prompt lab on, in a game no human plays; null: none (Play LLM, or the game is over).
+  const paused = promptLab ? pauseState(state) : null
+  // Why Try can't probe now: while an LLM turn is running, as the backend takes probes between turns. In a game that
+  // can pause, Try pauses it first instead, and probes once paused.
+  const pauseFirst = paused !== null && paused !== 'paused' ? pausedForTry : undefined
+  const tryBlocked = waitingForLlm(state) && !pauseFirst ? TRY_BLOCKED : undefined
+  // A probe asked from anywhere on the page (its mutations are keyed ['probe', …]): Resume waits for it, so a turn
+  // never waits behind it on the backend with its Time used ticking here.
+  const probing = useIsMutating({ mutationKey: ['probe'] }) > 0
+  const resumeBlocked = probing ? RESUME_BLOCKED : undefined
+  // Prompt lab switched off while paused: the game goes on, as there is no Pause to resume it from.
+  useEffect(() => {
+    if (!promptLab) resume()
+  }, [promptLab, resume])
   const openSheet = useCallback(() => setSheetOpen(true), [])
   // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
@@ -142,7 +155,15 @@ export default function App() {
           // The Turn panel follows the position on the board. (`shown` is set whenever `game` is.)
           game && shown ? (
             <>
-              <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings, promptLab))} />
+              <GameCard
+                game={game}
+                error={error}
+                onRematch={() => newGame(rematchOf(game.settings, promptLab))}
+                pause={paused}
+                resumeBlocked={resumeBlocked}
+                onPause={pause}
+                onResume={resume}
+              />
               <TurnPanel
                 game={game}
                 ply={shown.ply}
@@ -151,6 +172,7 @@ export default function App() {
                 onPreview={togglePreview}
                 tryBlocked={tryBlocked}
                 onDock={setDocked}
+                pauseFirst={pauseFirst}
               />
             </>
           ) : (

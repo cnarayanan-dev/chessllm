@@ -4,8 +4,11 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { ApiError, getGame, playLlmTurn, playMove, startGame } from '@/api/client'
 import type { GameState, NewGame } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
-import { gameLoop, initialGameLoop, llmToMove, type Request } from '@/game/gameLoop'
+import { gameLoop, initialGameLoop, llmToMove, tryDue, type Request } from '@/game/gameLoop'
 
+// A Try that waited for a pause the game no longer takes: resumed, or another game started.
+const TRY_DROPPED = 'The probe was not asked: the game was resumed, or a new one started, before it paused.'
+const TRY_LEFT = 'The probe was not asked: the page was left before the game paused.'
 const POLL_MS = 2000
 const CLOCK_POLL_MS = 1000
 
@@ -123,10 +126,47 @@ export function useGameLoop() {
     playMoveSound()
   }, [state.moveSounds])
 
+  // The Tries waiting for the game to pause: each is let go once no LLM turn runs, or failed once dropped.
+  const tries = useRef<{ resolve: () => void; reject: (error: Error) => void }[]>([])
+  const due = tryDue(state)
+  const asked = state.tryFor !== null
+  useEffect(() => {
+    if (tries.current.length === 0 || (asked && !due)) return
+    const waiting = tries.current
+    tries.current = []
+    if (due) {
+      dispatch({ type: 'tried' })
+      for (const { resolve } of waiting) resolve()
+    } else {
+      for (const { reject } of waiting) reject(new Error(TRY_DROPPED))
+    }
+  }, [asked, due])
+  // Left with a Try still waiting: it fails, so nothing waits on it.
+  useEffect(
+    () => () => {
+      const waiting = tries.current
+      tries.current = []
+      for (const { reject } of waiting) reject(new Error(TRY_LEFT))
+    },
+    [],
+  )
+
   const newGame = useCallback((settings: NewGame | null) => dispatch({ type: 'new-game', newGame: settings }), [])
   const humanMove = useCallback((uci: string) => dispatch({ type: 'human-move', uci }), [])
   const viewPly = useCallback((ply: number) => dispatch({ type: 'view', ply }), [])
   const step = useCallback((by: -1 | 1) => dispatch({ type: 'step', by }), [])
 
-  return { state, newGame, humanMove, viewPly, step }
+  const pause = useCallback(() => dispatch({ type: 'pause' }), [])
+  const resume = useCallback(() => dispatch({ type: 'resume', at: Date.now() }), [])
+  /** Pauses a running game no human plays, and resolves once no LLM turn runs, so a probe may be asked then. */
+  const pausedForTry = useCallback(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        tries.current.push({ resolve, reject })
+        dispatch({ type: 'try' })
+      }),
+    [],
+  )
+
+  return { state, newGame, humanMove, viewPly, step, pause, resume, pausedForTry }
 }

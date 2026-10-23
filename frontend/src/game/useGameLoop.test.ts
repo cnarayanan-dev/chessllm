@@ -146,3 +146,62 @@ describe("the LLM's Time used", () => {
     expect(now(result.current.state, 'black')).toBe(64.5)
   })
 })
+
+describe('Try in a faceoff', () => {
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+  const e4 = aTurn('e4', { ply: 1, color: 'white' })
+  const e5 = aTurn('e5')
+  const blacksTurn = afterE4({ settings, human_legal_moves: [], llm_turn: e4, llm_turns: [e4] })
+  const whitesTurn = afterE5({ settings, human_legal_moves: [], llm_turn: e5, llm_turns: [e4, e5] })
+
+  test('pauses the game first, and may probe only once the turn running has landed; no next turn is asked for', async () => {
+    const turn = later()
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(blacksTurn))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+    const { result } = renderHook(() => useGameLoop())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    let paused = false
+
+    act(() => void result.current.pausedForTry().then(() => (paused = true)))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.state.paused).toBe(true)
+    expect(paused).toBe(false)
+
+    await act(async () => turn.resolve(Response.json(whitesTurn)))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    expect(paused).toBe(true)
+    expect(result.current.state.game).toEqual(whitesTurn)
+    expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(1)
+  })
+
+  test('fails the Try when the game is resumed before it has paused', async () => {
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(blacksTurn))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    const { result } = renderHook(() => useGameLoop())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    let outcome: Promise<unknown> = Promise.resolve()
+    act(() => void (outcome = result.current.pausedForTry().catch((error: unknown) => error)))
+    act(() => result.current.resume())
+
+    expect(await outcome).toMatchObject({ message: expect.stringMatching(/not asked/) })
+  })
+
+  test('fails a Try still waiting when the page is left', async () => {
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(blacksTurn))
+      .on('POST /api/games/current/llm-turn', later().promise)
+    const { result, unmount } = renderHook(() => useGameLoop())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+
+    let outcome: Promise<unknown> = Promise.resolve()
+    act(() => void (outcome = result.current.pausedForTry().catch((error: unknown) => error)))
+    unmount()
+
+    expect(await outcome).toMatchObject({ message: expect.stringMatching(/page was left/) })
+  })
+})

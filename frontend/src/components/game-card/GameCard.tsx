@@ -1,12 +1,13 @@
 // The Game card, as a lichess game card without Elo: the Mode, the settings, the players, and the result and Rematch
-// once over.
-import { Bot, RotateCcw, User } from 'lucide-react'
+// once over. With Prompt lab on, a game no human plays has Pause beside "Playing".
+import { Bot, Pause, Play, RotateCcw, User } from 'lucide-react'
 import type { Color, GameState } from '@/api/types'
 import { settingIcon } from '@/components/game-card/settingIcons'
 import { SettingChip } from '@/components/setting-chip/SettingChip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { PauseState } from '@/game/gameLoop'
 import { rematchDescription } from '@/game/rematch'
 import { COLORS, COLOR_NAMES, gameSettings, resultText, type GameSetting } from '@/game/wording'
 import { cn } from '@/lib/utils'
@@ -23,6 +24,53 @@ type GameCardProps = {
   error: string | null
   /** Starts the Rematch, once the game is over. */
   onRematch: () => void
+  /** Where Pause stands, with Prompt lab on in a game no human plays; else undefined, and there is no Pause. */
+  pause?: PauseState | null
+  /** Why the paused game can't be resumed now (a probe runs); undefined when it can. */
+  resumeBlocked?: string
+  /** Pauses the game, or resumes it: the Pause button's. */
+  onPause?: () => void
+  onResume?: () => void
+}
+
+// What the Pause button does, or why it can't now, in its tooltip and `aria-description` (the hover rule).
+const PAUSE = "No new LLM turn starts until you resume; the turn running finishes first. Time used doesn't grow while paused."
+const PAUSING = 'Pausing: the LLM turn running finishes first.'
+const RESUME = "The next LLM turn starts. Time used doesn't grow while paused."
+const PAUSE_STATUS = { playing: 'Playing', pausing: 'Pausing after this turn…', paused: 'Paused' } as const
+
+type PauseButtonProps = { pause: PauseState; resumeBlocked?: string; onPause?: () => void; onResume?: () => void }
+
+/**
+ * A round icon button: Pause while playing, held (disabled) while the turn running finishes, and Resume once paused,
+ * disabled while a probe runs; its name and meaning, or why it can't now, in a tooltip.
+ */
+function PauseButton({ pause, resumeBlocked, onPause, onResume }: PauseButtonProps) {
+  const paused = pause === 'paused'
+  const name = paused ? 'Resume' : 'Pause'
+  const blocked = pause === 'pausing' ? PAUSING : paused ? resumeBlocked : undefined
+  const description = blocked ?? (paused ? RESUME : PAUSE)
+  const Icon = paused ? Play : Pause
+  return (
+    <Tooltip>
+      {/* The tooltip hangs on a wrapper, as a disabled button takes no hover. */}
+      <TooltipTrigger delay={150} render={<span className="inline-flex" />}>
+        <button
+          type="button"
+          aria-label={name}
+          aria-description={description}
+          disabled={blocked !== undefined}
+          onClick={paused ? onResume : onPause}
+          className="inline-flex size-7 flex-none cursor-pointer items-center justify-center rounded-full bg-muted text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        >
+          <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="block max-w-64">
+        <span className="font-semibold">{name}</span> {description}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 /** A setting as muted text, its meaning in a tooltip and its `aria-description` (DESIGN.md: the hover rule). */
@@ -102,7 +150,7 @@ function SettingsLine({
   )
 }
 
-export function GameCard({ game, error, onRematch }: GameCardProps) {
+export function GameCard({ game, error, onRematch, pause, resumeBlocked, onPause, onResume }: GameCardProps) {
   const mode = MODES[game.settings.mode]
   const over = game.status === 'over' ? resultText(game) : null
   // The Rules, whether the game is wild, is the one setting shown, as an icon; the settings the LLMs share are not
@@ -174,7 +222,14 @@ export function GameCard({ game, error, onRematch }: GameCardProps) {
             />
           </>
         ) : (
-          <div className="text-[15px]/5 font-semibold tracking-tight text-muted-foreground">Playing</div>
+          <div className="flex items-center gap-2">
+            <div className="text-[15px]/5 font-semibold tracking-tight text-muted-foreground">
+              {PAUSE_STATUS[pause ?? 'playing']}
+            </div>
+            {pause && (
+              <PauseButton pause={pause} resumeBlocked={resumeBlocked} onPause={onPause} onResume={onResume} />
+            )}
+          </div>
         )}
       </CardContent>
       {error !== null && (

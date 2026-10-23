@@ -137,6 +137,30 @@ def test_the_humans_running_move_shows_in_the_state_and_no_one_elses_until_asked
     assert (state.time_used.white, state.time_used.black) == (3.25, 0.0)
 
 
+def test_a_paused_faceoff_charges_no_one_for_the_pause_nor_for_a_probe_asked_during_it(tmp_path):
+    """Pause is the page's: it asks for no next turn. A game nobody is driving charges no one."""
+    clock = FakeClock()
+    white, black = ScriptedPlayer(["e4", "e5", "Nf3"]), ScriptedPlayer(["e5"])  # White's "e5" answers the probe
+    white.clock, white.reply_s, black.clock, black.reply_s = clock, [2.0, 9.0, 3.0], clock, [4.0]
+    settings = Settings("llm_faceoff", LlmSide(), LlmSide())
+    log = GameLog(tmp_path, *settings.side_names())
+    game = GameSession({"white": white, "black": black}, settings, log, clock=clock)
+    game.play_llm_turn()
+    game.play_llm_turn()
+    clock.advance(60.0)  # paused: no turn is asked for
+
+    game.probe(1, "white")
+    clock.advance(60.0)
+    paused = game.state()
+    game.play_llm_turn()  # resumed
+
+    assert paused.running_s is None
+    assert (paused.time_used.white, paused.time_used.black) == (2.0, 4.0)
+    state = game.state()
+    assert [ply.time_s for ply in state.plies] == [2.0, 4.0, 3.0]
+    assert (state.time_used.white, state.time_used.black) == (5.0, 4.0)
+
+
 def test_a_running_llm_turn_shows_only_how_long_it_has_run(tmp_path):
     """The state shows running_s while the turn runs, never the running turn itself (#81)."""
     clock = FakeClock()

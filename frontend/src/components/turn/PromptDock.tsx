@@ -22,6 +22,8 @@ const PARTS: { part: Part; name: string; meaning: string }[] = [
   { part: 'turn_template', name: 'Turn template', meaning: "The message of every turn, the position's placeholders filled in." },
 ]
 const TRY = 'Ask the LLM again about the position before this turn, with the text as it is, saved or not.'
+// Try in a running game no human plays: it pauses first, so a probe never runs alongside a real turn.
+const TRY_PAUSING = `Pauses the game after the turn running, then asks the LLM again about the position before this turn, with the text as it is, saved or not. Resume it on the Game card.`
 const SAVE = 'Add the text to the Prompt library as a new Prompt template, with a new ID. The one it is based on stays as it is.'
 const UNCHANGED = 'Nothing has changed yet.'
 const NAME = 'A name to recognise it by in the lists; optional.'
@@ -36,13 +38,15 @@ type PromptDockProps = {
   baseId: string
   /** Why Try can't probe now (an LLM turn runs); undefined when it can. */
   tryBlocked?: string
+  /** In a running game no human plays: pauses it, resolving once paused. Try awaits it before it probes. */
+  pauseFirst?: () => Promise<void>
   /** A Save as new version landed: the template saved, which the text is now based on. */
   onSaved: (template: PromptTemplateInfo) => void
   onClose: () => void
 }
 
 /** The dock: it takes the focus when it opens and closes on Esc; its editor once the template's text is in. */
-export function PromptDock({ game, turn, baseId, tryBlocked, onSaved, onClose }: PromptDockProps) {
+export function PromptDock({ game, turn, baseId, tryBlocked, pauseFirst, onSaved, onClose }: PromptDockProps) {
   const queryClient = useQueryClient()
   const base = useQuery(promptTemplateQuery(queryClient, baseId))
   const dock = useRef<HTMLElement>(null)
@@ -66,7 +70,15 @@ export function PromptDock({ game, turn, baseId, tryBlocked, onSaved, onClose }:
       className="fixed inset-x-0 bottom-0 z-40 flex h-[50svh] flex-col gap-2 border-t bg-card px-4 pt-3 pb-4 text-sm shadow-[0_-8px_24px_rgb(0_0_0/0.08)] outline-none sm:px-8"
     >
       {base.data ? (
-        <Editor game={game} turn={turn} base={base.data} tryBlocked={tryBlocked} onSaved={onSaved} onClose={onClose} />
+        <Editor
+          game={game}
+          turn={turn}
+          base={base.data}
+          tryBlocked={tryBlocked}
+          pauseFirst={pauseFirst}
+          onSaved={onSaved}
+          onClose={onClose}
+        />
       ) : (
         <div className="flex items-center gap-2">
           <p className={base.isError ? 'text-destructive' : quiet}>
@@ -91,7 +103,7 @@ function CloseButton({ onClose }: { onClose: () => void }) {
 
 type EditorProps = Omit<PromptDockProps, 'baseId'> & { base: PromptTemplateInfo }
 
-function Editor({ game, turn, base, tryBlocked, onSaved, onClose }: EditorProps) {
+function Editor({ game, turn, base, tryBlocked, pauseFirst, onSaved, onClose }: EditorProps) {
   const side = game.settings[turn.color]
   const [text, setText] = useState<Text>({ system_prompt: base.system_prompt, turn_template: base.turn_template })
   const [part, setPart] = useState<Part>('system_prompt')
@@ -100,7 +112,7 @@ function Editor({ game, turn, base, tryBlocked, onSaved, onClose }: EditorProps)
   useEffect(() => box.current?.focus(), [])
   const queryClient = useQueryClient()
   const probes = useQuery(probesQuery(game.game_id))
-  const { ask, last } = useProbeTurn(game, turn)
+  const { ask, last, waiting } = useProbeTurn(game, turn, pauseFirst)
   /** The library changed: the template is kept by its ID as it now is, and the list read again. */
   const landed = (template: PromptTemplateInfo) => {
     queryClient.setQueryData(promptTemplateQuery(queryClient, template.id).queryKey, template)
@@ -133,7 +145,8 @@ function Editor({ game, turn, base, tryBlocked, onSaved, onClose }: EditorProps)
         ? { ply: turn.ply, color: turn.color, ...text }
         : { ply: turn.ply, color: turn.color, prompt_template_id: base.id === inGame ? null : base.id },
     )
-  const blocked = tryBlocked ?? (last?.status === 'pending' ? 'Asking the LLM…' : undefined)
+  const blocked = tryBlocked ?? waiting
+  const meaning = pauseFirst ? TRY_PAUSING : TRY
   const unsaveable = saving.isPending ? 'Saving…' : changed ? undefined : UNCHANGED
   // This version's last answer: the turn's last probe asked with exactly this text, saved or not.
   const thisVersion = (probes.data ?? [])
@@ -201,8 +214,8 @@ function Editor({ game, turn, base, tryBlocked, onSaved, onClose }: EditorProps)
         none={last?.status === 'pending' ? 'asking the LLM…' : 'not tried yet'}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <Hinted hint={blocked ?? TRY}>
-          <Button size="sm" variant="secondary" aria-description={blocked ?? TRY} disabled={blocked !== undefined} onClick={tryChosen}>
+        <Hinted hint={blocked ?? meaning}>
+          <Button size="sm" variant="secondary" aria-description={blocked ?? meaning} disabled={blocked !== undefined} onClick={tryChosen}>
             <FlaskConical aria-hidden="true" />
             Try
           </Button>

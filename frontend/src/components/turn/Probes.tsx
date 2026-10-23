@@ -16,6 +16,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { fittingTemplates } from '@/settings/next-game'
 
 const TRY = "Ask the LLM again about the position before this turn, with the Prompt picked. The game doesn't change."
+// Try in a running game no human plays: it pauses first, so a probe never runs alongside a real turn.
+const TRY_PAUSING = `Pauses the game after the turn running, then asks the LLM again about the position before this turn, with the Prompt picked. The game doesn't change; resume it on the Game card.`
 const PICKER = 'The Prompt template to Try. Listed: those that fit what the LLM is given.'
 const EDIT = 'Open the Prompt in the editor under the board, to change it, try it and save it as a new version.'
 
@@ -24,6 +26,8 @@ type ProbesProps = {
   turn: LlmTurn
   /** Why Try can't probe now (an LLM turn runs); undefined when it can. */
   tryBlocked?: string
+  /** In a running game no human plays: pauses it, resolving once paused. Try awaits it before it probes. */
+  pauseFirst?: () => Promise<void>
   /** The template picked to Try, by its ID; null for the game's own. Kept by the panel from turn to turn. */
   picked: string | null
   onPick: (id: string) => void
@@ -55,11 +59,11 @@ function tally(probes: Probe[]): Tally[] {
 const tallyLine = ({ name, legal, slips, total }: Tally) =>
   `${name}: ${legal} of ${total} legal${slips > 0 ? ` (${slips} ${slips === 1 ? 'slip' : 'slips'})` : ''}`
 
-export function Probes({ game, turn, tryBlocked, picked, onPick, onEdit }: ProbesProps) {
+export function Probes({ game, turn, tryBlocked, pauseFirst, picked, onPick, onEdit }: ProbesProps) {
   const side = game.settings[turn.color]
   const library = useQuery(promptLibraryQuery)
   const probes = useQuery(probesQuery(game.game_id))
-  const { ask, last } = useProbeTurn(game, turn)
+  const { ask, last, waiting } = useProbeTurn(game, turn, pauseFirst)
   if (side.player !== 'llm') return null
   // The template the game recorded for the side, by its versioned ID; offered first when the library no longer lists
   // it (an older version, or a hidden one), and asked for by no ID, so the backend uses the recorded text.
@@ -71,13 +75,12 @@ export function Probes({ game, turn, tryBlocked, picked, onPick, onEdit }: Probe
   const chosen = templates.find((entry) => entry.id === picked) ?? templates.find((entry) => entry.id === inGame)
   const blocked =
     tryBlocked ??
-    (last?.status === 'pending'
-      ? 'Asking the LLM…'
-      : chosen === undefined
+    (waiting ??
+      (chosen === undefined
         ? library.isPending
           ? 'The Prompt library is loading.'
           : 'No Prompt template fits what this LLM is given.'
-        : undefined)
+        : undefined))
   const tryChosen = () =>
     chosen &&
     ask({
@@ -85,6 +88,7 @@ export function Probes({ game, turn, tryBlocked, picked, onPick, onEdit }: Probe
       color: turn.color,
       prompt_template_id: chosen.id === inGame ? null : chosen.id,
     })
+  const meaning = pauseFirst ? TRY_PAUSING : TRY
   const shown = probesOf(probes.data ?? [], turn)
   return (
     <div role="group" aria-label="Probes of this turn" className="mb-3 flex flex-col gap-2 border-b pb-3">
@@ -132,7 +136,7 @@ export function Probes({ game, turn, tryBlocked, picked, onPick, onEdit }: Probe
             <Button
               size="sm"
               variant="secondary"
-              aria-description={blocked ?? TRY}
+              aria-description={blocked ?? meaning}
               disabled={blocked !== undefined}
               onClick={tryChosen}
             >
@@ -140,7 +144,7 @@ export function Probes({ game, turn, tryBlocked, picked, onPick, onEdit }: Probe
               Try
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">{blocked ?? TRY}</TooltipContent>
+          <TooltipContent side="bottom">{blocked ?? meaning}</TooltipContent>
         </Tooltip>
       </div>
       {last?.status === 'error' && <p className="text-sm text-destructive">{last.error?.message}</p>}

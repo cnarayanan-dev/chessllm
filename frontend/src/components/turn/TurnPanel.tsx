@@ -38,6 +38,8 @@ type TurnPanelProps = {
   tryBlocked?: string
   /** Called with whether the dock is open, as the page sets itself aside under it, and gives it back once closed. */
   onDock?: (open: boolean) => void
+  /** In a running game no human plays: pauses it, resolving once paused, for Try to probe then (Pause). */
+  pauseFirst?: () => Promise<void>
 }
 
 /** The dock opened from a turn's Prompt row: on that turn of that game, and the template its text starts from, by
@@ -91,7 +93,7 @@ function replyText(attempt: Attempt): string {
 const trigger = 'gap-1 px-1 @max-[17rem]:text-xs @max-[17rem]:[&_svg]:hidden'
 const pane = 'max-h-80 overflow-y-auto'
 
-export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryBlocked, onDock }: TurnPanelProps) {
+export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryBlocked, onDock, pauseFirst }: TurnPanelProps) {
   const turn = turnShown(game, ply, live)
   const move = turn && moveName(game, turn)
   const gain = turn ? shownGain(game, turn) : undefined
@@ -148,6 +150,7 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
                   game={game}
                   turn={turn}
                   tryBlocked={tryBlocked}
+                  pauseFirst={pauseFirst}
                   picked={tried}
                   onPick={setTried}
                   onEdit={(baseId, from) => {
@@ -181,6 +184,7 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, tryB
             turn={dockedTurn}
             baseId={docked.baseId}
             tryBlocked={tryBlocked}
+            pauseFirst={pauseFirst}
             onSaved={(saved) => {
               setTried(saved.id)
               setDocked({ ...docked, baseId: saved.id })
