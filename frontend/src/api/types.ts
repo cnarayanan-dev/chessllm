@@ -18,6 +18,8 @@ export type PromptMessage = Schemas['PromptMessage']
 export type Ply = Schemas['Ply']
 /** Stockfish's judgement of the position after a ply, from White's point of view; `unjudged` says why there is none. */
 export type Evaluation = NonNullable<Ply['evaluation']>
+/** How much a Chaos move gained its mover, from its point of view; `vs_best` is recorded, never shown. */
+export type ChaosGain = NonNullable<LlmTurn['chaos_gain']>
 // The Legal counterpart switch may be left out of a request: Standard rules ignore it, and the API defaults it to on.
 export type NewGame = Omit<Schemas['NewGame'], 'legal_counterpart'> & { legal_counterpart?: boolean }
 export type ModelInfo = Schemas['ModelInfo']

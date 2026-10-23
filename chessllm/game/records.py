@@ -115,6 +115,20 @@ class Attempt(AttemptSummary):
         return shape
 
 
+class Evaluation(BaseModel):
+    """Stockfish's judgement of the position after a ply or a Legal counterpart, from White's point of view
+    (CONTEXT.md): in pawns, capped at ±10, or a mate in so many moves, positive when White mates, with pawns then at
+    the cap. A position that isn't valid chess is never judged: unjudged says why, and pawns and mate are None."""
+
+    pawns: float | None
+    mate: int | None
+    unjudged: str | None
+
+    def log_shape(self) -> dict[str, Any]:
+        """The Evaluation as the evaluation event logs it, the same as the API has it."""
+        return self.model_dump(mode="json")
+
+
 class LegalCounterpartSummary(BaseModel):
     """The Legal counterpart of a chaos move: the legal move the same LLM gave for the same position when asked once
     more, under Listed enforced, in one attempt. Never played. Its move and the position it would have left are
@@ -124,10 +138,30 @@ class LegalCounterpartSummary(BaseModel):
     san: str | None
     fen_after: str | None  # the position it would have left, so the page can show it without chess logic (ADR 0001)
     attempt: AttemptSummary
+    # Only with an evaluator, for a move that doesn't end the game: the Evaluation of the position it would have left,
+    # judged like any ply's.
+    evaluation: Evaluation | None = Field(default=None, exclude_if=is_none)
 
 
 class LegalCounterpart(LegalCounterpartSummary):
     attempt: Attempt
+
+
+class ChaosGain(BaseModel):
+    """How much a chaos move gained its mover (CONTEXT.md), in pawns from the mover's point of view: the Evaluation
+    after it minus the Evaluation of each Gain baseline, each capped at ±10, a King capture counting as +10 after the
+    move and a King left in check as -10 (any other end of the game by its result), so a gain is capped at ±20. A
+    gain is None when a position it needs has no Evaluation, and the gain over the Legal counterpart also when none
+    was asked for or it failed."""
+
+    # Stockfish's judgement of the position before the chaos move, which its best move keeps: recorded, never shown.
+    best_evaluation: Evaluation
+    vs_counterpart: float | None
+    vs_best: float | None  # recorded, never shown
+
+    def log_shape(self) -> dict[str, Any]:
+        """The gains as the chaos_gain event logs them, the same as the API has them."""
+        return self.model_dump(mode="json")
 
 
 class LlmTurnSummary(BaseModel):
@@ -140,6 +174,8 @@ class LlmTurnSummary(BaseModel):
     time_s: float
     # Only for a turn that ended in a chaos move, under Chaos rules with Legal counterparts asked for.
     legal_counterpart: LegalCounterpartSummary | None = Field(default=None, exclude_if=is_none)
+    # Only for a turn that ended in a chaos move, with an evaluator, once the positions it needs are judged.
+    chaos_gain: ChaosGain | None = Field(default=None, exclude_if=is_none)
 
     def log_shape(self) -> dict[str, Any]:
         """What the turn's last llm_attempt logs of the turn itself: its time."""
@@ -151,20 +187,6 @@ class LlmTurn(LlmTurnSummary):
     thinking: str | None  # the thinking of the last try that answered
     reasoning: str | None  # the Reasoning of the last try: the one played, or the last before a Forfeit
     legal_counterpart: LegalCounterpart | None = Field(default=None, exclude_if=is_none)
-
-
-class Evaluation(BaseModel):
-    """Stockfish's judgement of the position after a ply, from White's point of view (CONTEXT.md): in pawns, capped
-    at ±10, or a mate in so many moves, positive when White mates, with pawns then at the cap. A position that isn't
-    valid chess is never judged: unjudged says why, and pawns and mate are None."""
-
-    pawns: float | None
-    mate: int | None
-    unjudged: str | None
-
-    def log_shape(self) -> dict[str, Any]:
-        """The Evaluation as the evaluation event logs it, the same as the API has it."""
-        return self.model_dump(mode="json")
 
 
 class EvaluationEngine(BaseModel):

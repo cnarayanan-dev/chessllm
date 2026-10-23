@@ -235,6 +235,87 @@ describe('Legal counterpart', () => {
   })
 })
 
+describe('Chaos gain', () => {
+  type ChaosGain = NonNullable<LlmTurn['chaos_gain']>
+  const MEANING =
+    'How much breaking the rules gained the LLM: the Evaluation after its Chaos move minus the one after its Legal counterpart, in pawns from its side. Capped at ±20.'
+  const e5 = {
+    move: 'e7e5',
+    san: 'e5',
+    fen_after: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+    attempt: aTurn('e5').attempts[0],
+  }
+  const gain = (vs_counterpart: number | null): ChaosGain => ({
+    best_evaluation: { pawns: 0.3, mate: null, unjudged: null },
+    vs_counterpart,
+    vs_best: 4.2,
+  })
+  /** 1. e4 Bb4, a Chaos move, with its Legal counterpart and the gain given; the switch on unless `switchOn` is false. */
+  const withGain = (chaosGain: ChaosGain | undefined, switchOn = true) => {
+    const game = chaosGame(2)
+    const turns = game.llm_turns.map((turn) => ({ ...turn, legal_counterpart: switchOn ? e5 : undefined, chaos_gain: chaosGain }))
+    return { ...game, llm_turns: turns, llm_turn: turns.at(-1)!, settings: { ...game.settings, legal_counterpart: switchOn } }
+  }
+  const line = () => within(panel()).queryByRole('group', { name: 'Chaos gain' })
+  const value = () => within(line()!).getByTestId('chaos-gain')
+  const icon = () => line()!.querySelector('svg')
+
+  test('under the Legal counterpart, the gain over it with a rising icon, its meaning in a tooltip', async () => {
+    render(<TurnPanel game={withGain(gain(6.6))} ply={2} live />)
+
+    expect(value()).toHaveTextContent('+6.6')
+    expect(icon()).toHaveClass('lucide-trending-up')
+    expect(panel()).not.toHaveTextContent('4.2') // never the gain over Stockfish's best move
+    const counterpart = within(panel()).getByRole('group', { name: 'Legal counterpart' })
+    expect(counterpart.compareDocumentPosition(line()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const name = within(line()!).getByText('Chaos gain')
+    expect(name).toHaveAttribute('aria-description', MEANING)
+    await userEvent.hover(name)
+    expect((await screen.findByText(MEANING)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
+  test('a loss with a falling icon and a minus sign, no gain with a flat one', () => {
+    const { rerender } = render(<TurnPanel game={withGain(gain(-19.6))} ply={2} live />)
+    expect(value()).toHaveTextContent('−19.6')
+    expect(icon()).toHaveClass('lucide-trending-down')
+
+    rerender(<TurnPanel game={withGain(gain(0))} ply={2} live />)
+    expect(value()).toHaveTextContent('0.0')
+    expect(icon()).toHaveClass('lucide-minus')
+  })
+
+  test('a gain not judged says so, and why in its tooltip', () => {
+    render(<TurnPanel game={withGain(gain(null))} ply={2} live />)
+
+    expect(value()).toHaveTextContent('not judged')
+    expect(value()).toHaveAttribute('aria-description', expect.stringMatching(/no Evaluation/))
+  })
+
+  test('its meaning opens on keyboard focus too', async () => {
+    render(<TurnPanel game={withGain(gain(6.6))} ply={2} live />)
+
+    within(line()!).getByText('Chaos gain').focus()
+    expect((await screen.findByText(MEANING)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
+  test('a Legal counterpart that gave no move has no gain line', () => {
+    const game = withGain(gain(null))
+    const failed = { ...e5, move: null, san: null, fen_after: null }
+    const turns = game.llm_turns.map((turn) => ({ ...turn, legal_counterpart: failed }))
+    render(<TurnPanel game={{ ...game, llm_turns: turns, llm_turn: turns.at(-1)! }} ply={2} live />)
+
+    expect(line()).not.toBeInTheDocument()
+  })
+
+  test('with the switch off, or before the gain is worked out, there is no such line', () => {
+    const { rerender } = render(<TurnPanel game={withGain(gain(6.6), false)} ply={2} live />)
+    expect(line()).not.toBeInTheDocument()
+
+    rerender(<TurnPanel game={withGain(undefined)} ply={2} live />)
+    expect(line()).not.toBeInTheDocument()
+  })
+})
+
 test('the tab chosen stays chosen on the next turn and after a reload', async () => {
   const { rerender, unmount } = render(<TurnPanel game={twoMovesIn()} ply={4} live />)
   await userEvent.click(tab('Answer'))

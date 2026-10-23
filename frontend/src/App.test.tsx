@@ -843,6 +843,53 @@ describe('Chaos rules', () => {
     expect(theBoard().position).toBe('rnbqk1nr/pppppppp/8/8/1b2P3/8/PPPP1PPP/RNBQKBNR') // never played
   })
 
+  describe('Chaos gains', () => {
+    const e5 = {
+      move: 'e7e5',
+      san: 'e5',
+      fen_after: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      attempt: aTurn('e5').attempts[0],
+    }
+    const gain = { best_evaluation: judged(0.3), vs_counterpart: 6.6, vs_best: 4.2 }
+    /** chaosGame(2), Play LLM, its Chaos move Bb4 landed with its counterpart and gain, judged by Stockfish. */
+    const landed = (switchOn: boolean): GameState => {
+      const game = chaosGame(2, { evaluator: STOCKFISH })
+      const turn = { ...game.llm_turns[0], legal_counterpart: switchOn ? e5 : undefined, chaos_gain: gain }
+      return { ...game, llm_turn: turn, llm_turns: [turn], settings: { ...game.settings, legal_counterpart: switchOn } }
+    }
+    const scoreRow = () =>
+      [...screen.getByTestId('mistakes-card').querySelectorAll('tbody tr')]
+        .map((row) => row.textContent)
+        .find((text) => text?.includes('Chaos gain'))
+
+    test("in Play LLM the LLM's Chaos gain shows live, in the Turn panel and the Rule-breaking card", async () => {
+      const turn = later()
+      fakeBackend()
+        .on('GET /api/games/current', Response.json(chaosGame(1, { evaluator: STOCKFISH, settings: landed(true).settings })))
+        .on('POST /api/games/current/llm-turn', turn.promise)
+      renderApp()
+      expect(await screen.findByTestId('mistakes-card')).toHaveTextContent('Chaos gain')
+      expect(scoreRow()).toBe('Chaos gain0.0')
+
+      await act(async () => turn.resolve(Response.json(landed(true))))
+
+      const line = await within(turnPanel()).findByRole('group', { name: 'Chaos gain' })
+      expect(within(line).getByTestId('chaos-gain')).toHaveTextContent('+6.6')
+      expect(scoreRow()).toBe('Chaos gain+6.6')
+      expect(screen.queryByText('+4.2')).not.toBeInTheDocument() // never the gain over Stockfish's best move
+      expect(screen.queryByRole('meter')).not.toBeInTheDocument() // and still no Evaluation bar in Play LLM
+    })
+
+    test('with the Legal counterpart switch off no Chaos gain is shown anywhere', async () => {
+      fakeBackend().on('GET /api/games/current', Response.json(landed(false)))
+      renderApp()
+
+      expect(await screen.findByTestId('mistakes-card')).toHaveTextContent('Rule-breaking')
+      expect(screen.queryByText('Chaos gain')).not.toBeInTheDocument()
+      expect(screen.queryByText(/6\.6|4\.2/)).not.toBeInTheDocument()
+    })
+  })
+
   test("the arrow goes once the human's move lands", async () => {
     fakeBackend()
       .on('GET /api/games/current', Response.json(chaosGame(2)))

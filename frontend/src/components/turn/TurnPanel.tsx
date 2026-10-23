@@ -2,12 +2,14 @@
 import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, MessageSquareText, Scale } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import type { Attempt, GameState, LlmTurn, PromptMessage } from '@/api/types'
+import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { shownGain } from '@/game/chaosGain'
 import { faceoff } from '@/game/wording'
 
 type Decision = 'Thinking' | 'Reasoning'
@@ -104,6 +106,7 @@ const prose = 'leading-relaxed whitespace-pre-wrap text-card-foreground'
 export function TurnPanel({ game, ply, live }: TurnPanelProps) {
   const turn = turnShown(game, ply, live)
   const move = turn && moveName(game, turn)
+  const gain = turn ? shownGain(game, turn) : undefined
   const [tab, setTab] = useState(storedTab)
   const choose = (chosen: Tab) => {
     localStorage.setItem(TAB_KEY, chosen)
@@ -135,6 +138,7 @@ export function TurnPanel({ game, ply, live }: TurnPanelProps) {
         {turn?.legal_counterpart && turn.ply === ply && (
           <Counterpart counterpart={turn.legal_counterpart} number={moveNumber(turn)} />
         )}
+        {turn?.ply === ply && gain && <ChaosGainLine gain={gain} />}
       </CardContent>
     </Card>
   )

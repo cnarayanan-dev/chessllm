@@ -1,9 +1,9 @@
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test, vi } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import type { Attempt, GameState } from '@/api/types'
 import { MovesCard } from '@/components/moves/MovesCard'
-import { aGame, aTurn, chaosAttempt, chaosGame, E4, E5, NF3, plies } from '@/test/games'
+import { aGame, aTurn, chaosAttempt, chaosGame, E4, E5, NF3, plies, STOCKFISH } from '@/test/games'
 
 const NF6: [string, string, string] = ['g8f6', 'Nf6', 'rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2']
 
@@ -265,6 +265,74 @@ test('under Chaos rules the card is Rule-breaking: one Illegal moves row for ill
     'aria-description',
     'Illegal moves, played anyway, or retried if they could not be read.',
   )
+})
+
+describe('the Chaos gain row', () => {
+  const gain = (vs_counterpart: number | null) => ({
+    best_evaluation: { pawns: 0, mate: null, unjudged: null },
+    vs_counterpart,
+    vs_best: 5,
+  })
+  /** A Legal counterpart that gave a move, or with `failed` one that gave none. */
+  const counterpart = (failed = false) => ({
+    move: failed ? null : 'e7e5',
+    san: failed ? null : 'e5',
+    fen_after: failed ? null : 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+    attempt: aTurn('e5').attempts[0],
+  })
+  /** chaosGame(8), Black's Chaos moves Bb4, Qg5 and the spawn Qd5 with the gains given, judged by Stockfish; the
+  Legal counterparts at the indexes in `failed` gave no move. */
+  const withGains = (gains: (number | null)[], switchOn = true, failed: number[] = []): GameState => {
+    const game = chaosGame(8)
+    const chaosPlies = [2, 4, 8]
+    const turns = game.llm_turns.map((turn) => {
+      const index = chaosPlies.indexOf(turn.ply)
+      return index >= 0 && index < gains.length
+        ? { ...turn, legal_counterpart: counterpart(failed.includes(index)), chaos_gain: gain(gains[index]) }
+        : turn
+    })
+    return { ...game, llm_turns: turns, evaluator: STOCKFISH, settings: { ...game.settings, legal_counterpart: switchOn } }
+  }
+  const row = () => mistakes().find((cells) => cells.includes('Chaos gain'))
+
+  test("sums each side's judged gains over the Legal counterpart, leaving those not judged out", async () => {
+    render(<MovesCard game={withGains([6.6, null, -2.1])} />)
+
+    expect(row()).toEqual(['Chaos gain', '+4.5'])
+    const card = screen.getByTestId('mistakes-card')
+    expect(icons(card).at(-1)).toBe('lucide-trending-up-down')
+    const total = within(card).getByText('+4.5')
+    expect(total).toHaveAttribute('aria-description', 'Adds up 3 Chaos moves; 1 not judged is left out.')
+  })
+
+  test('leaves out a Chaos move whose Legal counterpart gave no move: it has no gain', () => {
+    render(<MovesCard game={withGains([6.6, null, -2.1], true, [1])} />)
+
+    expect(row()).toEqual(['Chaos gain', '+4.5'])
+    expect(within(screen.getByTestId('mistakes-card')).getByText('+4.5')).toHaveAttribute(
+      'aria-description',
+      'Adds up 2 Chaos moves.',
+    )
+  })
+
+  test('is 0.0 before the first Chaos move', () => {
+    render(<MovesCard game={withGains([])} />)
+
+    expect(row()).toEqual(['Chaos gain', '0.0'])
+    expect(within(screen.getByTestId('mistakes-card')).getByText('0.0')).toHaveAttribute(
+      'aria-description',
+      'Adds up 0 Chaos moves.',
+    )
+  })
+
+  test('is not shown with the Legal counterpart switch off, under Standard rules, or without an evaluator', () => {
+    const { unmount } = render(<MovesCard game={withGains([6.6], false)} />)
+    expect(row()).toBeUndefined()
+    unmount()
+
+    render(<MovesCard game={{ ...withGains([6.6]), evaluator: undefined }} />)
+    expect(row()).toBeUndefined()
+  })
 })
 
 test('under Enforced decoding illegal tries are not applicable, unless one gets through anyway', () => {

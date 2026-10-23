@@ -216,7 +216,21 @@
               "content": "PGN: 1. e4\nFEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nLegal moves: Nf6 c5 h5 h6 c6 Nh6 g5 d6 Nc6 a6 f5 Na6 e6 a5 f6 e5 b6 b5 g6 d5"
             }
           ]
+        },
+        "evaluation": {
+          "pawns": 0.0,
+          "mate": null,
+          "unjudged": null
         }
+      },
+      "chaos_gain": {
+        "best_evaluation": {
+          "pawns": 0.0,
+          "mate": null,
+          "unjudged": null
+        },
+        "vs_counterpart": 0.0,
+        "vs_best": 0.0
       },
       "thinking": null,
       "reasoning": null

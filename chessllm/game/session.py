@@ -15,11 +15,15 @@ from chessllm.core.types import COLORS, Color, color_of
 from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
 from chessllm.exceptions import AnchorUnavailable, RefusedAnchorTurn, RefusedLlmTurn, RejectedHumanMove
+from chessllm.game.chaos_gain import GainBaselines, for_mover, result_for_mover
 from chessllm.game.ending import GameEnd, check_end, position_key
 from chessllm.game.evaluation import judge
+from chessllm.game.llm_turn.counterpart import CounterpartAnswer
 from chessllm.game.llm_turn.prompt import move_record, prompt_file, side_template
 from chessllm.game.llm_turn.turn import LlmTurns
-from chessllm.game.records import EvaluationEngine, GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed
+from chessllm.game.records import (
+    ChaosGain, Evaluation, EvaluationEngine, GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed,
+)
 from chessllm.game.rules.chaos import ResolvedMove, apply
 from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, side_log_shape
@@ -230,14 +234,16 @@ class GameSession:
             self._move_started = started = self._clock()
             outcome = turns.play(self._board, moves, started)
             time_s = outcome.turn.time_s
-            counterpart = None
-            if outcome.chaos_move is not None and self._legal_counterparts:
-                # Asked once the turn is over and before its chaos move is played, so the move and its counterpart
-                # land together. The side's clock stops at the turn's last attempt: the counterpart's call is never
-                # its Time used, nor on its running clock.
+            counterpart, baselines = None, None
+            if outcome.chaos_move is not None:
+                # Its Legal counterpart is asked and judged once the turn is over and before its chaos move is
+                # played, so the move and its counterpart land together. The side's clock stops at the turn's last
+                # attempt: neither is ever its Time used, nor on its running clock.
                 with self._landing:
                     self._move_ended = started + time_s
-                counterpart = turns.legal_counterpart(self._board, moves)
+                if self._legal_counterparts:
+                    counterpart = turns.legal_counterpart(self._board, moves)
+                baselines = self._gain_baselines(color, counterpart)
                 if counterpart is not None:
                     outcome.turn.legal_counterpart = counterpart.counterpart
             with self._ending:
@@ -254,14 +260,21 @@ class GameSession:
                         self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
                     else:
                         self._check_end()
+                    if baselines is not None and self._end is not None:
+                        # A chaos move that ends the game counts by its result, so its gains land with it.
+                        outcome.turn.chaos_gain = baselines.gain(result_for_mover(self._end.result, color))
                     self._position_ready()
                     played = outcome.move is not None or outcome.chaos_move is not None
                     unjudged = self._ply_to_judge() if played else None
                 if counterpart is not None:  # logged only with its turn: an abandoned game's never is
                     turns.log_legal_counterpart(counterpart, len(moves) + 1)
+                if outcome.turn.chaos_gain is not None:
+                    self._log_chaos_gain(outcome.turn)
                 if self._end is not None:
                     self._write_end(self._end)
-            self._judge(unjudged)
+            evaluation = self._judge(unjudged)
+            if baselines is not None and evaluation is not None:
+                self._add_chaos_gain(baselines.gain(for_mover(evaluation, color)))
         finally:
             self._llm_turn_running.release()
 
@@ -271,6 +284,54 @@ class GameSession:
         llm_turns to grow or the game to be over, so neither may run ahead of it."""
         self._llm_turns.append(turn)
 
+    def _gain_baselines(self, color: Color, counterpart: CounterpartAnswer | None) -> GainBaselines | None:
+        """Outside every lock, before a chaos move of color lands: what its Chaos gains are measured against. The
+        position before it has the Evaluation of the ply that left it, or is judged now (the start position, or a
+        ply still being judged); the counterpart's position is judged like any ply, and its Evaluation recorded with
+        it. None without an evaluator, or once the game is abandoned, which is judged no further."""
+        if self._evaluator is None or self._abandoned.is_set():
+            return None
+        with self._landing:
+            before = self._plies[-1].evaluation if self._plies else None
+        best = before if before is not None else judge(self._board.copy(stack=False), self._evaluator)
+        value = None
+        if counterpart is not None and counterpart.counterpart.fen_after is not None:
+            value, counterpart.counterpart.evaluation = self._judge_counterpart(counterpart.counterpart.fen_after, color)
+        return GainBaselines(color, best, value)
+
+    def _judge_counterpart(self, fen_after: str, color: Color) -> tuple[float | None, Evaluation | None]:
+        """The value to its mover of the position a Legal counterpart would have left, and its Evaluation: a
+        position that would have ended the game has none, and counts by the result it would have had."""
+        assert self._evaluator is not None
+        board = chess.Board(fen_after)
+        positions = self._positions + [position_key(board)]
+        end = self._rules.end(board) or check_end(board, positions, self._mode.unattended)
+        if end is not None:
+            return result_for_mover(end.result, color), None
+        evaluation = judge(board, self._evaluator)
+        return for_mover(evaluation, color), evaluation
+
+    def _add_chaos_gain(self, gain: ChaosGain) -> None:
+        """Add the gains of the last LLM turn's chaos move, once the position it left is judged, in one step, and log
+        them after its Evaluation. An abandoned game's are dropped."""
+        with self._ending:
+            if self._abandoned.is_set():
+                return
+            with self._landing:
+                turn = self._llm_turns[-1] = self._llm_turns[-1].model_copy(update={"chaos_gain": gain})
+            self._log_chaos_gain(turn)
+
+    def _log_chaos_gain(self, turn: LlmTurn) -> None:
+        """Log a chaos move's gains, with the Evaluation of its Legal counterpart's position if one was asked for:
+        None when it failed, or its position would have ended the game."""
+        assert turn.chaos_gain is not None
+        counterpart = turn.legal_counterpart
+        asked = {}
+        if counterpart is not None:
+            evaluation = counterpart.evaluation
+            asked["counterpart_evaluation"] = evaluation.log_shape() if evaluation is not None else None
+        self._log.write("chaos_gain", color=turn.color, ply=turn.ply, **asked, **turn.chaos_gain.log_shape())
+
     def _ply_to_judge(self) -> tuple[Evaluator, int, chess.Board] | None:
         """With _landing held, once a ply has landed: what judging it takes, the evaluator, the ply's index and a
         copy of its position, or None without an evaluator or once the game is over, as a position that ends the
@@ -279,21 +340,22 @@ class GameSession:
             return None
         return self._evaluator, len(self._plies) - 1, self._board.copy(stack=False)
 
-    def _judge(self, unjudged: tuple[Evaluator, int, chess.Board] | None) -> None:
+    def _judge(self, unjudged: tuple[Evaluator, int, chess.Board] | None) -> Evaluation | None:
         """Judge the ply that landed, outside _landing, as the engine can take a while: the ply is in the state
         without its Evaluation until then, which the page shows as evaluating. Its Evaluation joins the ply in one
         step, and the log after the move. An abandoned game is judged no further: its search is skipped, or its
-        result dropped, and nothing more is written to its log."""
+        result dropped, and nothing more is written to its log. Returns the Evaluation, if it joined the ply."""
         if unjudged is None or self._abandoned.is_set():
-            return
+            return None
         evaluator, index, board = unjudged
         evaluation = judge(board, evaluator)
         with self._ending:
             if self._abandoned.is_set():
-                return
+                return None
             with self._landing:
                 ply = self._plies[index] = self._plies[index].model_copy(update={"evaluation": evaluation})
             self._log.write("evaluation", ply=ply.ply, **evaluation.log_shape())
+        return evaluation
 
     def _write_end(self, end: GameEnd) -> None:
         self._log.write(
