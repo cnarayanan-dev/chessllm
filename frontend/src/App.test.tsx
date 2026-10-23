@@ -7,7 +7,7 @@ import type { GameState } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { fakeBackend, later } from '@/test/fakeBackend'
 import { theBoard } from '@/test/fakeChessboard'
-import { aGame, aTurn, afterE4, afterE5, chaosGame, E4, plies } from '@/test/games'
+import { aFaceoff, aGame, aTurn, afterE4, afterE5, chaosGame, E4, E5, judged, NF3, notJudged, plies, STOCKFISH } from '@/test/games'
 
 vi.mock('@/components/board/moveSound', () => ({ playMoveSound: vi.fn(), isMoveSoundOn: () => true, setMoveSoundOn: vi.fn() }))
 
@@ -914,5 +914,113 @@ describe('Chaos rules', () => {
     const result = await screen.findByTestId('result')
     expect(within(result).getByText('White wins by King capture')).toBeInTheDocument()
     expect(result).toHaveAttribute('aria-description', 'qwen3.5:9b left its king hanging')
+  })
+})
+
+describe('the Evaluation bar', () => {
+  const bar = () => screen.queryByRole('meter', { name: 'Evaluation' })
+  /** What the bar shows: its value as read out, and how much of it is White's, in percent. */
+  const shows = () => [bar()?.getAttribute('aria-valuetext'), bar()?.getAttribute('aria-valuenow')]
+  /** A faceoff loaded as the current game, its next LLM turn running for as long as the test lasts. */
+  function load(game: GameState) {
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(game))
+      .on('POST /api/games/current/llm-turn', new Promise<Response>(() => {}))
+    renderApp()
+  }
+
+  test("in an LLM faceoff a bar left of the board shows the Evaluation of the position on it, filled by White's win chance", async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), judged(-1.2)]))
+
+    await waitFor(() => expect(bar()).toBeInTheDocument())
+    expect(shows()).toEqual(['−1.2', '39'])
+    expect(bar()).toHaveTextContent('−1.2')
+    expect(bar()!.compareDocumentPosition(theBoard().context)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    // The details and the engine with its search are in its tooltip.
+    expect(bar()).toHaveAttribute(
+      'aria-description',
+      expect.stringContaining('Stockfish 19 · depth 16, 1 thread, 64 MB hash'),
+    )
+  })
+
+  test('an Evaluation at the cap reads +10.0', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), judged(10)]))
+
+    await waitFor(() => expect(shows()).toEqual(['+10.0', '98']))
+  })
+
+  test('a mate fills the bar for the side giving it', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), judged(-10, -2)]))
+
+    await waitFor(() => expect(shows()).toEqual(['−M2', '0']))
+  })
+
+  test('Play LLM never shows the bar', async () => {
+    const evaluated = afterE5()
+    evaluated.plies = evaluated.plies.map((ply) => ({ ...ply, evaluation: judged(0.3) }))
+    fakeBackend().on('GET /api/games/current', Response.json({ ...evaluated, evaluator: STOCKFISH }))
+    renderApp()
+
+    await yourMove()
+    expect(bar()).not.toBeInTheDocument()
+  })
+
+  test('a faceoff played without an evaluator shows no bar', async () => {
+    load(aFaceoff([E4, E5], [], { evaluator: undefined }))
+
+    await llmMoving('white')
+    expect(bar()).not.toBeInTheDocument()
+  })
+
+  test('the bar follows the ply viewed in the move history', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), judged(-1.2)]))
+    await waitFor(() => expect(shows()).toEqual(['−1.2', '39']))
+
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(shows()).toEqual(['+0.3', '53'])
+
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(shows()).toEqual(['No Evaluation yet', '50'])
+  })
+
+  test('a position not judged greys the bar at the last judged value, the reason in its tooltip', async () => {
+    const backRank = notJudged('a pawn stands on a back rank')
+    load(aFaceoff([E4, E5, NF3], [judged(0.3), backRank, backRank]))
+
+    await waitFor(() => expect(shows()).toEqual(['Not judged', '53']))
+    expect(bar()).toHaveAttribute('data-state', 'unjudged')
+    expect(bar()).toHaveAttribute('aria-description', expect.stringContaining('a pawn stands on a back rank'))
+    expect(bar()).toHaveAttribute('aria-description', expect.stringContaining('+0.3, after 1. e4'))
+  })
+
+  test('while a ply has no Evaluation yet, the bar holds the last judged value', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), undefined]))
+
+    await waitFor(() => expect(shows()).toEqual(['+0.3', '53']))
+    expect(bar()).toHaveAttribute('data-state', 'evaluating')
+  })
+
+  test('once the game is over the last ply shows the result, filled for the winner', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), undefined], { status: 'over', result: '1-0', end_reason: 'checkmate' }))
+
+    await waitFor(() => expect(shows()).toEqual(['1-0', '100']))
+    expect(bar()).toHaveAttribute('data-state', 'over')
+    expect(bar()).toHaveAttribute('aria-description', expect.stringContaining("ended on this position, so it isn't judged"))
+
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(shows()).toEqual(['+0.3', '53'])
+  })
+
+  test('after a Forfeit, the result says how the last position was judged', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), judged(-1.2)], { status: 'over', result: '0-1', end_reason: 'forfeit' }))
+
+    await waitFor(() => expect(shows()).toEqual(['0-1', '0']))
+    expect(bar()).toHaveAttribute('aria-description', expect.stringContaining('The last position was judged −1.2.'))
+  })
+
+  test('a draw shows ½-½ at the even line', async () => {
+    load(aFaceoff([E4, E5], [judged(0.3), undefined], { status: 'over', result: '1/2-1/2', end_reason: 'stalemate' }))
+
+    await waitFor(() => expect(shows()).toEqual(['½-½', '50']))
   })
 })

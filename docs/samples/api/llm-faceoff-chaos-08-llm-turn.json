@@ -14,7 +14,12 @@
       "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
       "check": false,
-      "time_s": 1.5
+      "time_s": 1.5,
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
+      }
     },
     {
       "ply": 2,
@@ -32,6 +37,11 @@
         "piece": "q",
         "rook": null,
         "reason": "the queen on d8 moves"
+      },
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
       }
     },
     {
@@ -42,7 +52,12 @@
       "fen_before": "rnb1kbnr/pppppppp/8/8/4P2q/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2",
       "fen_after": "rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2",
       "check": false,
-      "time_s": 2.0
+      "time_s": 2.0,
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
+      }
     },
     {
       "ply": 4,
@@ -52,7 +67,12 @@
       "fen_before": "rnb1kbnr/pppppppp/8/8/4P2q/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2",
       "fen_after": "rnb1kbnr/1ppppppp/p7/8/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
       "check": false,
-      "time_s": 1.75
+      "time_s": 1.75,
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
+      }
     },
     {
       "ply": 5,
@@ -62,7 +82,12 @@
       "fen_before": "rnb1kbnr/1ppppppp/p7/8/4P2q/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 3",
       "fen_after": "rnb1kbnr/1ppppppp/p7/8/4P2N/8/PPPP1PPP/RNBQKB1R b KQkq - 0 3",
       "check": false,
-      "time_s": 2.5
+      "time_s": 2.5,
+      "evaluation": {
+        "pawns": 9.0,
+        "mate": null,
+        "unjudged": null
+      }
     },
     {
       "ply": 6,
@@ -80,6 +105,11 @@
         "piece": "q",
         "rook": null,
         "reason": "no queen on the board; one appears on d5"
+      },
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
       }
     },
     {
@@ -90,7 +120,12 @@
       "fen_before": "rnb1kbnr/1ppppppp/p7/3q4/4P2N/8/PPPP1PPP/RNBQKB1R w KQkq - 1 4",
       "fen_after": "rnb1kbnr/1ppppppp/p7/3q4/4P2N/3P4/PPP2PPP/RNBQKB1R b KQkq - 0 4",
       "check": false,
-      "time_s": 4.25
+      "time_s": 4.25,
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
+      }
     }
   ],
   "check": false,
@@ -525,5 +560,11 @@
     "white": 10.25,
     "black": 12.25
   },
-  "running_s": null
+  "running_s": null,
+  "evaluator": {
+    "version": "material count",
+    "search": {
+      "depth": 0
+    }
+  }
 }

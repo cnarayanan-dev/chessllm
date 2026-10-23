@@ -13,7 +13,7 @@ running the command twice changes nothing.
 | Sample game | Shows |
 |---|---|
 | `play-llm-standard`: Play LLM, Standard rules | a human move, a Notation slip, an illegal move then a Retry, the Reasoning, checkmate |
-| `llm-faceoff-chaos`: LLM faceoff, Chaos rules | a chaos move, a Spawn, a Retry after badly formed notation, King capture, `rules` and `chaos_plies`; White Listed with the position described |
+| `llm-faceoff-chaos`: LLM faceoff, Chaos rules | a chaos move, a Spawn, a Retry after badly formed notation, King capture, `rules` and `chaos_plies`; White Listed with the position described; each ply's Evaluation, by a material count standing in for Stockfish |
 | `anchor-match-standard`: Anchor match, Standard rules (scripted Anchor) | Anchor moves, an ambiguous, an illegal and a badly formed move, a Forfeit after the maximum attempts |
 | `llm-faceoff-thinking-budget`: LLM faceoff with a Thinking budget (benchmark sides) | Thinking, a Thinking level, a cut-off forced answer and its Retry, token counts, a timeout |
 

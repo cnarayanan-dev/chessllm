@@ -120,7 +120,7 @@ The page footer is one muted line of credits: the Merida pieces, the move sound 
 | 760 to 1100px | 3fr \| 2fr | the board on the left; Moves, then the Game card and Turn panel under them, on the right |
 | under 760px | one | board, Moves, Game card, Turn panel |
 
-The board column is a stack at the board's width, `min(100%, 100svh - var(--around-board))`, so the board fits the window's height together with what is around it (`--around-board`, whose parts the CSS lists: the top bar, the page's top padding, a player strip above and below it with their gaps, and a little room under the lower strip); what sits directly above and below the board takes its width. Under 760px the stack is the full width. Nothing sits under the board: a chaos move shows only as its arrow and a Spawn as its ring, on the board, and the resolver's reason is not shown.
+The board column is a stack at the board's width, `min(100%, 100svh - var(--around-board))`, so the board fits the window's height together with what is around it (`--around-board`, whose parts the CSS lists: the top bar, the page's top padding, a player strip above and below it with their gaps, and a little room under the lower strip); what sits directly above and below the board takes its width. Under 760px the stack is the full width. In an LLM faceoff the **Evaluation bar** (below) stands left of the board, in the gap before the board column, so the board and its strips keep their width; under 760px, with no such gap, the board makes room for it. Nothing sits under the board: a chaos move shows only as its arrow and a Spawn as its ring, on the board, and the resolver's reason is not shown.
 
 **On a wide window** (over 1100 × 600) the page fits the window, with no page scroll: the page is the window's height, and `--around-board` takes in the page's bottom padding and the footer too. The board is as large as the window's height allows, but no wider than the larger of half the row and the row less two side columns of `--side-min` (300px): on a tall window the side columns keep `--side-min` while the board grows past half, on a narrow one the board stops at half, and on a short one the height decides and the side columns take the rest. The board column is as wide as the board, and the side columns share the rest equally. The Game card keeps its size, the Turn panel under it scrolls inside itself, and the Moves card is the Game card's height (`--top-card`, 290px), so the Turn panel and the mistakes card start level. The Game card is taller only when a player's row holds that side's own settings.
 
@@ -137,6 +137,7 @@ Before a game exists, an error starting one shows as a `destructive` Alert in th
 | Turn panel | `Card`, `CardHeader` / `CardTitle` / `CardContent`, `Badge` (`secondary`, or `destructive` when forfeited or not legal), `Tabs` (`line`), `Collapsible`, ghost icon `Button`s |
 | Player strip | `Item` holding a pill with `Avatar` / `AvatarFallback`; Merida pieces; `Badge variant="secondary"` for +N |
 | Board | cm-chessboard in `Board.tsx`, unchanged |
+| Evaluation bar | a `meter` with `Tooltip` |
 | Moves panel | `Card size="sm"`, `CardTitle`, `Switch size="sm"`, `ScrollArea` |
 | Start error | `Alert variant="destructive"` |
 | Analytics | `Card` with `CardHeader` / `CardContent` / `CardFooter`, `Switch`, `Table`, `Badge` (`secondary` chips, dashed `outline` mark), `Tooltip` |
@@ -196,6 +197,16 @@ There is no Back to live button: → up to the latest move, or clicking it, retu
 ## Board
 
 Unchanged by the restyle (`frontend/src/components/board/`): cm-chessboard with the lichess look (`#f0d9b5` / `#b58863` squares, olive last-move tint, green dots, check glow), Merida pieces, the move sound. Its flashes (`flashes.css`: the centre card of an LLM turn's mistakes, the amber slip bubble) and the chaos move's red arrow and the Spawn's purple ring (`board.css`) keep the old page's look. There is no caption under the board.
+
+## Evaluation bar
+
+`frontend/src/components/evaluation-bar/EvaluationBar.tsx` and `evaluation-bar.css`, left of the board at its height, 22px wide, only in an **LLM faceoff** played with an evaluator (never in Play LLM, though the Evaluations are recorded there too). Black's `foreground` from the top, White's `card` from the bottom, a quiet even line at the middle; the fill is White's win chance, `50 + 50 * (2 / (1 + exp(-0.00368208 * centipawns)) - 1)` on the Evaluation capped at ±10, and a mate fills it for the side giving it. Its number, 10px semibold tabular, sits at the leading side's end: "+1.2", "−3.0", "+10.0", "M3" (White mates) or "−M3" (Black mates). It follows the ply viewed in the move history. Focusable, a `role="meter"` named "Evaluation"; its `Tooltip` (on the left; hover and keyboard focus) and `aria-description` hold the details and the engine with its search, e.g. "Stockfish 19 · depth 16, 1 thread, 64 MB hash". The page reads the backend's Evaluations only (`frontend/src/game/evaluation.ts`). Its states:
+
+- **Judged**: the value and its fill.
+- **Evaluating**: a ply without an Evaluation yet holds the last judged value, its number breathing.
+- **Not judged**: a position that isn't valid chess is greyed at the last judged value, "?" for its number, the reason in the tooltip.
+- **Over**: at the last ply of a finished game, the result (1-0, 0-1, ½-½), filled for the winner.
+- **Start position**: even, with no number.
 
 ## Analytics page
 

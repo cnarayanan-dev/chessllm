@@ -10,13 +10,14 @@ import json
 
 import chess
 import pytest
-from chess.engine import Cp, Mate, Score
+from chess.engine import Cp, Mate
 
 from tests.conftest import ScriptedAnchor, ScriptedPlayer, play_llm, play_move
+from tests.fakes import FixedEvaluator, UnavailableEvaluator
 
 from chessllm.analytics.analysis import analyse_game, analyse_games
 from chessllm.cli.anchor_match import main as anchor_match
-from chessllm.exceptions import Maia2Unavailable, StockfishUnavailable
+from chessllm.exceptions import Maia2Unavailable
 
 
 def fen_after(*sans: str) -> str:
@@ -24,22 +25,6 @@ def fen_after(*sans: str) -> str:
     for san in sans:
         board.push_san(san)
     return board.fen()
-
-
-class FixedEvaluator:
-    """Test fake for the Evaluator port: each position's evaluation, relative to the side to move, from a table,
-    and 0 for any other position. Records every position it is asked about."""
-
-    version = "fake-engine 1"
-    search = {"depth": 1}
-
-    def __init__(self, scores: dict[str, Score] | None = None) -> None:
-        self.scores = scores or {}
-        self.asked: list[str] = []
-
-    def evaluate(self, fen: str) -> Score:
-        self.asked.append(fen)
-        return self.scores.get(fen, Cp(0))
 
 
 # After 2...Nc6 White is a pawn up in the fake's eyes, and 3...Nf6 allows mate in one.
@@ -153,19 +138,6 @@ def test_a_move_that_mates_is_perfect_without_searching_the_mated_position(faceo
         ("d8h4", 0, 100),
     ]
     assert fen_after("f3", "e5", "g4", "Qh4#") not in evaluator.asked
-
-
-class UnavailableEvaluator:
-    """Test fake for the Evaluator port when Stockfish isn't installed."""
-
-    search = {"depth": 1}
-
-    @property
-    def version(self) -> str:
-        raise StockfishUnavailable("stockfish is not on the PATH")
-
-    def evaluate(self, fen: str) -> Score:
-        raise StockfishUnavailable("stockfish is not on the PATH")
 
 
 class UnavailableMoveModel:

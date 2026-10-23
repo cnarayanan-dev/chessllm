@@ -5,7 +5,8 @@ instead of Ollama, and the game logs in a temporary directory.
 
 POST /e2e/script {"white": [...], "black": [...]} sets the SAN replies of each side's LLM for the games started after
 it; each game's LLM plays its own copy of the script, from the start (a ScriptedPlayer, as in tests/conftest.py). With
-thinking off each reply carries a Reasoning, "Reasoning for <san>.", as Ollama's answers do.
+thinking off each reply carries a Reasoning, "Reasoning for <san>.", as Ollama's answers do. Every ply is judged by
+material alone (tests/fakes.py's MaterialEvaluator), a stand-in for Stockfish, so a faceoff shows its Evaluation bar.
 
 POST /e2e/leaderboard-games replaces every game log with the synthetic games of tests/e2e/leaderboard.py, for the
 analytics page.
@@ -27,6 +28,7 @@ from chessllm.api.app import create_app
 from chessllm.core.types import Color
 from chessllm.game.settings import Settings
 from tests.conftest import Raw, ScriptedPlayer
+from tests.fakes import MaterialEvaluator
 from tests.e2e.leaderboard import write_leaderboard_games
 
 
@@ -57,6 +59,7 @@ def main() -> None:
             games_dir=games_dir,
             sampling_file=temp / "no-sampling.toml",
             move_quality_validation=temp / "no-validation.json",  # no validation has run: estimates are unvalidated
+            evaluator=MaterialEvaluator(),
         )
 
         @app.post("/e2e/script", include_in_schema=False)

@@ -16,6 +16,8 @@ export type LlmTurn = Schemas['LlmTurn']
 export type Attempt = Schemas['Attempt']
 export type PromptMessage = Schemas['PromptMessage']
 export type Ply = Schemas['Ply']
+/** Stockfish's judgement of the position after a ply, from White's point of view; `unjudged` says why there is none. */
+export type Evaluation = NonNullable<Ply['evaluation']>
 export type NewGame = Schemas['NewGame']
 export type ModelInfo = Schemas['ModelInfo']
 export type Color = GameState['turn']

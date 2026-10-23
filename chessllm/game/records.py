@@ -135,6 +135,32 @@ class LlmTurn(LlmTurnSummary):
     reasoning: str | None  # the Reasoning of the last try: the one played, or the last before a Forfeit
 
 
+class Evaluation(BaseModel):
+    """Stockfish's judgement of the position after a ply, from White's point of view (CONTEXT.md): in pawns, capped
+    at ±10, or a mate in so many moves, positive when White mates, with pawns then at the cap. A position that isn't
+    valid chess is never judged: unjudged says why, and pawns and mate are None."""
+
+    pawns: float | None
+    mate: int | None
+    unjudged: str | None
+
+    def log_shape(self) -> dict[str, Any]:
+        """The Evaluation as the evaluation event logs it, the same as the API has it."""
+        return self.model_dump(mode="json")
+
+
+class EvaluationEngine(BaseModel):
+    """The engine a game's Evaluations come from, and the search it judges every position with, so numbers from
+    different settings are never mixed up."""
+
+    version: str  # e.g. "Stockfish 19"
+    search: dict[str, int]  # e.g. {"depth": 16, "threads": 1, "hash_mb": 64}
+
+    def log_shape(self) -> dict[str, Any]:
+        """The engine as game_start logs it, the same as the API has it."""
+        return self.model_dump(mode="json")
+
+
 class Ply(BaseModel):
     """One ply of the game as played, for the page's move history: it shows any ply's position and animates into
     it without chess logic of its own (ADR 0001). The LLM turn that played it, if any, has the same ply number."""
@@ -149,6 +175,8 @@ class Ply(BaseModel):
     time_s: float  # the Time used on the move that made the ply
     # Only for a chaos move or spawn: its resolution, as its attempt has it, so a replay never resolves it again.
     resolution: Resolution | None = Field(default=None, exclude_if=is_none)
+    # Only with an evaluator, and never for a position that ends the game.
+    evaluation: Evaluation | None = Field(default=None, exclude_if=is_none)
 
     def log_shape(self) -> dict[str, Any]:
         """A human's or an Anchor's ply as human_move or anchor_move logs it, its move in SAN (ADR 0004)."""
@@ -233,3 +261,5 @@ class GameState(BaseModel):
     # How long the side to move had been on its move when the state was built. None once the game is over, and
     # while an LLM's Turn or an Anchor's move hasn't been asked for: their time only runs once it has.
     running_s: float | None
+    # Only with an evaluator: the engine every ply's Evaluation comes from.
+    evaluator: EvaluationEngine | None = Field(default=None, exclude_if=is_none)

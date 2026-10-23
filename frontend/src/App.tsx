@@ -5,6 +5,7 @@ import { modelsQuery } from '@/api/models'
 import type { Color, GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { BoardFlashes } from '@/components/board/BoardFlashes'
+import { BesideBoard } from '@/components/evaluation-bar/EvaluationBar'
 import { GameCard } from '@/components/game-card/GameCard'
 import { GameLayout } from '@/components/game-layout/GameLayout'
 import { MovesCard } from '@/components/moves/MovesCard'
@@ -15,6 +16,7 @@ import { TopBar } from '@/components/top-bar/TopBar'
 import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown } from '@/game/chaos'
+import { evaluationBar } from '@/game/evaluation'
 import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
@@ -131,23 +133,25 @@ export default function App() {
           game && shown ? (
             <>
               {strip(game, orientation(game) === 'white' ? 'black' : 'white')}
-              <Board
-                fen={shown.fen}
-                orientation={orientation(game)}
-                lastMove={shown.lastMove}
-                animateFrom={shown.animateFrom}
-                check={shown.check}
-                // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
-                // position the move left. Locked while the move history shows the past.
-                input={boardInput(state)}
-                legalMoves={legalMoves}
-                arrows={chaos?.arrows ?? NO_ARROWS}
-                spawn={chaos?.spawn ?? null}
-                onMove={humanMove}
-              >
-                {/* The live turn's flashes, kept off a past position. */}
-                {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
-              </Board>
+              <BesideBoard bar={evaluationBar(game, shown.ply)}>
+                <Board
+                  fen={shown.fen}
+                  orientation={orientation(game)}
+                  lastMove={shown.lastMove}
+                  animateFrom={shown.animateFrom}
+                  check={shown.check}
+                  // Unchanged while the human's move is sent: the board locks itself, and a change would redraw the
+                  // position the move left. Locked while the move history shows the past.
+                  input={boardInput(state)}
+                  legalMoves={legalMoves}
+                  arrows={chaos?.arrows ?? NO_ARROWS}
+                  spawn={chaos?.spawn ?? null}
+                  onMove={humanMove}
+                >
+                  {/* The live turn's flashes, kept off a past position. */}
+                  {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
+                </Board>
+              </BesideBoard>
               {strip(game, orientation(game))}
             </>
           ) : state.noGame ? (

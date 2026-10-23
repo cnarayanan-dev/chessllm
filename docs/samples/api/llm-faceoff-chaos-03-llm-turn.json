@@ -14,7 +14,12 @@
       "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
       "check": false,
-      "time_s": 1.5
+      "time_s": 1.5,
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
+      }
     },
     {
       "ply": 2,
@@ -32,6 +37,11 @@
         "piece": "q",
         "rook": null,
         "reason": "the queen on d8 moves"
+      },
+      "evaluation": {
+        "pawns": 0.0,
+        "mate": null,
+        "unjudged": null
       }
     }
   ],
@@ -212,5 +222,11 @@
     "white": 1.5,
     "black": 4.0
   },
-  "running_s": null
+  "running_s": null,
+  "evaluator": {
+    "version": "material count",
+    "search": {
+      "depth": 0
+    }
+  }
 }

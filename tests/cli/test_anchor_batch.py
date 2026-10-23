@@ -10,7 +10,8 @@ import pytest
 
 from tests.conftest import ScriptedAnchor, ScriptedPlayer
 from tests.analytics.test_analysis import PeakedMoveModel
-from tests.analytics.test_centipawn_loss_and_accuracy import FixedEvaluator, UnavailableEvaluator, UnavailableMoveModel
+from tests.analytics.test_centipawn_loss_and_accuracy import UnavailableMoveModel
+from tests.fakes import FixedEvaluator, UnavailableEvaluator
 
 from chessllm.cli.anchor_batch import main
 from chessllm.exceptions import AnchorUnavailable

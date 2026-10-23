@@ -1,0 +1,70 @@
+/* The board with the Evaluation bar left of it, at the board's height. The bar stands in the gap before the board
+   column, so the board keeps its size and the player strips their width; on one column, with no such gap, the board
+   makes room for it. */
+.board-beside { position: relative; }
+.board-beside > .evaluation-bar { position: absolute; top: 0; bottom: 0; right: calc(100% + 8px); }
+@media (max-width: 760px) {
+  .board-beside { display: flex; align-items: stretch; gap: 8px; }
+  .board-beside > .evaluation-bar { position: relative; right: auto; }
+  .board-beside > .board-beside-main { flex: 1 1 0; min-width: 0; }
+}
+
+/* The bar: Black's dark from the top, White's light from the bottom, the number at the leading side's end. */
+.evaluation-bar {
+  position: relative;
+  flex: none;
+  width: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--foreground);
+  /* Firm enough to keep a bar full for White apart from the page. */
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 32%, transparent);
+  cursor: help;
+}
+.evaluation-bar:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.evaluation-bar-white {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--card);
+  transition: height .5s cubic-bezier(.22, .61, .36, 1), background-color .3s;
+}
+/* The even line, quiet. */
+.evaluation-bar-even {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+}
+.evaluation-bar-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  transition: color .3s;
+}
+.evaluation-bar-label.white { bottom: 6px; color: var(--foreground); }
+.evaluation-bar-label.black { top: 6px; color: var(--card); }
+
+/* Evaluating: the bar holds the last Evaluation, its number breathing. */
+@keyframes evaluation-bar-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.evaluation-bar[data-state="evaluating"] .evaluation-bar-label { animation: evaluation-bar-breathe 1.4s ease-in-out infinite; }
+
+/* Not judged: greyed at the last judged value, a "?" for its number. */
+.evaluation-bar[data-state="unjudged"] { background: color-mix(in oklab, var(--muted-foreground) 45%, var(--card)); }
+.evaluation-bar[data-state="unjudged"] .evaluation-bar-white { background: var(--muted); }
+.evaluation-bar[data-state="unjudged"] .evaluation-bar-label { font-size: 12px; color: var(--foreground); }
+
+@media (prefers-reduced-motion: reduce) {
+  .evaluation-bar-white, .evaluation-bar-label { transition: none; }
+  .evaluation-bar[data-state="evaluating"] .evaluation-bar-label { animation: none; opacity: .5; }
+}

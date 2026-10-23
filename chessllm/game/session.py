@@ -1,6 +1,7 @@
 """One game, each side played by a human, an LLM player or an Anchor as the settings' Mode says: the board, the
 order of turns, and the human's and the Anchor's moves. An LLM's turn is played by llm_turn, under the game's Rules."""
 
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -12,16 +13,30 @@ import chess
 
 from chessllm.core.types import COLORS, Color, color_of
 from chessllm.engines.anchors import Anchor
+from chessllm.engines.evaluator import Evaluator
 from chessllm.exceptions import AnchorUnavailable, RefusedAnchorTurn, RefusedLlmTurn, RejectedHumanMove
 from chessllm.game.ending import GameEnd, check_end, position_key
+from chessllm.game.evaluation import judge
 from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
 from chessllm.game.llm_turn.turn import LlmTurns
-from chessllm.game.records import GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed
+from chessllm.game.records import EvaluationEngine, GameSettings, GameState, LlmTurn, Ply, Stats, TimeUsed
 from chessllm.game.rules.chaos import ResolvedMove, apply
 from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, side_log_shape
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog, now
+
+
+def started(evaluator: Evaluator | None) -> tuple[Evaluator | None, EvaluationEngine | None]:
+    """The evaluator and the engine it runs, once it has started; neither if it can't start (Stockfish isn't
+    installed), and the game is played without Evaluations."""
+    if evaluator is None:
+        return None, None
+    try:
+        return evaluator, EvaluationEngine(version=evaluator.version, search=evaluator.search)
+    except Exception:  # the game goes on without Evaluations; the analysis says so again at its end
+        logging.getLogger(__name__).exception("the evaluator won't start, so this game gets no Evaluations")
+        return None, None
 
 
 class GameSession:
@@ -32,11 +47,14 @@ class GameSession:
         log: GameLog,
         anchors: dict[Color, Anchor] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        evaluator: Evaluator | None = None,
     ) -> None:
         """players holds the LLM player of each LLM side, and anchors the Anchor of each Anchor side. clock times
-        each side's moves, its Time used."""
+        each side's moves, its Time used. With an evaluator, every ply is judged as it is played, by the request
+        that plays it."""
         self._anchors = anchors or {}
         self._clock = clock
+        self._evaluator, self._evaluation_engine = started(evaluator)
         self._settings = settings
         self._mode = settings.the_mode()
         self._rules = settings.the_rules()
@@ -73,7 +91,8 @@ class GameSession:
         # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
         self._llm_turn_running = threading.Lock()
         self._abandoned = threading.Event()  # set by abandon(), from the request that starts a new game
-        # Held while the game is abandoned and while an LLM turn ends the game, so a game is never both.
+        # Held while the game is abandoned, while an LLM turn ends the game, so a game is never both, and while a
+        # ply's Evaluation is added, so an abandoned game never gets one.
         self._ending = threading.Lock()
         # Held while a move lands and while state() is built, so the state never shows a move without its time and
         # the clock it starts, or the reverse. Never held while a side thinks, so a running turn doesn't hold up the
@@ -98,6 +117,7 @@ class GameSession:
             max_retries=settings.max_attempts - 1,
             **self._mode.logged_prompt_files(prompt_files),
             **self._rules.game_start_fields(),
+            **({"evaluator": self._evaluation_engine.log_shape()} if self._evaluation_engine else {}),
             # To the microsecond, so games started within the same second still sort in the order they started.
             started_at=now("microseconds"),
         )
@@ -137,7 +157,9 @@ class GameSession:
             self._charge(color, time_s)
             self._check_end()
             self._position_ready()
+            unjudged = self._ply_to_judge()
         self._log.write("human_move", **self._plies[-1].log_shape())
+        self._judge(unjudged)
         if self._end is not None:
             self._write_end(self._end)
 
@@ -167,7 +189,9 @@ class GameSession:
             self._charge(color, time_s)
             self._check_end()
             self._position_ready()
+            unjudged = self._ply_to_judge()
         self._log.write("anchor_move", **self._plies[-1].log_shape())
+        self._judge(unjudged)
         if self._end is not None:
             self._write_end(self._end)
 
@@ -206,8 +230,11 @@ class GameSession:
                     else:
                         self._check_end()
                     self._position_ready()
+                    played = outcome.move is not None or outcome.chaos_move is not None
+                    unjudged = self._ply_to_judge() if played else None
                 if self._end is not None:
                     self._write_end(self._end)
+            self._judge(unjudged)
         finally:
             self._llm_turn_running.release()
 
@@ -216,6 +243,30 @@ class GameSession:
         after the turn's move is on the board and before the game ends: a page waiting on a running turn checks for
         llm_turns to grow or the game to be over, so neither may run ahead of it."""
         self._llm_turns.append(turn)
+
+    def _ply_to_judge(self) -> tuple[Evaluator, int, chess.Board] | None:
+        """With _landing held, once a ply has landed: what judging it takes, the evaluator, the ply's index and a
+        copy of its position, or None without an evaluator or once the game is over, as a position that ends the
+        game has no Evaluation (the page shows the result there)."""
+        if self._evaluator is None or self._end is not None:
+            return None
+        return self._evaluator, len(self._plies) - 1, self._board.copy(stack=False)
+
+    def _judge(self, unjudged: tuple[Evaluator, int, chess.Board] | None) -> None:
+        """Judge the ply that landed, outside _landing, as the engine can take a while: the ply is in the state
+        without its Evaluation until then, which the page shows as evaluating. Its Evaluation joins the ply in one
+        step, and the log after the move. An abandoned game is judged no further: its search is skipped, or its
+        result dropped, and nothing more is written to its log."""
+        if unjudged is None or self._abandoned.is_set():
+            return
+        evaluator, index, board = unjudged
+        evaluation = judge(board, evaluator)
+        with self._ending:
+            if self._abandoned.is_set():
+                return
+            with self._landing:
+                ply = self._plies[index] = self._plies[index].model_copy(update={"evaluation": evaluation})
+            self._log.write("evaluation", ply=ply.ply, **evaluation.log_shape())
 
     def _write_end(self, end: GameEnd) -> None:
         self._log.write(
@@ -278,6 +329,7 @@ class GameSession:
             stats=self._all_stats(),
             time_used=self._time_used_record(),
             running_s=self._time_since_move_started(self._clock()) if self._end is None else None,
+            evaluator=self._evaluation_engine,
         )
 
     def _position_ready(self) -> None:

@@ -30,7 +30,7 @@ from chessllm.logs.game_log import GameLog
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.exceptions import LlmTimeout
-from tests.fakes import FakeClock, Raw, ScriptedAnchor, ScriptedPlayer
+from tests.fakes import FakeClock, MaterialEvaluator, Raw, ScriptedAnchor, ScriptedPlayer
 
 ROOT = Path(__file__).parent.parent
 SAMPLES_DIR = ROOT / "docs" / "samples"
@@ -77,8 +77,11 @@ class Samples:
     def games_dir(self, game: str) -> Path:
         return self.work_dir / game
 
-    def client(self, game: str, players: dict[Color, ScriptedPlayer]) -> TestClient:
-        """The app for one sample game, its LLM sides played by the given players."""
+    def client(
+        self, game: str, players: dict[Color, ScriptedPlayer], evaluator: MaterialEvaluator | None = None
+    ) -> TestClient:
+        """The app for one sample game, its LLM sides played by the given players, and its plies judged by the
+        evaluator, if any."""
 
         def player_for(settings: Settings, color: Color) -> LlmPlayer:
             return players[color].for_settings(settings, color)
@@ -89,6 +92,7 @@ class Samples:
             sampling_defaults=model_sampling,
             sampling_file=self.sampling_file,
             clock=self.clock,
+            evaluator=evaluator,
         )
         return TestClient(app)
 
@@ -162,7 +166,8 @@ def play_llm_standard(samples: Samples) -> None:
 
 def llm_faceoff_chaos(samples: Samples) -> None:
     """An LLM faceoff under Chaos rules, White Listed with the position described: a chaos move, a Spawn, a Retry
-    after badly formed notation (never a chaos move), and King capture."""
+    after badly formed notation (never a chaos move), and King capture. Each ply is judged by material alone, a
+    stand-in for Stockfish, to show the Evaluations."""
     game = "llm-faceoff-chaos"
     white = samples.timed(ScriptedPlayer(["e4", "Nf3", "Nxh4", "banana", "d3"]), 1.5, 2.0, 2.5, 1.25, 3.0)
     black = samples.timed(
@@ -174,7 +179,7 @@ def llm_faceoff_chaos(samples: Samples) -> None:
         ]),
         4.0, 1.75, 6.5, 2.25,
     )
-    client = samples.client(game, {"white": white, "black": black})
+    client = samples.client(game, {"white": white, "black": black}, MaterialEvaluator())
     new_game = {
         "mode": "llm_faceoff",
         "white": {"player": "llm", "model": "gemma3:12b", "llm_constraints": "listed", "position": "described"},

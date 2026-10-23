@@ -1,5 +1,5 @@
 // Game states as the API sends them, for tests.
-import type { Attempt, GameState, LlmTurn, Ply } from '@/api/types'
+import type { Attempt, Evaluation, GameState, LlmTurn, Ply } from '@/api/types'
 
 type Resolution = NonNullable<Ply['resolution']>
 
@@ -222,6 +222,39 @@ export function chaosGame(count: number, overrides: Partial<GameState> = {}): Ga
         spawns,
       },
     },
+    ...overrides,
+  })
+}
+
+export const judged = (pawns: number, mate: number | null = null): Evaluation => ({ pawns, mate, unjudged: null })
+export const notJudged = (unjudged: string): Evaluation => ({ pawns: null, mate: null, unjudged })
+export const STOCKFISH: NonNullable<GameState['evaluator']> = {
+  version: 'Stockfish 19',
+  search: { depth: 16, threads: 1, hash_mb: 64 },
+}
+
+/**
+ * An LLM faceoff of qwen3.5:9b against itself after the plies given, each with its Evaluation by Stockfish as the
+ * backend sent it (undefined: none yet), the next LLM to move.
+ */
+export function aFaceoff(
+  given: PlyGiven[],
+  evaluations: (Evaluation | undefined)[],
+  overrides: Partial<GameState> = {},
+): GameState {
+  const llm = aGame().settings.black
+  const last = given.at(-1)
+  return aGame({
+    fen: last?.[2] ?? START,
+    turn: given.length % 2 === 0 ? 'white' : 'black',
+    human_legal_moves: [],
+    last_move: last?.[0] ?? null,
+    plies: plies(...given).map((ply, index) => {
+      const evaluation = evaluations[index]
+      return evaluation ? { ...ply, evaluation } : ply
+    }),
+    settings: { ...aGame().settings, mode: 'llm_faceoff', white: llm, black: llm },
+    evaluator: STOCKFISH,
     ...overrides,
   })
 }

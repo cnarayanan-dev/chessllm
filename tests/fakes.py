@@ -1,12 +1,14 @@
-"""Scripted fakes for the LLM player and Anchor ports, so games play without Ollama or an engine. Shared by the tests
+"""Scripted fakes for the LLM player, Anchor and Evaluator ports, so games play without Ollama or an engine. Shared by the tests
 (through conftest.py) and the sample games (scripts/sample_logs.py)."""
 
 import json
 from typing import Any
 
 import chess
+from chess.engine import Cp, Score
 
 from chessllm.core.types import Color
+from chessllm.exceptions import StockfishUnavailable
 from chessllm.game.settings import Settings
 from chessllm.llm.players import LlmReply, Message
 
@@ -86,3 +88,51 @@ class ScriptedAnchor:
 
     def close(self) -> None:
         self.closed = True
+
+
+class FixedEvaluator:
+    """Test fake for the Evaluator port: each position's evaluation, relative to the side to move, from a table,
+    and 0 for any other position. Records every position it is asked about."""
+
+    version = "fake-engine 1"
+    search = {"depth": 1}
+
+    def __init__(self, scores: dict[str, Score] | None = None) -> None:
+        self.scores = scores or {}
+        self.asked: list[str] = []
+
+    def evaluate(self, fen: str) -> Score:
+        self.asked.append(fen)
+        return self.scores.get(fen, Cp(0))
+
+
+class UnavailableEvaluator:
+    """Test fake for the Evaluator port when Stockfish isn't installed."""
+
+    search = {"depth": 1}
+
+    @property
+    def version(self) -> str:
+        raise StockfishUnavailable("stockfish is not on the PATH")
+
+    def evaluate(self, fen: str) -> Score:
+        raise StockfishUnavailable("stockfish is not on the PATH")
+
+
+PIECE_VALUES = {chess.PAWN: 100, chess.KNIGHT: 300, chess.BISHOP: 300, chess.ROOK: 500, chess.QUEEN: 900}
+
+
+class MaterialEvaluator:
+    """Test fake for the Evaluator port that judges a position by its material alone, relative to the side to move:
+    deterministic, so the sample games and the Playwright journeys get Evaluations without Stockfish."""
+
+    version = "material count"
+    search = {"depth": 0}
+
+    def evaluate(self, fen: str) -> Score:
+        board = chess.Board(fen)
+        balance = sum(
+            value * (len(board.pieces(piece, board.turn)) - len(board.pieces(piece, not board.turn)))
+            for piece, value in PIECE_VALUES.items()
+        )
+        return Cp(balance)
