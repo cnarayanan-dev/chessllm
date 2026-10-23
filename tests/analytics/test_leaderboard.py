@@ -127,12 +127,13 @@ def with_start(events, **fields):
     [
         game(HUMAN, LLAMA | {"thinking": True}, "1-0"),
         game(HUMAN, LLAMA | {"retry_feedback": "hinted"}, "1-0"),
+        game(HUMAN, LLAMA | {"retry_feedback": "repeat"}, "1-0"),
         game(HUMAN, LLAMA | {"model": "gemma3:12b"}, "1-0"),
         game(HUMAN, LLAMA, "1-0", sampling={"temperature": 0.2}),
         game(HUMAN, LLAMA, "1-0", rules="chaos"),
         with_start(game(HUMAN, LLAMA, "1-0"), prompt_file="/somewhere/chessllm/prompts/other.txt"),
     ],
-    ids=["thinking", "retry_feedback", "model", "sampling", "rules", "prompt"],
+    ids=["thinking", "retry_feedback", "retry_feedback_repeat", "model", "sampling", "rules", "prompt"],
 )
 def test_games_differing_in_any_setting_are_different_player_configurations(leaderboard, other):
     configurations = leaderboard(game(HUMAN, LLAMA, "1-0"), other)

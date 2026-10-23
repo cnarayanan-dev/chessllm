@@ -114,6 +114,16 @@ def test_the_llms_retries_and_forfeit_are_logged_as_in_a_faceoff_and_the_anchor_
     assert pgn_game(tmp_path / "games").headers["White"] == "qwen3.5:9b (thinking)"
 
 
+def test_with_retry_feedback_repeat_each_retry_is_sent_the_turns_first_prompt(anchor_match, tmp_path):
+    code, player, _, _ = anchor_match(["Ke2", "Nf3"], ["e5"], "--retry-feedback", "repeat", "--color", "white")
+
+    assert code == 0
+    start, first, retry, *_ = events(tmp_path / "games")
+    assert start["white"]["retry_feedback"] == "repeat"
+    assert player.prompts[1] == player.prompts[0]
+    assert (retry["prompt"], retry["feedback_sent"], retry["result"]) == (first["prompt"], None, "legal")
+
+
 def test_the_leaderboard_counts_an_anchor_match_against_the_anchor_and_only_the_llms_attempts(anchor_match, tmp_path):
     # 1. Nf3 e5 2. Ke3 (illegal) Nd4 Qg5, then the LLM forfeits its third turn: with no reply left, the call fails.
     anchor_match(["Nf3", "Ke3", "Nd4"], ["e5", "Qg5"], "--color", "white", "--skill", "3")

@@ -5,8 +5,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-# What the LLM is told after an illegal move: explained (the default), bare or hinted.
-RetryFeedback = Literal["explained", "bare", "hinted"]
+# What the LLM is told after an illegal move: explained (the default), bare or hinted; or repeat, nothing: the turn's
+# first Prompt is sent again unchanged, as the control for the other levels.
+RetryFeedback = Literal["explained", "bare", "hinted", "repeat"]
 # Whether the LLM is shown the legal-move list, and whether Enforced decoding holds its move to the legal moves:
 # free (neither, the default), listed (the list only), blind_enforced (enforced only) or listed_enforced (both).
 LlmConstraints = Literal["free", "listed", "blind_enforced", "listed_enforced"]

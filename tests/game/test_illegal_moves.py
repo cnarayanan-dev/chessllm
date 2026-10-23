@@ -257,6 +257,22 @@ def test_hinted_feedback_adds_the_legal_moves_in_san(scripted):
     assert player.prompts[1][-1].content == explained("Qh4", "illegal", 1) + f"\nLegal moves: {legal_after_e4}"
 
 
+def test_repeat_feedback_sends_every_attempt_the_turns_first_prompt_unchanged(scripted):
+    client, player = scripted(["Qh4", "banana", "e5"])
+    client.post("/api/games", json=play_llm(retry_feedback="repeat"))
+
+    state = play_move(client, "e2e4").json()
+
+    first, *retries = player.prompts
+    assert [message.role for message in first] == ["system", "user"]  # no rejected answer, no feedback
+    assert retries == [first, first]
+    sent = [{"role": message.role, "content": message.content} for message in first]
+    assert [attempt["prompt"] for attempt in state["llm_turn"]["attempts"]] == [sent, sent, sent]
+    assert [attempt["feedback_sent"] for attempt in state["llm_turn"]["attempts"]] == [None, None, None]
+    assert attempts(state) == [("Qh4", "illegal"), ("banana", "invalid"), ("e5", "legal")]
+    assert state["settings"]["black"]["retry_feedback"] == "repeat"
+
+
 def test_an_unknown_retry_feedback_level_is_refused(scripted):
     client, _ = scripted([])
 

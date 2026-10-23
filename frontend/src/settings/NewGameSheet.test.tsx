@@ -382,16 +382,29 @@ describe('Advanced settings', () => {
     expect(started()).toMatchObject({ black: { llm_constraints: 'listed' } })
   })
 
-  test('After an illegal move, tell the LLM: Explained, Bare or Hinted', async () => {
+  test('After an illegal move, tell the LLM: Explained, Bare, Hinted or Repeat', async () => {
     const { user, started } = await openSheet()
     await openAdvanced(user)
 
-    expect(radiosIn('After an illegal move, tell the LLM')).toEqual(['Explained', 'Bare', 'Hinted'])
+    expect(radiosIn('After an illegal move, tell the LLM')).toEqual(['Explained', 'Bare', 'Hinted', 'Repeat'])
     expect(radio('Explained')).toHaveAttribute('aria-checked', 'true')
     expect(radio('Bare')).toHaveAttribute('aria-description', 'After an illegal move the LLM is told only that it was illegal.')
     await user.click(radio('Hinted'))
     await user.click(screen.getByRole('button', { name: 'Play as White' }))
     expect(started()).toMatchObject({ black: { retry_feedback: 'hinted' } })
+  })
+
+  test('Repeat asks the LLM again with the same prompt, its description in the tooltip', async () => {
+    const { user, started } = await openSheet()
+    await openAdvanced(user)
+
+    await user.hover(radio('Repeat'))
+    expect(await tooltip()).toHaveTextContent(
+      'After an illegal move the LLM is sent the same prompt again, never told its move was illegal.',
+    )
+    await user.click(radio('Repeat'))
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started()).toMatchObject({ black: { retry_feedback: 'repeat' } })
   })
 
   test('Illegal moves before forfeit: 5 by default, any of 1 to 25', async () => {

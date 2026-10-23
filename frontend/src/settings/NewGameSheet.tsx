@@ -360,7 +360,7 @@ function Feedback({ next, set, color }: Omit<SideProps, 'models'> & { color: Col
     <Choice<RetryFeedback>
       label="After an illegal move, tell the LLM"
       ariaLabel={perSide(next, color, 'After an illegal move, tell the LLM')}
-      columns={3}
+      columns={2}
       value={value(next, color, 'retry_feedback')}
       onChange={(choice) => set(setValue(next, color, 'retry_feedback', choice))}
       options={(Object.keys(RETRY_FEEDBACK_WORDS) as RetryFeedback[]).map((choice) => ({

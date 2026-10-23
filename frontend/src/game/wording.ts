@@ -121,6 +121,10 @@ export const RETRY_FEEDBACK_WORDS: Record<LlmSide['retry_feedback'], Words> = {
   explained: { name: 'Explained', description: 'After an illegal move the LLM is told the move and the kind of failure.' },
   bare: { name: 'Bare', description: 'After an illegal move the LLM is told only that it was illegal.' },
   hinted: { name: 'Hinted', description: 'After an illegal move the LLM is also told the legal moves.' },
+  repeat: {
+    name: 'Repeat',
+    description: 'After an illegal move the LLM is sent the same prompt again, never told its move was illegal.',
+  },
 }
 const shown = <T extends string, W extends Words>(words: Record<T, W>, name: (word: W) => string) =>
   Object.fromEntries(

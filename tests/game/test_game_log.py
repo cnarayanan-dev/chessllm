@@ -181,6 +181,27 @@ def test_a_forfeit_is_logged_with_its_illegal_moves_and_pgn(scripted, tmp_path):
     assert "1. e4 1-0" in pgn
 
 
+def test_under_repeat_the_log_records_every_attempt_and_its_result_as_under_explained(scripted, tmp_path):
+    def logged(retry_feedback):
+        games = tmp_path / retry_feedback
+        client, _ = scripted(["Qh4", "banana", "O-O", "Nd7", "Ke2"], games_dir=games)
+        client.post("/api/games", json=play_llm(model="qwen3.5:9b", thinking=True, retry_feedback=retry_feedback))
+        play_move(client, "e2e4")
+        return events(logs(games, ".jsonl")[0])
+
+    explained, repeat = logged("explained"), logged("repeat")
+
+    def attempts(log):
+        return [without(event, "prompt", "feedback_sent") for event in log if event["type"] == "llm_attempt"]
+
+    assert attempts(repeat) == attempts(explained)
+    first, *retries = [event for event in repeat if event["type"] == "llm_attempt"]
+    assert [event["result"] for event in (first, *retries)] == ["illegal", "invalid", "illegal", "illegal", "illegal"]
+    assert [(retry["prompt"], retry["feedback_sent"]) for retry in retries] == [(first["prompt"], None)] * 4
+    assert repeat[0]["black"] == QWEN_THINKING | {"retry_feedback": "repeat"}
+    assert without(repeat[-1], "ended_at") == without(explained[-1], "ended_at")
+
+
 def test_a_timeout_is_logged_as_an_attempt_without_a_reply(scripted, tmp_path):
     client, _ = scripted([LlmTimeout(300)])
 

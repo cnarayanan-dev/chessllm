@@ -9,6 +9,7 @@ import {
   Lock,
   MessageSquare,
   MessageSquareText,
+  Repeat,
   ShieldCheck,
   Zap,
   type LucideProps,
@@ -22,7 +23,7 @@ type IconOf = ComponentType<LucideProps>
 const ICONS: { [setting in GameSetting['setting']]: Record<string, IconOf> } = {
   llm_constraints: { free: Eye, listed: ListChecks, blind_enforced: Lock, listed_enforced: ShieldCheck },
   rules: { standard: ChessKnight, chaos: Zap },
-  retry_feedback: { explained: MessageSquareText, bare: MessageSquare, hinted: Lightbulb },
+  retry_feedback: { explained: MessageSquareText, bare: MessageSquare, hinted: Lightbulb, repeat: Repeat },
   thinking: { on: Brain, off: BrainOff },
   max_attempts: {},
 }

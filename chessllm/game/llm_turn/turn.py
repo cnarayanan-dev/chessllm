@@ -143,6 +143,7 @@ class LlmTurns:
         prompt_file = SYSTEM_PROMPT_FILES[side.llm_constraints]
         description = describe_position(board, last_move) if side.position == "described" else None
         messages = turn_messages(pgn, fen, color, prompt_file, listed_moves, description)
+        first_messages = messages
         turn = LlmTurn(ply=ply, color=color, attempts=[], time_s=0.0, thinking=None, reasoning=None)
         feedback = None
         illegal_in_turn = False  # a turn recovers only from an illegal move, not from a cut-off answer
@@ -216,8 +217,11 @@ class LlmTurns:
                 stats.chaos_moves += 1
                 stats.spawns += resolution.kind == "spawn"
                 return TurnOutcome(turn, chaos_move=resolution, written=written)
-            feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
-            messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
+            if side.retry_feedback == "repeat":  # another sample: the first Prompt again, the rejected move unseen
+                feedback, messages = None, first_messages
+            else:
+                feedback = retry_feedback(side.retry_feedback, written, result, number, max_attempts, legal_moves)
+                messages = messages + [Message("assistant", reply.raw), Message("user", feedback)]
         return TurnOutcome(turn, forfeit=True)
 
     def _ended(self, turn: LlmTurn, started: float) -> dict[str, Any]:

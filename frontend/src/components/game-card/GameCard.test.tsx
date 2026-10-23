@@ -99,6 +99,17 @@ test("in a faceoff a setting the LLMs share is not shown; one that differs is on
   expect(within(gameCard()).getByText('Thinking on')).toHaveAttribute('aria-description', 'The LLM reasons before each move.')
 })
 
+test("Repeat feedback is on the player's row of the LLM that plays under it, its meaning in aria-description", () => {
+  renderCard(faceoffOf({}, { retry_feedback: 'repeat' }))
+
+  expect(line("White's settings")).toEqual(['Explained feedback'])
+  expect(line("Black's settings")).toEqual(['Repeat feedback'])
+  expect(within(gameCard()).getByText('Repeat feedback')).toHaveAttribute(
+    'aria-description',
+    'After an illegal move the LLM is sent the same prompt again, never told its move was illegal.',
+  )
+})
+
 test('the players are shown by name with their colour, without a model logo', () => {
   renderCard(faceoffOf({}, {}))
   const players = within(gameCard()).getByRole('list', { name: 'Players' })
