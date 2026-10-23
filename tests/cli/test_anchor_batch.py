@@ -1,4 +1,5 @@
-"""Anchor match batches: a budget of Anchor matches against Dragon, played unattended up and down the Skill ladder.
+"""Anchor match batches: a budget of Anchor matches, played unattended up and down the ladder: the random legal mover,
+then Dragon's Skill levels.
 
 The LLM is a ScriptedPlayer and the Anchor a ScriptedAnchor, scripted per game so that each game ends in a planted
 result. Every assertion is on the game logs the batch writes."""
@@ -34,20 +35,31 @@ SCRIPTS = {
 
 class PlantedResults:
     """Builds, for each game in turn, a ScriptedPlayer and a ScriptedAnchor that play to the next planted result
-    ("win", "loss" or "draw", for the LLM, or "interrupted"). The Anchor is built first and plays the side to move when first asked."""
+    ("win", "loss" or "draw", for the LLM, or "interrupted"). The Anchor is built first and plays the side to move when first asked.
+    An Anchor built and never played with (the batch's check that its engine starts) plays no game and takes no result.
+    sides holds the Anchor side of every game."""
 
     def __init__(self, results: list[str]) -> None:
         self.results = list(results)
         self.anchors_built = 0
         self.anchors: list["PlantedAnchor"] = []
+        self.sides: list = []
+        self._unplayed = False
 
     def anchor_for(self, side) -> "PlantedAnchor":
+        if self._unplayed:  # the last one only checked the engine
+            self.anchors_built -= 1
+            self.anchors.pop()
+            self.sides.pop()
         anchor = PlantedAnchor(self.results[self.anchors_built])
         self.anchors_built += 1
         self.anchors.append(anchor)
+        self.sides.append(side)
+        self._unplayed = True
         return anchor
 
     def player_for(self, settings, color) -> ScriptedPlayer:
+        self._unplayed = False
         llm, anchor = SCRIPTS[(self.results[self.anchors_built - 1], color)]
         self.anchors[-1].script(anchor)
         return ScriptedPlayer(llm).for_settings(settings, color)
@@ -73,8 +85,8 @@ def logs(games_dir) -> list[list[dict]]:
 
 
 def games(games_dir) -> list[tuple[int, str, str]]:
-    """Each logged game as (Dragon's Skill, the LLM's colour, the LLM's result), oldest first. An unfinished game's
-    result is None."""
+    """Each logged game as (the ladder's rung: 0 for the random mover, else Dragon's Skill, the LLM's colour, the LLM's
+    result), oldest first. An unfinished game's result is None."""
     played = []
     for start, *_, end in logs(games_dir):
         llm_color = "white" if start["white"]["player"] == "llm" else "black"
@@ -85,7 +97,7 @@ def games(games_dir) -> list[tuple[int, str, str]]:
             result = "draw"
         else:
             result = "win" if end["result"] == ("1-0" if llm_color == "white" else "0-1") else "loss"
-        played.append((anchor["skill"], llm_color, result))
+        played.append((0 if anchor["engine"] == "random" else anchor["skill"], llm_color, result))
     return played
 
 
@@ -123,22 +135,34 @@ def test_the_ladder_steps_up_after_over_50_percent_down_after_under_and_stays_at
     code, _ = batch(results, "--games", "12")
 
     assert code == 0
-    # Judged on each pair of games at a Skill: 2 points up, 1.5 up, 1 stays, 0.5 down, 0 down, 1 stays.
+    # It starts at the random mover. Judged on each pair of games at a rung: 2 points up, 1.5 up, 1 stays, 0.5 down,
+    # 0 down, 1 stays.
     assert games(tmp_path / "games") == [
-        (1, "white", "win"), (1, "black", "win"),
-        (2, "white", "win"), (2, "black", "draw"),
-        (3, "white", "win"), (3, "black", "loss"),
-        (3, "white", "loss"), (3, "black", "draw"),
-        (2, "white", "loss"), (2, "black", "loss"),
-        (1, "white", "draw"), (1, "black", "draw"),
+        (0, "white", "win"), (0, "black", "win"),
+        (1, "white", "win"), (1, "black", "draw"),
+        (2, "white", "win"), (2, "black", "loss"),
+        (2, "white", "loss"), (2, "black", "draw"),
+        (1, "white", "loss"), (1, "black", "loss"),
+        (0, "white", "draw"), (0, "black", "draw"),
     ]  # fmt: skip
 
 
-def test_the_ladder_never_leaves_skill_1_to_7(batch, tmp_path):
+def test_the_ladder_starts_at_the_random_mover_with_a_fresh_seed_each_game_then_dragon(batch, tmp_path):
+    code, planted = batch(["win", "win", "draw"], "--games", "3")
+
+    assert code == 0
+    first, second, third = (start for start, *_ in logs(tmp_path / "games"))
+    assert first["black"]["engine"] == second["white"]["engine"] == "random"
+    assert first["black"]["seed"] != second["white"]["seed"]
+    assert third["black"] == {"player": "anchor", "engine": "dragon", "skill": 1}
+    assert [side.engine for side in planted.sides] == ["random", "random", "dragon"]
+
+
+def test_the_ladder_never_leaves_the_random_mover_to_skill_7(batch, tmp_path):
     batch(["loss"] * 4, "--games", "4", games_dir=tmp_path / "bottom")
     batch(["win"] * 4, "--games", "4", "--skill", "6", games_dir=tmp_path / "top")
 
-    assert [skill for skill, *_ in games(tmp_path / "bottom")] == [1, 1, 1, 1]
+    assert [skill for skill, *_ in games(tmp_path / "bottom")] == [0, 0, 0, 0]
     assert [skill for skill, *_ in games(tmp_path / "top")] == [6, 6, 7, 7]
 
 
@@ -150,7 +174,7 @@ def test_the_same_results_pick_the_same_opponents(batch, tmp_path):
 
     first, second = games(tmp_path / "first"), games(tmp_path / "second")
     assert first == second
-    assert [skill for skill, *_ in first] == [1, 1, 2, 2, 2, 2, 3, 3]
+    assert [skill for skill, *_ in first] == [0, 0, 1, 1, 1, 1, 2, 2]
 
 
 def test_a_later_batch_extends_the_configurations_games_where_the_ladder_left_off(batch, tmp_path, capsys):
@@ -164,8 +188,8 @@ def test_a_later_batch_extends_the_configurations_games_where_the_ladder_left_of
     assert code == 0
     played = games(tmp_path / "games")
     assert len(played) == 8
-    # The first batch left off at Skill 2 after one game, as White: the next is its pair, as Black.
-    assert played[5:] == [(2, "black", "win"), (3, "white", "loss"), (3, "black", "loss")]
+    # The first batch left off at Skill 1 after one game, as White: the next is its pair, as Black.
+    assert played[5:] == [(1, "black", "win"), (2, "white", "loss"), (2, "black", "loss")]
     assert "Going on from 3 earlier Anchor matches" in capsys.readouterr().out
 
 
@@ -176,7 +200,7 @@ def test_a_batch_with_tools_has_a_ladder_of_its_own(batch, tmp_path):
     code, _ = batch(["win", "win"], "--games", "2", *thinking, "--tools", "board")
 
     assert code == 0
-    assert [skill for skill, *_ in games(tmp_path / "games")] == [1, 1, 1, 1]
+    assert [skill for skill, *_ in games(tmp_path / "games")] == [0, 0, 0, 0]
     sides = [start[color] for start, *_ in logs(tmp_path / "games") for color in ("white", "black")]
     assert [side["tools"] for side in sides if "tools" in side] == [["board"], ["board"]]
 
@@ -187,8 +211,8 @@ def test_an_unfinished_game_is_not_part_of_the_history_and_skill_overrides_where
     batch(["draw", "draw"], "--games", "2", "--skill", "5")
 
     played = games(tmp_path / "games")
-    assert played[:2] == [(1, "white", "win"), (1, "black", "win")]
-    assert played[2] == (2, "white", None)
+    assert played[:2] == [(0, "white", "win"), (0, "black", "win")]
+    assert played[2] == (1, "white", None)
     assert played[3:] == [(5, "white", "draw"), (5, "black", "draw")]
 
 
@@ -197,15 +221,15 @@ def test_a_batch_prints_each_games_progress_and_a_summary(batch, capsys):
 
     out = capsys.readouterr().out.splitlines()
     assert out[:3] == [
-        "Game 1/3: Skill 1, LLM as white: win (1-0, checkmate)",
-        "Game 2/3: Skill 1, LLM as black: draw (1/2-1/2, threefold_repetition)",
-        "Game 3/3: Skill 2, LLM as white: loss (0-1, forfeit)",
+        "Game 1/3: Random mover, LLM as white: win (1-0, checkmate)",
+        "Game 2/3: Random mover, LLM as black: draw (1/2-1/2, threefold_repetition)",
+        "Game 3/3: Skill 1, LLM as white: loss (0-1, forfeit)",
     ]
     assert out[3:] == [
         "Batch: 3 games, 1 wins, 1 draws, 1 losses.",
-        "  Skill 1: 1 W · 1 D · 0 L",
-        "  Skill 2: 0 W · 0 D · 1 L",
-        "Next game: Skill 2, LLM as black.",
+        "  Random mover: 1 W · 1 D · 0 L",
+        "  Skill 1: 0 W · 0 D · 1 L",
+        "Next game: Skill 1, LLM as black.",
     ]
 
 
@@ -214,7 +238,7 @@ def test_an_interrupted_batch_leaves_every_finished_games_log_complete(batch, tm
 
     assert code == 130
     played = games(tmp_path / "games")
-    assert played == [(1, "white", "win"), (1, "black", "draw"), (2, "white", None)]
+    assert played == [(0, "white", "win"), (0, "black", "draw"), (1, "white", None)]
     first, second, third = logs(tmp_path / "games")
     assert first[-1]["type"] == second[-1]["type"] == "game_end"
     assert [event["type"] for event in third] == ["game_start", "llm_attempt", "anchor_move"]
@@ -312,32 +336,33 @@ def test_a_missing_dragon_stops_the_batch_before_the_first_game(tmp_path, capsys
 
 
 def test_a_dragon_that_fails_mid_batch_stops_it_with_the_finished_games_logged(tmp_path, capsys):
-    planted = PlantedResults(["win", "win"])
+    planted = PlantedResults(["win", "win", "win"])
     built = []
 
     def anchor_for(side):
-        if built:
+        if side.engine == "dragon" and built:  # it started for the check before the first game, and not again
             raise AnchorUnavailable("Dragon at dragon-osx won't start: gone")
         built.append(side)
         return planted.anchor_for(side)
 
     code = main(
-        ["--games-dir", str(tmp_path / "games"), "--no-analysis", "--games", "2"],
+        ["--games-dir", str(tmp_path / "games"), "--no-analysis", "--games", "3"],
         player_for=planted.player_for,
         anchor_for=anchor_for,
         sampling_file=tmp_path / "no-sampling.toml",
     )
 
     assert code == 1
-    assert games(tmp_path / "games") == [(1, "white", "win")]
+    assert games(tmp_path / "games") == [(0, "white", "win"), (0, "black", "win")]
     assert "Anchor match batch stopped: Dragon at dragon-osx won't start: gone" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
     ("args", "error"),
     [
-        (["--rules", "chaos"], "Only Stockfish can be the Anchor under Chaos rules"),
+        (["--rules", "chaos"], "Only Stockfish or the random mover can be the Anchor under Chaos rules"),
         (["--skill", "8"], "plays at Skill 1-7, not 8"),
+        (["--engine", "random"], "the random mover is the ladder's bottom rung, not its engine"),
         (["--model", "llama3:8b", "--thinking"], "llama3:8b (white) cannot think"),
         (["--model", "qwen3.8:latest", "--thinking-level", "high"], "has no Thinking level high: it offers low"),
         (["--model", "qwen3.8:latest", "--thinking-budget", "1024"], "has a Thinking budget, so thinking must be on"),

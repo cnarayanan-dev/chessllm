@@ -128,24 +128,39 @@ class BenchmarkLlmSide(LlmSide):
         return f"{self.model} ({thinking}{budget})"
 
 
-AnchorEngine = Literal["dragon", "stockfish"]
+AnchorEngine = Literal["dragon", "stockfish", "random"]
 
 
 @dataclass(frozen=True)
 class AnchorSide:
-    """An Anchor side: Komodo Dragon 1, or Stockfish standing in for it, at a Skill level, in the game log's shape."""
+    """An Anchor side, in the game log's shape: Komodo Dragon 1, or Stockfish standing in for it, at a Skill level; or
+    the random legal mover, which has no Skill but the seed it plays its game from (see random_mover)."""
 
     player: Literal["anchor"] = "anchor"
     engine: AnchorEngine = "dragon"
-    skill: int = 1
+    skill: int | None = 1  # None for the random mover
+    seed: int | None = None  # the random mover's only, so its game can be replayed
+
+    @classmethod
+    def random_mover(cls, seed: int) -> "AnchorSide":
+        return cls(engine="random", skill=None, seed=seed)
 
     def name(self) -> str:
-        """The side's name in the PGN, e.g. "Dragon (Skill 1)"."""
+        """The side's name in the PGN, e.g. "Dragon (Skill 1)" or "Random mover"."""
+        if self.engine == "random":
+            return "Random mover"
         return f"{self.engine.capitalize()} (Skill {self.skill})"
 
     def file_name(self) -> str:
-        """The side's part of the game log's file name, e.g. "dragon-skill1"."""
+        """The side's part of the game log's file name, e.g. "dragon-skill1" or "random-mover"."""
+        if self.engine == "random":
+            return "random-mover"
         return f"{self.engine}-skill{self.skill}"
+
+    def log_shape(self) -> dict[str, Any]:
+        """The side as game_start logs it: without the Skill or seed it hasn't, so an engine Anchor logs as before the
+        random mover, and the random mover's name has no Skill (anchors.anchor_name)."""
+        return {key: value for key, value in asdict(self).items() if value is not None}
 
 
 Side = HumanSide | LlmSide | AnchorSide
@@ -158,4 +173,4 @@ def side_log_shape(side: Side, template: PromptTemplate | None) -> dict[str, Any
     if isinstance(side, LlmSide):
         assert template is not None, "an LLM side plays with a Prompt template"
         return side.log_shape(template)
-    return asdict(side)
+    return side.log_shape() if isinstance(side, AnchorSide) else asdict(side)

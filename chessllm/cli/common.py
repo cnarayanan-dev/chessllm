@@ -12,6 +12,7 @@ from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH
 from chessllm.engines.anchors import (
     Anchor,
     DragonAnchor,
+    RandomAnchor,
     StockfishAnchor,
     configured_dragon_path,
     configured_stockfish_path,
@@ -186,7 +187,8 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         "--engine",
         choices=get_args(AnchorEngine),
         default="dragon",
-        help="the Anchor: Dragon, or Stockfish as a rough stand-in where Dragon can't be had (default dragon)",
+        help="the Anchor: Dragon, or Stockfish as a rough stand-in where Dragon can't be had (default dragon); "
+        "anchor-match also takes random, the random legal mover, which needs no engine",
     )
     parser.add_argument("--dragon", help=f"the Dragon executable (default: ${DRAGON_PATH_VARIABLE})")
     parser.add_argument(
@@ -195,8 +197,10 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     add_games_dir_argument(parser)
 
 
-def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int, sampling_file: Path) -> Settings:
-    """The settings of an Anchor match of the LLM in args at llm_color against Dragon at skill. Raises
+def anchor_match_settings(
+    args: argparse.Namespace, llm_color: Color, anchor_side: AnchorSide, sampling_file: Path
+) -> Settings:
+    """The settings of an Anchor match of the LLM in args at llm_color against the Anchor side. Raises
     InvalidSettings with the reason when they can't be played, and InvalidSamplingConfig for a broken config."""
     llm = BenchmarkLlmSide(
         model=args.model,
@@ -210,7 +214,6 @@ def anchor_match_settings(args: argparse.Namespace, llm_color: Color, skill: int
         tools=args.tools,
         tool_call_cap=tool_call_cap(args.tools, args.tool_call_cap, f"--tool-call-cap {args.tool_call_cap}"),
     )
-    anchor_side = AnchorSide(engine=args.engine, skill=skill)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)
     settings = Settings(
         "anchor_match",
@@ -240,7 +243,11 @@ def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
 
 
 def default_anchor(args: argparse.Namespace, side: AnchorSide) -> Anchor:
-    """The Anchor of the side, from --dragon or --stockfish."""
+    """The Anchor of the side, from --dragon or --stockfish; the random mover from its seed."""
+    if side.engine == "random":
+        assert side.seed is not None, "Settings.check gives the random mover a seed"
+        return RandomAnchor(side.seed)
+    assert side.skill is not None, "Settings.check gives an engine Anchor a Skill"
     if side.engine == "stockfish":
         return StockfishAnchor(configured_stockfish_path(args.stockfish), side.skill)
     return DragonAnchor(configured_dragon_path(args.dragon), side.skill)

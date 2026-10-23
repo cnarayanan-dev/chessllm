@@ -1,10 +1,13 @@
 """The leaderboard's Rating: a maximum-likelihood Elo on the chess.com scale over one pool of every rated game (Anchor
-matches and LLM faceoffs under Standard rules), with the Dragon Anchors held at 125 × (skill + 1) ± 100.
+matches and LLM faceoffs under Standard rules), with the Dragon Anchors held at 125 × (skill + 1) ± 100 and the
+random mover at -122 ± 200.
 
 The synthetic configurations below have a planted strength: their scores against each Anchor are what the Elo model
 expects of a player that strong."""
 
 import random
+
+from chessllm.analytics.rating import Z_95
 
 from tests.analytics.test_leaderboard import HUMAN, LLAMA, QWEN, by_model, game, leaderboard  # noqa: F401 (the fixture)
 
@@ -105,6 +108,47 @@ def test_faceoffs_place_configurations_relative_to_each_other_in_the_pool(leader
     assert llama["high"] - llama["low"] > qwen["high"] - qwen["low"]  # its place is only as sure as QWEN's
     assert (gemma["estimate"], gemma["low"]) == (None, None)
     assert gemma["high"] < qwen["estimate"]
+
+
+def against_the_random_mover(llm, wins=0, losses=0, forfeits=0):
+    """Anchor matches of the LLM against the random mover, each from its own seed, colours alternating."""
+    results = ["win"] * wins + ["loss"] * losses + ["forfeit"] * forfeits
+    games = []
+    for number, outcome in enumerate(results):
+        llm_white, random_mover = number % 2 == 0, {"player": "anchor", "engine": "random", "seed": 1000 + number}
+        white, black = (llm, random_mover) if llm_white else (random_mover, llm)
+        reason = "forfeit" if outcome == "forfeit" else "checkmate"
+        games.append(game(white, black, result_of(outcome, llm_white), reason, mode="anchor_match"))
+    return games
+
+
+def test_beating_the_random_mover_but_losing_to_every_dragon_level_gives_a_finite_rating(leaderboard):
+    def to_every_dragon(llm):
+        return [game for skill in range(1, 8) for game in against_anchor(llm, skill, losses=2, forfeits=2)]
+
+    configurations = by_model(
+        leaderboard(
+            *to_every_dragon(LLAMA),  # never met the random mover
+            *to_every_dragon(QWEN),
+            *against_the_random_mover(QWEN, wins=8, losses=1, forfeits=1),
+            *against_the_random_mover(GEMMA, wins=8, losses=1, forfeits=1),  # met only the random mover
+        )
+    )
+
+    llama = configurations[("llama3:8b", "free")]["rating"]
+    assert (llama["estimate"], llama["low"]) == (None, None) and llama["high"] < 250
+    gemma = configurations[("gemma3:12b", "free")]["rating"]
+    # Scoring 80% against the random mover at -122 is about -122 + 240, and no surer than the random mover's own
+    # prior of ±200 at 95%.
+    assert gemma["low"] < 118 < gemma["high"]
+    assert gemma["high"] - gemma["low"] > 2 * Z_95 * 200
+    qwen = configurations[("qwen3.5:9b", "free")]
+    # The same results against the random mover, and the Dragon losses pull it down, but never to "< X".
+    assert qwen["rating"]["low"] < qwen["rating"]["estimate"] < qwen["rating"]["high"]
+    assert qwen["rating"]["estimate"] < gemma["estimate"]
+    assert qwen["rating"]["high"] < 250
+    assert qwen["rating"]["rated_games"] == 38
+    assert {"opponent": "anchor:random", "games": 10, "wins": 8, "draws": 0, "losses": 2} in qwen["opponents"]
 
 
 def test_a_configuration_that_won_every_anchored_game_gets_a_lower_bound(leaderboard):

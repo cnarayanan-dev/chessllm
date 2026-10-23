@@ -1,7 +1,19 @@
+import pytest
+
 from tests.conftest import play_llm, play_move
 
+from chessllm.exceptions import InvalidSettings
 from chessllm.game.settings import Settings
-from chessllm.llm.models import LlmModel
+from chessllm.game.sides import AnchorSide, LlmSide
+from chessllm.llm.models import LLM_MODELS, LlmModel
+
+
+def test_the_random_mover_plays_from_a_seed_and_has_no_skill():
+    Settings("anchor_match", LlmSide(), AnchorSide.random_mover(seed=3)).check(LLM_MODELS)
+
+    for side in (AnchorSide(engine="random", skill=None), AnchorSide(engine="random", skill=1, seed=3)):
+        with pytest.raises(InvalidSettings, match=r"The random mover \(black\) has no Skill, only the seed"):
+            Settings("anchor_match", LlmSide(), side).check(LLM_MODELS)
 
 
 def test_the_models_offered_are_the_saved_list_with_whether_each_can_think(scripted):

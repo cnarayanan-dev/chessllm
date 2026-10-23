@@ -97,6 +97,16 @@ def test_record_counts_each_llm_side_and_splits_anchor_matches_by_skill(tmp_path
     assert report["end_reasons"] == {"checkmate": 2, "move_cap": 1, "forfeit": 1}
 
 
+def test_games_against_the_random_mover_are_recorded_against_it(tmp_path):
+    random_mover = {"player": "anchor", "engine": "random", "seed": 7}
+    write_log(tmp_path, "2026-10-19T10-00-00_a", game(LLAMA, random_mover, ["f3", "e5", "g4", "Qh4#"], "0-1", "checkmate"))
+    games, _ = load_games(tmp_path)
+
+    report = analyse(games, Filters())
+
+    assert by_label(report)[("llama3:8b", "free")]["by_anchor"]["Random mover"]["losses"] == 1
+
+
 def test_a_side_with_turn_memory_is_a_configuration_of_its_own(tmp_path):
     games_dir = tmp_path / "games"
     chat = LLAMA | {"turn_memory": "chat_position"}

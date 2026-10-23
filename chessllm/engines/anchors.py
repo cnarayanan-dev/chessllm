@@ -4,9 +4,13 @@ The adapters are Komodo Dragon 1 and Stockfish, both driven over UCI by python-c
 downloaded from komodochess.com (/pub/dragon.zip) and its executable's path is configured, with --dragon or
 CHESSLLM_DRAGON. Stockfish is the stand-in where Dragon can't be had: its own strength settings don't go as low as
 Dragon's Skill levels, so each of its Skill levels is a Stockfish Skill Level held to a shallow search depth, and its
-ratings are rough guesses, not published ones."""
+ratings are rough guesses, not published ones. The random legal mover, the lowest Anchor (ADR 0011), needs no engine:
+it plays a uniformly random legal move, from a seed drawn per game and logged with its side, so the game can be
+replayed."""
 
 import platform
+import random
+import secrets
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,8 +43,8 @@ class AnchorRating:
     uncertainty: float
 
 
-# Every Anchor's rating, by the Anchor's name (see anchor_name). The one place they are set: another Anchor, such as a
-# random legal mover at about -122, is added here and then rated games against it count towards the Rating.
+# Every Anchor's rating, by the Anchor's name (see anchor_name). The one place they are set: another Anchor is added
+# here and then rated games against it count towards the Rating.
 ANCHOR_RATINGS: dict[str, AnchorRating] = {
     f"anchor:dragon:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=100) for skill in DRAGON_SKILLS
 }
@@ -50,6 +54,12 @@ STOCKFISH_LEVELS: dict[int, tuple[int, int]] = {1: (0, 1), 2: (0, 2), 3: (1, 3),
 ANCHOR_RATINGS |= {
     f"anchor:stockfish:{skill}": AnchorRating(rating=125 * (skill + 1), uncertainty=300) for skill in STOCKFISH_LEVELS
 }
+# The random legal mover is at LLM Chess's calibration, -122.3 on the same Dragon-anchored chess.com scale
+# (docs/research/elo-estimation.md). It is published, not measured here, and was fitted from a pool scoring near 0%
+# against Dragon Skill 1, where the logistic model is least sure, so its prior is twice as wide as Dragon's; but the
+# mover is exactly the same program as theirs, so it is narrower than Stockfish's uncalibrated guess.
+RANDOM_MOVER = "anchor:random"
+ANCHOR_RATINGS[RANDOM_MOVER] = AnchorRating(rating=-122, uncertainty=200)
 
 
 def anchor_name(side: dict[str, Any]) -> str:
@@ -65,6 +75,28 @@ class Anchor(Protocol):
     def close(self) -> None:
         """Stop the Anchor's engine, if it has one."""
         ...
+
+
+def new_seed() -> int:
+    """A fresh seed for one game's random legal mover."""
+    return secrets.randbits(32)
+
+
+class RandomAnchor:
+    """The random legal mover: in any position, a uniformly random legal move, the same ones for the same seed. The
+    moves are drawn from in UCI order, so a seed replays the game whatever order python-chess generates them in."""
+
+    def __init__(self, seed: int) -> None:
+        self._random = random.Random(seed)
+
+    def move(self, board: chess.Board) -> chess.Move:
+        moves = sorted(board.legal_moves, key=chess.Move.uci)
+        if not moves:
+            raise AnchorUnavailable("the random mover has no legal move")
+        return self._random.choice(moves)
+
+    def close(self) -> None:
+        pass  # no engine to stop
 
 
 def configured_dragon_path(path: str | None = None) -> Path:

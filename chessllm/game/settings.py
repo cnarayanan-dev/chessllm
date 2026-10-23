@@ -65,7 +65,10 @@ class Settings:
         rules = self.the_rules()
         self.the_mode().check_sides(self.white, self.black)
         for color, anchor in self.anchor_sides().items():
-            if anchor.skill not in DRAGON_SKILLS:
+            if anchor.engine == "random":
+                if anchor.skill is not None or anchor.seed is None:
+                    raise InvalidSettings(f"The random mover ({color}) has no Skill, only the seed it plays from")
+            elif anchor.skill not in DRAGON_SKILLS:
                 low, high = DRAGON_SKILLS[0], DRAGON_SKILLS[-1]
                 skills = f"Skill {low}-{high}"
                 raise InvalidSettings(f"{anchor.engine.capitalize()} ({color}) plays at {skills}, not {anchor.skill}")

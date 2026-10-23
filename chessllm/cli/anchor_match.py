@@ -1,9 +1,12 @@
 """Play one Anchor match from the command line: a Player configuration against Dragon at a Skill and colour.
 
     uv run anchor-match --model llama3:8b --skill 1 --color white --dragon ~/dragon/dragon-osx
+    uv run anchor-match --model llama3:8b --engine random
 
 The game runs unattended through the same game session as the app's Modes, and writes its log and PGN to the
-games directory. The Dragon executable comes from --dragon, else the CHESSLLM_DRAGON environment variable."""
+games directory. The Dragon executable comes from --dragon, else the CHESSLLM_DRAGON environment variable. The random
+legal mover (--engine random) needs no engine; it plays from a fresh seed, logged with its side, and --seed with a
+logged seed replays its moves."""
 
 import argparse
 import sys
@@ -18,7 +21,7 @@ from chessllm.cli.common import (
     warn_of_turn_memory,
 )
 from chessllm.cli.common import player_for as default_player_for
-from chessllm.engines.anchors import Anchor
+from chessllm.engines.anchors import Anchor, new_seed
 from chessllm.core.config import SAMPLING_FILE
 from chessllm.core.types import COLORS, Color, opponent
 from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
@@ -34,11 +37,12 @@ FAILED = "Anchor match not played"
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="anchor-match",
-        description="Play one game of an LLM against Komodo Dragon 1, unattended, and log it.",
+        description="Play one game of an LLM against an Anchor, Komodo Dragon 1 by default, unattended, and log it.",
     )
     add_configuration_arguments(parser)
     parser.add_argument("--skill", type=int, default=1, help="Dragon's Skill level, 1-7 (default 1)")
     parser.add_argument("--color", choices=COLORS, default="white", help="the LLM's colour (default white)")
+    parser.add_argument("--seed", type=int, help="the random mover's seed, e.g. a logged one to replay (default: fresh)")
     return parser
 
 
@@ -51,12 +55,15 @@ def main(
     """Run the command; returns its exit code. anchor_for builds the Anchor, by default Dragon from --dragon."""
     args = parser().parse_args(argv)
     llm_color: Color = args.color
+    if args.engine == "random":
+        anchor_side = AnchorSide.random_mover(args.seed if args.seed is not None else new_seed())
+    else:
+        anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     try:
-        settings = anchor_match_settings(args, llm_color, args.skill, sampling_file)
+        settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     warn_of_turn_memory(args)
-    anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     if anchor_for is None:
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
     try:

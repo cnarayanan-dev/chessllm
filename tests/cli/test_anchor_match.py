@@ -195,7 +195,7 @@ def test_a_thinking_budget_reaches_the_llms_settings_and_is_logged(anchor_match,
 @pytest.mark.parametrize(
     ("args", "error"),
     [
-        (["--rules", "chaos"], "Only Stockfish can be the Anchor under Chaos rules"),
+        (["--rules", "chaos"], "Only Stockfish or the random mover can be the Anchor under Chaos rules"),
         (["--skill", "8"], "Dragon (black) plays at Skill 1-7, not 8"),
         (["--model", "nonesuch:1b"], "nonesuch:1b (white) is not in the model list"),
         (["--model", "llama3:8b", "--thinking"], "llama3:8b (white) cannot think"),
@@ -314,3 +314,46 @@ def test_a_broken_sampling_config_is_refused_before_the_game_starts(tmp_path, ca
     assert "sampling.toml: sampling options must be numbers: temperature" in capsys.readouterr().err
     assert player.built_for == []
     assert not (tmp_path / "games").exists()
+
+
+# 1. Nf3 2. Ng1 3. Nf3, whatever the random mover answers (in two moves Black can neither give check nor reach f3 or
+# g1), then the LLM forfeits its fourth turn: with no reply left, the call fails.
+KNIGHT_SHUFFLE = ["Nf3", "Ng1", "Nf3"]
+
+
+def play_the_random_mover(games_dir, sampling_file, *args: str) -> list[dict]:
+    """Runs the command against the random mover, built as the command builds it, and returns the game's events."""
+    player = ScriptedPlayer(KNIGHT_SHUFFLE)
+    code = main(
+        ["--games-dir", str(games_dir), "--engine", "random", "--color", "white", *args],
+        player_for=player.for_settings,
+        sampling_file=sampling_file,
+    )
+    assert code == 0
+    return events(games_dir)
+
+
+def test_the_random_mover_needs_no_engine_and_is_logged_with_its_seed_and_rated(tmp_path):
+    start, *moves, end = play_the_random_mover(tmp_path / "games", tmp_path / "no-sampling.toml")
+
+    [log] = (tmp_path / "games").glob("*.jsonl")
+    assert log.name.endswith("_llama3-8b_vs_random-mover.jsonl")
+    assert start["black"] == {"player": "anchor", "engine": "random", "seed": start["black"]["seed"]}
+    assert isinstance(start["black"]["seed"], int)
+    assert anchor_name(start["black"]) == "anchor:random" and "anchor:random" in ANCHOR_RATINGS
+    assert [event["type"] for event in moves].count("anchor_move") == 3
+    assert (end["result"], end["reason"]) == ("0-1", "forfeit")
+    assert pgn_game(tmp_path / "games").headers["Black"] == "Random mover"
+
+
+def test_the_seed_in_the_log_replays_the_game_against_the_random_mover(tmp_path):
+    first = play_the_random_mover(tmp_path / "first", tmp_path / "no-sampling.toml")
+    seed = first[0]["black"]["seed"]
+
+    replay = play_the_random_mover(tmp_path / "replay", tmp_path / "no-sampling.toml", "--seed", str(seed))
+
+    def moves(events):
+        return [event["move"] for event in events if event["type"] in ("llm_attempt", "anchor_move")]
+
+    assert replay[0]["black"]["seed"] == seed
+    assert moves(replay) == moves(first)

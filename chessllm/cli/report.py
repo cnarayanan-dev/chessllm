@@ -125,7 +125,7 @@ class LlmSide:
     game: Game
     color: Color
     configuration: Configuration
-    opponent: str  # "human", "Dragon skill 3", or the other LLM's model
+    opponent: str  # "human", "Dragon skill 3", "Random mover", or the other LLM's model
     outcome: str | None  # win/draw/loss from this side's view; None while unfinished
 
     @property
@@ -192,6 +192,8 @@ def llm_sides(game: Game) -> list[LlmSide]:
 
 
 def opponent_label(side: dict[str, Any]) -> str:
+    if side.get("player") == "anchor" and side.get("engine") == "random":
+        return "Random mover"
     if side.get("player") == "anchor":
         return f"{str(side.get('engine', 'anchor')).capitalize()} skill {side.get('skill', '?')}"
     if side.get("player") == "llm":
