@@ -78,7 +78,7 @@ WCAG 2.x ratios of the shipped values (AA: 4.5:1 for text, 3:1 for non-text). "T
 
 Stock shadcn neutral's muted foreground (`#737373`) fails AA on a grey page (about 4.3:1), which is why it is darker here.
 
-**Known gap**: the Moves panel's illegal-try and forfeit chips and its chaos moves (muted from that red), and the chaos caption under the board, still use the old page's raw red (`--red: #e03e3e`, `--red-soft: #fbe4e4` in `moves.css`; the same values in `board.css`) instead of `--destructive`, and it fails AA as above.
+**Known gap**: the Moves panel's illegal-try and forfeit chips and its chaos moves (muted from that red) still use the old page's raw red (`--red: #e03e3e`, `--red-soft: #fbe4e4` in `moves.css`) instead of `--destructive`, and it fails AA as above.
 
 Checks: `frontend/src/theme.test.ts` (with `frontend/src/test/contrast.ts`) reads `:root` from `index.css` and checks, at 4.5:1, `muted-foreground` on background, card, popover, muted, secondary and accent; each of foreground, card, popover, primary, secondary, accent and timer with its own `-foreground`; `destructive`, `slip` and `spawn` on card; and that the card stands out from the page (over 1.05:1). `frontend/e2e/analytics.e2e.ts` measures every text on the built Analytics page against the surface under it, all layers composited; nothing does that for the game page.
 
@@ -116,13 +116,13 @@ The page footer is one muted line of credits: the Merida pieces, the move sound 
 
 | window | columns | order |
 | --- | --- | --- |
-| over 1100px | **¼ \| ½ \| ¼** | Game card and Turn panel · board with its strips · Moves |
+| over 1100px | **¼ \| ½ \| ¼**; over 1100 × 600, the board's own width between two equal side columns (see below) | Game card and Turn panel · board with its strips · Moves |
 | 760 to 1100px | 3fr \| 2fr | the board on the left; Moves, then the Game card and Turn panel under them, on the right |
 | under 760px | one | board, Moves, Game card, Turn panel |
 
-The board column is a stack at the board's width, `min(100%, 100svh - 206px)`, so the board fits the window's height together with a player strip above and below it; what sits directly above and below the board takes its width. Under 760px the stack is the full width.
+The board column is a stack at the board's width, `min(100%, 100svh - var(--around-board))`, so the board fits the window's height together with what is around it (`--around-board`, whose parts the CSS lists: the top bar, the page's top padding, a player strip above and below it with their gaps, and a little room under the lower strip); what sits directly above and below the board takes its width. Under 760px the stack is the full width. Nothing sits under the board: a chaos move shows only as its arrow and a Spawn as its ring, on the board, and the resolver's reason is not shown.
 
-**On a wide window** (over 1100 × 600) the page fits the window, with no page scroll: the page is the window's height, the board stack is `min(100%, 100svh - 216px)`, the Game card keeps its size, the Turn panel under it scrolls inside itself, and the Moves card is the Game card's height (`--top-card`, 290px), so the Turn panel and the mistakes card start level. The Game card is taller only when a player's row holds that side's own settings.
+**On a wide window** (over 1100 × 600) the page fits the window, with no page scroll: the page is the window's height, and `--around-board` takes in the page's bottom padding and the footer too. The board is as large as the window's height allows, but no wider than the larger of half the row and the row less two side columns of `--side-min` (300px): on a tall window the side columns keep `--side-min` while the board grows past half, on a narrow one the board stops at half, and on a short one the height decides and the side columns take the rest. The board column is as wide as the board, and the side columns share the rest equally. The Game card keeps its size, the Turn panel under it scrolls inside itself, and the Moves card is the Game card's height (`--top-card`, 290px), so the Turn panel and the mistakes card start level. The Game card is taller only when a player's row holds that side's own settings.
 
 **Orientation** (`orientation` in `frontend/src/game/gameLoop.ts`): in **Play LLM** the human's side is at the bottom; in an **LLM faceoff** White is.
 
@@ -195,7 +195,7 @@ There is no Back to live button: → up to the latest move, or clicking it, retu
 
 ## Board
 
-Unchanged by the restyle (`frontend/src/components/board/`): cm-chessboard with the lichess look (`#f0d9b5` / `#b58863` squares, olive last-move tint, green dots, check glow), Merida pieces, the move sound. Its flashes (`flashes.css`: the centre card of an LLM turn's mistakes, the amber slip bubble) and the chaos caption under the board (`board.css`, red for a chaos move, `--spawn` for a Spawn) keep the old page's look.
+Unchanged by the restyle (`frontend/src/components/board/`): cm-chessboard with the lichess look (`#f0d9b5` / `#b58863` squares, olive last-move tint, green dots, check glow), Merida pieces, the move sound. Its flashes (`flashes.css`: the centre card of an LLM turn's mistakes, the amber slip bubble) and the chaos move's red arrow and the Spawn's purple ring (`board.css`) keep the old page's look. There is no caption under the board.
 
 ## Analytics page
 

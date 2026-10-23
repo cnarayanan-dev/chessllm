@@ -4,10 +4,15 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
   grid-template-areas: "game board moves";
   align-items: start;
-  gap: 32px;
+  /* The gap between the columns, and the page's padding at their sides. */
+  --col-gap: 32px;
+  /* What the board's height gives up to fit the window: the top bar (60px), the page's top padding (4px), a player
+     strip above and below it (48px each) with their gaps (10px each), and 8px under the lower strip. */
+  --around-board: 188px;
+  gap: var(--col-gap);
   max-width: 1680px;
   margin: 0 auto;
-  padding: 4px 32px 40px;
+  padding: 4px var(--col-gap) 40px;
 }
 .game-layout > .game-column { grid-area: game; }
 .game-layout > .board-column { grid-area: board; }
@@ -15,8 +20,8 @@
 .game-column, .moves-column { display: flex; flex-direction: column; gap: 20px; }
 .board-column { display: flex; justify-content: center; }
 /* The board and whatever sits directly above and below it, at the board's width. The board fits the window's
-   height, less the top bar, the page's padding and a player strip above and below it. */
-.board-stack { width: min(100%, calc(100svh - 206px)); display: flex; flex-direction: column; gap: 10px; }
+   height, less what is around it. */
+.board-stack { width: min(100%, calc(100svh - var(--around-board))); display: flex; flex-direction: column; gap: 10px; }
 
 /* Two columns: the board, and the moves with the Game card under them. */
 @media (max-width: 1100px) {
@@ -45,7 +50,19 @@
   .page { height: 100svh; display: flex; flex-direction: column; overflow: hidden; }
   .page > .game-layout { flex: 1 1 0; min-height: 0; width: 100%; padding-bottom: 8px; grid-template-rows: minmax(0, 1fr); }
   .page > footer { padding-bottom: 8px; }
-  .board-stack { width: min(100%, calc(100svh - 216px)); }
+  /* The board is as large as the window's height allows, the page's bottom padding (8px) and the footer (24px) under
+     it too, but no wider than the larger of half the row and the row less two side columns of --side-min. Its column
+     is as wide as the board, and the side columns share the rest. (100cqw is the row and its two gaps.) */
+  .game-layout {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    container-type: inline-size;
+    --around-board: 212px;
+    --side-min: 300px;
+    --row: calc(100cqw - 2 * var(--col-gap));
+  }
+  .board-stack {
+    width: min(calc(100svh - var(--around-board)), max(calc(var(--row) / 2), calc(var(--row) - 2 * var(--side-min))));
+  }
   .game-column, .moves-column { max-height: 100%; min-height: 0; }
   .moves-column { align-self: stretch; }
   .game-column > :last-child { min-height: 0; overflow-y: auto; }

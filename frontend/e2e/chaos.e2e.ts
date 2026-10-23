@@ -20,7 +20,6 @@ async function expectPiece(page: Page, name: string, piece: string) {
 }
 const arrows = (page: Page) => page.locator('.chessboard .arrow.chaos-arrow')
 const spawnMarker = (page: Page) => page.locator('.chessboard .marker.spawn')
-const caption = (page: Page) => page.getByTestId('chaos-caption')
 const moves = (page: Page) => page.getByTestId('moves')
 const lastMove = (page: Page) => moves(page).locator('.ply.last')
 /** The move viewed in the move history. */
@@ -67,23 +66,20 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
 
   // The bishop jumps over its own pawn on e7.
   await move(page, 'e2e4', 'Bb4')
-  await expect(caption(page)).toContainText('Bf8→b4: the bishop on f8 moves')
   await expect(arrows(page)).toHaveCount(1)
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'f8b4')
   await expectPiece(page, 'b4', 'bb')
   await expect(lastMove(page)).toHaveClass(/chaos/)
   await expect(page.locator('.center-flash')).toHaveCount(0)
 
-  // The human's move clears the caption and the arrow.
+  // The human's move clears the arrow.
   await move(page, 'c2c3', 'Qg5')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'd8g5')
   await move(page, 'd2d4', 'e5')
-  await expect(caption(page)).toHaveCount(0)
   await expect(arrows(page)).toHaveCount(0)
 
   // The queen is taken, so the next queen move is a spawn.
   await move(page, 'c1g5', 'Qd5')
-  await expect(caption(page)).toContainText('Qd5: no queen on the board; one appears on d5')
   await expect(spawnMarker(page)).toHaveCount(1)
   await expect(arrows(page)).toHaveCount(0)
   await expectPiece(page, 'd5', 'bq')
@@ -94,7 +90,6 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
 
   // Castling with the knight still on g8: the king and the rook move anyway, the knight is taken.
   await move(page, 'g1f3', 'O-O')
-  await expect(caption(page)).toContainText('O-O: illegal O-O: king e8→g8, rook h8→f8')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'e8g8')
   await expectPiece(page, 'g8', 'bk')
   await expectPiece(page, 'f8', 'br')
@@ -109,23 +104,20 @@ test('a Play LLM game under Chaos rules: a chaos move, a spawn, an illegal castl
   await expect(result).toContainText(/.+ left its king hanging/)
   await expect(page.getByTestId('totals')).toHaveText('5 illegal tries · 0 notation slips · 5 chaos moves (1 spawn)')
 
-  // The history replays the spawn and the chaos move, with their marker, arrow and caption.
+  // The history replays the spawn and the chaos move, with their marker and arrow.
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('Qd5')
-  await expect(caption(page)).toContainText('Qd5: no queen on the board; one appears on d5')
   await expect(spawnMarker(page)).toHaveCount(1)
   await expectPiece(page, 'd5', 'bq')
 
   await moves(page).getByRole('button', { name: 'Bb4' }).click()
   await expect(viewedMove(page)).toHaveText('Bb4')
-  await expect(caption(page)).toContainText('Bf8→b4: the bishop on f8 moves')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'f8b4')
   await expect(spawnMarker(page)).toHaveCount(0)
   await expectPiece(page, 'b4', 'bb')
   await expect(pieceOn(page, 'f8')).toHaveCount(0)
 
   await page.keyboard.press('ArrowLeft')
-  await expect(caption(page)).toHaveCount(0)
   await expect(arrows(page)).toHaveCount(0)
   await expectPiece(page, 'f8', 'bb')
 })
@@ -155,7 +147,6 @@ test('an LLM faceoff under Chaos rules, started from the New game sheet, ends in
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('ArrowLeft')
   await expect(viewedMove(page)).toHaveText('Qxf7')
-  await expect(caption(page)).toContainText('Qd1→f7: no queen can reach f7 by its movement; d1 is nearest')
   await expect(arrows(page)).toHaveAttribute('data-arrow', 'd1f7')
 })
 

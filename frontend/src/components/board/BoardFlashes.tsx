@@ -14,7 +14,7 @@ const SHOWN_MS = 7400
 
 type Box = { x: number; y: number; width: number; height: number }
 
-// A chaos move was played, so it is shown on the board with its arrow and caption, not as an illegal try here.
+// A chaos move was played, so it is shown on the board with its arrow, not as an illegal try here.
 function CenterFlash({ turn, maxAttempts }: { turn: LlmTurn; maxAttempts: number }) {
   const illegal = turn.attempts.filter(illegalTry)
   const error = turn.attempts.find((attempt) => attempt.error)?.error // a forfeit with no answer

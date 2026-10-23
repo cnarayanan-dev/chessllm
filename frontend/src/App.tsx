@@ -14,7 +14,7 @@ import { thenFrom } from '@/components/top-bar/then'
 import { TopBar } from '@/components/top-bar/TopBar'
 import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { chaosShown, type ChaosShown } from '@/game/chaos'
+import { chaosShown } from '@/game/chaos'
 import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
@@ -35,16 +35,6 @@ const keyTakenElsewhere = (event: KeyboardEvent) =>
   event.shiftKey ||
   (event.target instanceof HTMLElement &&
     (event.target.isContentEditable || !!event.target.closest('input, textarea, select, [role="dialog"]')))
-
-/** The caption under the board for the chaos move or spawn shown, live or in the move history. */
-function ChaosCaption({ chaos }: { chaos: ChaosShown }) {
-  return (
-    <div data-testid="chaos-caption" className={`chaos-caption ${chaos.kind}`} key={chaos.caption}>
-      {chaos.kind === 'spawn' ? '✦ ' : '↯ '}
-      {chaos.caption}
-    </div>
-  )
-}
 
 export default function App() {
   const { state, newGame, humanMove, viewPly, step } = useGameLoop()
@@ -159,7 +149,6 @@ export default function App() {
                 {!history && <BoardFlashes flash={state.flash} maxAttempts={game.settings.max_attempts} />}
               </Board>
               {strip(game, orientation(game))}
-              {chaos && <ChaosCaption chaos={chaos} />}
             </>
           ) : state.noGame ? (
             <Board fen={EMPTY_BOARD} orientation="white" />

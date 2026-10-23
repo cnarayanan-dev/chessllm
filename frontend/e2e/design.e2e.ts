@@ -128,7 +128,7 @@ async function columns(page: Page) {
   return { game: await box('game-column'), board: await box('board-column'), moves: await box('moves-column') }
 }
 
-test('at desktop width the game page has three columns: the Game card ¼, the board ½, the moves ¼', async ({ page }) => {
+test('at desktop width the game page has three columns: the Game card, the board, the moves', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await openGame(page)
 
@@ -136,10 +136,34 @@ test('at desktop width the game page has three columns: the Game card ¼, the bo
   expect(game.x + game.width).toBeLessThan(board.x)
   expect(board.x + board.width).toBeLessThan(moves.x)
   expect(new Set([game.y, board.y, moves.y]).size).toBe(1)
-  expect(board.width / game.width).toBeCloseTo(2, 1)
   expect(moves.width).toBeCloseTo(game.width, 0)
   await expect(page.getByRole('region', { name: 'Game' })).toBeVisible()
 })
+
+// The board on a wide window, worked out by hand: the largest square the height allows (the window less 212px), but
+// no wider than the larger of half the row and the row less two 300px side columns. The row is the page's width (at
+// most 1680px) less its 32px padding and two 32px gaps.
+for (const { width, height, size, by } of [
+  { width: 1440, height: 900, size: 688, by: 'the height' }, // row 1312: up to max(656, 712)
+  { width: 1600, height: 1000, size: 788, by: 'the height' }, // row 1472: up to max(736, 872)
+  { width: 1920, height: 800, size: 588, by: 'the height' }, // row 1552: up to max(776, 952)
+  { width: 1101, height: 900, size: 486.5, by: 'half the row' }, // row 973: max(486.5, 373); the height allows 688
+  { width: 1101, height: 600, size: 388, by: 'the height' }, // row 973: up to 486.5
+]) {
+  test(`on a wide window, ${width}×${height}, the board is ${size}px, bound by ${by}, the side columns alike`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height })
+    await openGame(page)
+
+    const { game, board, moves } = await columns(page)
+    expect(Math.abs(board.width - size)).toBeLessThanOrEqual(1)
+    expect(moves.width).toBeCloseTo(game.width, 0)
+    // A board past half the row leaves each side column 300px at least.
+    const row = Math.min(width, 1680) - 64 - 64
+    if (size > row / 2) expect(game.width).toBeGreaterThanOrEqual(300)
+  })
+}
 
 for (const [width, height] of [
   [1440, 900],
@@ -159,8 +183,23 @@ for (const [width, height] of [
     expect(page_.turnPanel).toBe('auto')
     const { game, board, moves } = await columns(page)
     for (const column of [game, board, moves]) expect(column.y + column.height).toBeLessThanOrEqual(height)
+    // The board is the largest square that fits: its stack, with a player strip above and below, fills the
+    // column's height, down to where the moves column ends.
+    expect(Math.abs(board.y + board.height - (moves.y + moves.height))).toBeLessThanOrEqual(1)
   })
 }
+
+test('on a short window under 1100px the board and its player strips fit the window, with no room left under them', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 600 })
+  await openGame(page)
+
+  const strip = (await page.getByTestId('strip-white').boundingBox())!
+  const bottom = strip.y + strip.height
+  expect(bottom).toBeLessThanOrEqual(600)
+  expect(bottom).toBeGreaterThanOrEqual(600 - 9)
+})
 
 test('between 760px and 1100px: two columns, the board, and the moves with the Game card under them', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 })
