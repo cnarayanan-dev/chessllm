@@ -163,7 +163,7 @@ describe('with no current game', () => {
   const defaults = {
     mode: 'play_llm',
     white: { player: 'human' },
-    black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'listed', retry_feedback: 'explained' },
+    black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'listed', retry_feedback: 'explained', turn_memory: 'fresh' },
     rules: 'standard',
     max_attempts: 7,
   }
@@ -429,7 +429,7 @@ test("New game opens the sheet with the running game's settings; starting replac
   expect(backend.sentTo('POST /api/games')[0].body).toEqual({
     mode: 'play_llm',
     white: { player: 'human' },
-    black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+    black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' },
     rules: 'standard',
     max_attempts: 5,
   })
@@ -453,7 +453,7 @@ describe('Rematch', () => {
     await llmMoving('white')
     expect(backend.sentTo('POST /api/games')[0].body).toEqual({
       mode: 'play_llm',
-      white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+      white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' },
       black: { player: 'human' },
       rules: 'standard',
       max_attempts: 5,
@@ -525,7 +525,7 @@ test("with Prompt lab on, Try on the LLM's last turn waits while its next turn r
   localStorage.setItem('chessllm.promptLab', 'on')
   const turn = later()
   const afterNf3 = afterE4({ pgn: '1. e4 e5 2. Nf3', plies: plies(E4, E5, NF3), llm_turns: [aTurn('e5')] })
-  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], default_for: ['free'] }]
+  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], turn_memories: ['fresh'], default_for: ['free'] }]
   fakeBackend()
     .on('GET /api/games/current', Response.json(afterNf3))
     .on('POST /api/games/current/llm-turn', turn.promise)
@@ -553,7 +553,7 @@ describe('Pause', () => {
   // A faceoff loaded as Black's turn runs, then that turn landed.
   const afterWhite = afterE4({ settings, human_legal_moves: [], llm_turn: white, llm_turns: [white] })
   const afterBlack = afterE5({ settings, human_legal_moves: [], llm_turn: black, llm_turns: [white, black], running_s: null })
-  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], default_for: ['free'] }]
+  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], turn_memories: ['fresh'], default_for: ['free'] }]
   const pauseButton = (name: 'Pause' | 'Resume') => within(gameCard()).getByRole('button', { name })
   beforeEach(() => localStorage.setItem('chessllm.promptLab', 'on'))
   afterEach(() => localStorage.clear())
@@ -683,7 +683,7 @@ describe('the New game sheet', () => {
     await waitFor(() => expect(players()).toEqual(['White qwen3.5:9b', 'Black You']))
     expect(backend.sentTo('POST /api/games')[0].body).toEqual({
       mode: 'play_llm',
-      white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+      white: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' },
       black: { player: 'human' },
       rules: 'standard',
       max_attempts: 5,

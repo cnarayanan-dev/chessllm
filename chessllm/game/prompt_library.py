@@ -1,30 +1,35 @@
 """The Prompt library (ADR 0010): the default Prompt templates, as their files say now, and the saved ones, each a
 JSON file in the library's folder, so saved prompts show up in git. A saved Prompt template never changes, and an
 old one is only hidden: left out of the list, it still resolves for the games that play it. A default can be hidden
-too, until the app can play it: the Moves templates, until it plays Turn memory chat_moves (#108), and the Tools
-template, which only the benchmark's commands can play (ADR 0011)."""
+too, as the Tools template is, which only the benchmark's commands can play (ADR 0011)."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import get_args
 
 from chessllm.exceptions import InvalidSettings
 from chessllm.game.llm_turn.prompt import DefaultTemplate, check_prompt_template, default_template
-from chessllm.game.sides import LISTED, LlmConstraints, PromptTemplate
+from chessllm.game.sides import LISTED, LlmConstraints, PromptTemplate, TurnMemory
 
 LLM_CONSTRAINTS: tuple[LlmConstraints, ...] = get_args(LlmConstraints)
+TURN_MEMORIES: list[TurnMemory] = list(get_args(TurnMemory))
+# The Turn memories whose turns show the position, which every default template but Moves fits.
+SHOWING_THE_POSITION: list[TurnMemory] = [memory for memory in TURN_MEMORIES if memory != "chat_moves"]
 
 
 @dataclass(frozen=True)
 class LibraryEntry:
     """A Prompt template of the library, with the LLM constraints it fits (check_prompt_template), and those it is
-    the Default of: what a side under them plays when it asks for no template."""
+    the Default of under the Turn memories it fits (check_turn_memory): what a side under them plays when it asks for
+    no template."""
 
     template: PromptTemplate
     fits: list[LlmConstraints]
     default_for: list[LlmConstraints]
     hidden: bool = False
+    # A default template's own: chat_moves alone for Moves, every other for the rest; a saved one's, all of them.
+    turn_memories: list[TurnMemory] = field(default_factory=lambda: list(TURN_MEMORIES))
 
 
 class PromptLibrary:
@@ -57,23 +62,27 @@ class PromptLibrary:
 
 def default_entries() -> list[LibraryEntry]:
     """The default Prompt templates as their files say now: Default and Described without the Legal-move list, then
-    with it, each followed by Moves, the Default under Turn memory chat_moves, and Tools, the Default of a side with
-    Tools. Moves is hidden until the app plays a conversation (#108): under fresh Turn memory its turns would show the
-    LLM only the last move. Tools is hidden, as the app can't give a side Tools."""
+    with it, each followed by Moves, the Default under Turn memory chat_moves and fitting no other, and Tools, the
+    Default of a side with Tools. Tools is hidden, as the app can't give a side Tools."""
     templates: dict[str, PromptTemplate] = {}
+    kinds: dict[str, DefaultTemplate] = {}
     default_for: dict[str, list[LlmConstraints]] = {}
-    hidden: set[str] = set()
     for llm_constraints in sorted(LLM_CONSTRAINTS, key=lambda constraints: constraints in LISTED):
         for kind in get_args(DefaultTemplate):
             template = default_template(llm_constraints, kind)
             templates.setdefault(template.id, template)
+            kinds[template.id] = kind
             default_for.setdefault(template.id, [])
-            if kind == "default":
+            if kind in ("default", "moves"):
                 default_for[template.id].append(llm_constraints)
-            if kind in ("moves", "tools"):
-                hidden.add(template.id)
     return [
-        LibraryEntry(template, fits(template), default_for[template_id], hidden=template_id in hidden)
+        LibraryEntry(
+            template,
+            fits(template),
+            default_for[template_id],
+            hidden=kinds[template_id] == "tools",
+            turn_memories=["chat_moves"] if kinds[template_id] == "moves" else SHOWING_THE_POSITION,
+        )
         for template_id, template in templates.items()
     ]
 

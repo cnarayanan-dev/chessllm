@@ -16,6 +16,12 @@ class NoGameStarted(ChessLlmError):
         super().__init__("no game started")
 
 
+class NoLlmAttempt(ChessLlmError):
+    """The game has played no such attempt of an LLM turn, so it has no Prompt to show."""
+
+    code = "no_llm_attempt"
+
+
 class RejectedHumanMove(ChessLlmError):
     """A human's move can't be played: it is illegal (illegal_move) or not UCI (invalid_move), no human plays in
     the game (not_human_turn), or the game is over (game_over)."""

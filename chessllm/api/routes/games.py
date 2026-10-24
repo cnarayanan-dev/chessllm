@@ -1,4 +1,4 @@
-"""The current game: starting one, its state, a human's move and an LLM turn."""
+"""The current game: starting one, its state, a human's move, an LLM turn and the whole Prompt of an attempt."""
 
 import logging
 from dataclasses import replace
@@ -15,9 +15,11 @@ from chessllm.exceptions import (
     InvalidSamplingConfig,
     InvalidSettings,
     NoGameStarted,
+    NoLlmAttempt,
     RefusedLlmTurn,
     RejectedHumanMove,
 )
+from chessllm.game.llm_turn.conversation import TurnPrompt, turn_prompt
 from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.records import GameState
 from chessllm.game.session import GameSession
@@ -45,15 +47,6 @@ def start_game(
     new_game: NewGame | None = None,
 ) -> GameState:
     new_game = new_game or NewGame()
-    for color, side in (("white", new_game.white), ("black", new_game.black)):
-        # Hidden from the schema until the page shows a conversation's whole Prompt (#108): it would show only what
-        # each attempt added (ADR 0009).
-        if isinstance(side, LlmSide) and side.turn_memory != "fresh":
-            refused = (
-                f"A new game takes no Turn memory but fresh yet: the LLM side ({color}) can't play "
-                f"{side.turn_memory} from the app, only from the batch commands"
-            )
-            raise InvalidSettings(refused, code="turn_memory_not_accepted")
     settings = Settings(
         new_game.mode,
         with_template(new_game.white, "white", library),
@@ -91,6 +84,17 @@ def with_template(side: SideIn, color: Color, library: PromptLibrary) -> SideIn:
 @router.get("/api/games/current", responses=error_responses(NoGameStarted))
 def get_game(session: CurrentGame) -> GameState:
     return session.state()
+
+
+@router.get(
+    "/api/games/current/llm-turns/{ply}/attempts/{attempt}/prompt",
+    responses=error_responses(NoGameStarted, NoLlmAttempt),
+)
+def get_attempt_prompt(ply: int, attempt: int, session: CurrentGame) -> TurnPrompt:
+    """The whole Prompt of an attempt (numbered from 1) of the LLM turn at ply, by turn, as the LLM received it. In a
+    conversation kept by Turn memory the state records only what each attempt added (ADR 0009), so the Turn panel
+    asks for it here, rebuilt from the records, with how many of the side's earliest turns were trimmed from it."""
+    return turn_prompt(session.state().llm_turns, ply, attempt)
 
 
 @router.post("/api/games/current/moves", responses=error_responses(RejectedHumanMove, NoGameStarted))

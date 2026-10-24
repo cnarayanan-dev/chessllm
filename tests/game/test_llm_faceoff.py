@@ -141,6 +141,7 @@ def test_each_llm_side_gets_its_own_player_built_from_the_games_settings(faceoff
         "thinking": False,
         "llm_constraints": "free",
         "retry_feedback": "explained",
+        "turn_memory": "fresh",
     }
 
 

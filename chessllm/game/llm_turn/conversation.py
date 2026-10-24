@@ -17,7 +17,10 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from pydantic import BaseModel
+
 from chessllm.core.types import Color
+from chessllm.exceptions import NoLlmAttempt
 from chessllm.game.llm_turn.prompt import fill_system_prompt
 from chessllm.game.records import Attempt, LlmTurn, PromptMessage
 from chessllm.game.sides import BenchmarkLlmSide, LlmSide, PromptTemplate, TurnMemory
@@ -186,9 +189,43 @@ def full_prompt(llm_turns: Sequence[LlmTurn], ply: int, attempt: int) -> list[Pr
     turn = next(turn for turn in llm_turns if turn.ply == ply)
     if turn.remembered is None:
         return list(turn.attempts[attempt - 1].prompt or [])
+    return turn_prompt(llm_turns, ply, attempt).messages()
+
+
+class PromptTurn(BaseModel):
+    """One turn of a rebuilt Prompt: the side's turn, numbered from 1, and the messages it put in the Prompt."""
+
+    number: int
+    messages: list[PromptMessage]
+
+
+class TurnPrompt(BaseModel):
+    """The whole Prompt of an attempt by turn, as the Turn panel shows it: the System prompt, how many of the side's
+    earliest turns had been trimmed from its conversation to fit the context, and each turn the Prompt holds, the
+    attempt's own last. A fresh attempt's holds its own turn only, and none is trimmed from it."""
+
+    system: PromptMessage
+    trimmed: int
+    turns: list[PromptTurn]
+
+    def messages(self) -> list[PromptMessage]:
+        """The Prompt as it was sent: the System prompt, then each turn's messages."""
+        return [self.system, *(message for turn in self.turns for message in turn.messages)]
+
+
+def turn_prompt(llm_turns: Sequence[LlmTurn], ply: int, attempt: int) -> TurnPrompt:
+    """The whole Prompt of an attempt (numbered from 1 in its turn) of the LLM turn at ply, by turn, rebuilt from the
+    game's LLM turns as full_prompt has it. Raises NoLlmAttempt if the game has played no such attempt."""
+    turn = next((turn for turn in llm_turns if turn.ply == ply), None)
+    if turn is None or not 1 <= attempt <= len(turn.attempts):
+        raise NoLlmAttempt(f"the game has played no attempt {attempt} of an LLM turn at ply {ply}")
+    if turn.remembered is None:
+        [system, *messages] = turn.attempts[attempt - 1].prompt or []
+        number = len(side_turns(llm_turns, turn))
+        return TurnPrompt(system=system, trimmed=0, turns=[PromptTurn(number=number, messages=messages)])
     remembered = turn.held(attempt)
     assert remembered is not None, "a turn of a conversation"
-    return held(llm_turns, turn, remembered) + kept(turn.attempts[:attempt], ended=False)
+    return by_turn(llm_turns, turn, remembered, kept(turn.attempts[:attempt], ended=False))
 
 
 def counterpart_prompt(llm_turns: Sequence[LlmTurn], ply: int) -> list[PromptMessage]:
@@ -201,18 +238,27 @@ def counterpart_prompt(llm_turns: Sequence[LlmTurn], ply: int) -> list[PromptMes
     attempt = turn.legal_counterpart.attempt
     if attempt.remembered is None:
         return list(attempt.prompt or [])
-    return held(llm_turns, turn, attempt.remembered) + kept(turn.attempts, ended=True) + list(attempt.prompt or [])
+    own = kept(turn.attempts, ended=True) + list(attempt.prompt or [])
+    return by_turn(llm_turns, turn, attempt.remembered, own).messages()
 
 
-def held(llm_turns: Sequence[LlmTurn], turn: LlmTurn, remembered: int) -> list[PromptMessage]:
-    """What a conversation sent before a turn of it: the side's System prompt and the last remembered of its
-    earlier turns, each as it ended."""
-    side = [earlier for earlier in llm_turns if earlier.color == turn.color and earlier.ply <= turn.ply]
-    [system, *_] = side[0].attempts[0].prompt or []
-    prompt = [system]
-    for earlier in side[len(side) - 1 - remembered : -1]:
-        prompt += kept(earlier.attempts, ended=True)
-    return prompt
+def by_turn(llm_turns: Sequence[LlmTurn], turn: LlmTurn, remembered: int, own: list[PromptMessage]) -> TurnPrompt:
+    """A Prompt of a conversation, by turn: the side's System prompt, the last remembered of its turns before turn,
+    each as it ended, then turn's own messages, own. The one rebuild of a conversation's Prompts (ADR 0009)."""
+    side = side_turns(llm_turns, turn)
+    first = len(side) - remembered
+    turns = [
+        PromptTurn(number=number, messages=kept(earlier.attempts, ended=True))
+        for number, earlier in enumerate(side[first - 1 : -1], start=first)
+    ]
+    turns.append(PromptTurn(number=len(side), messages=own))
+    [system, *_] = side[0].attempts[0].prompt or []  # recorded once for the game, at the side's first attempt
+    return TurnPrompt(system=system, trimmed=first - 1, turns=turns)
+
+
+def side_turns(llm_turns: Sequence[LlmTurn], turn: LlmTurn) -> list[LlmTurn]:
+    """The side's turns up to turn, its own included: turn is the last, its number in the side's turns their count."""
+    return [earlier for earlier in llm_turns if earlier.color == turn.color and earlier.ply <= turn.ply]
 
 
 def kept(attempts: Sequence[Attempt], ended: bool) -> list[PromptMessage]:

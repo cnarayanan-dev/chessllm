@@ -89,6 +89,28 @@ test('with Prompt lab on, a side picked to play Described gets the piece list in
   await expect(panel(page)).toContainText('Your pieces (Black): King e8')
 })
 
+test('a side picked to chat with moves remembers the game: the Prompt tab shows the whole conversation', async ({ page }) => {
+  await playLlm(page, ['e5', 'Nc6']) // a game on the page, so the New game sheet doesn't open by itself
+  await page.getByRole('banner').getByRole('button', { name: 'New game' }).click()
+  const sheet = page.getByRole('dialog', { name: 'New game' })
+  await sheet.getByRole('button', { name: 'Advanced settings' }).click()
+  await sheet.getByRole('radio', { name: 'Chat with moves' }).click()
+  await sheet.getByRole('button', { name: 'Play as White' }).click()
+  await expect(page.getByRole('list', { name: "Black's settings" })).toHaveText('Chat with moves')
+
+  await clickMove(page, 'e2e4')
+  await expect(lastMove(page)).toHaveText('e5')
+  await clickMove(page, 'g1f3')
+  await expect(badge(page)).toHaveText('2… Nc6')
+  await tab(page, 'Prompt').click()
+
+  const turns = panel(page).getByRole('listitem', { name: /^Turn \d$/ })
+  await expect(turns).toHaveCount(2)
+  await expect(turns.nth(0)).toContainText('Opponent played e4.')
+  await expect(turns.nth(0)).toContainText('"move": "e5"')
+  await expect(turns.nth(1)).toContainText('Opponent played Nf3.')
+})
+
 test("after a Forfeit, the last attempt's Reasoning, marked as forfeited, and every attempt one step away", async ({
   page,
 }) => {

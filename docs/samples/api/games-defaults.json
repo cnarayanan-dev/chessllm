@@ -8,7 +8,8 @@
     "model": "llama3:8b",
     "thinking": false,
     "llm_constraints": "free",
-    "retry_feedback": "explained"
+    "retry_feedback": "explained",
+    "turn_memory": "fresh"
   },
   "rules": "standard",
   "max_attempts": 5,

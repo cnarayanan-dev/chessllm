@@ -32,7 +32,7 @@ test('when a turn is already running, checks the game every 2 s until it has lan
 })
 
 test('a faceoff reloaded mid-turn waits for the running turn, which the game shows only once it has landed', async () => {
-  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' } as const
   const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
   const e4 = aTurn('e4', { ply: 1, color: 'white' })
   const e5 = aTurn('e5')

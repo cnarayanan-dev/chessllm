@@ -50,7 +50,7 @@ export function aGame(overrides: Partial<GameState> = {}): GameState {
     settings: {
       mode: 'play_llm',
       white: { player: 'human' },
-      black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' },
+      black: { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' },
       sampling: {},
       max_attempts: 5,
     },

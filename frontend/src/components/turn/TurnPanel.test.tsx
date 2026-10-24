@@ -1,8 +1,10 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Attempt, LlmTurn } from '@/api/types'
+import type { Attempt, GameState, LlmTurn, TurnPrompt } from '@/api/types'
 import { TurnPanel } from '@/components/turn/TurnPanel'
+import { fakeBackend } from '@/test/fakeBackend'
 import { aTurn, afterE4, afterE5, chaosGame, E4, E5, NF3, NC6, plies } from '@/test/games'
 
 beforeEach(() => localStorage.clear())
@@ -73,7 +75,7 @@ test('in the move history the forfeited turn is not shown: it has no move on the
 })
 
 test('in a faceoff the badge still names only the move', () => {
-  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' } as const
   const game = afterE5({
     settings: { ...afterE5().settings, mode: 'llm_faceoff', white: { ...llm, model: 'gemma3:4b' }, black: llm },
     llm_turns: [aTurn('e4', { ply: 1, color: 'white' }), aTurn('e5')],
@@ -177,6 +179,77 @@ test('a turn with one attempt has no stepper', () => {
   render(<TurnPanel game={twoMovesIn()} ply={4} live />)
 
   expect(within(panel()).queryByRole('button', { name: 'Earlier attempt' })).not.toBeInTheDocument()
+})
+
+describe('a conversation kept by Turn memory', () => {
+  const PROMPT_ROUTE = 'GET /api/games/current/llm-turns/4/attempts/1/prompt'
+  const TRIMMED = "Dropped from the conversation, oldest first, to fit the model's context."
+  /** 1. e4 e5 2. Nf3 Nc6, the LLM playing Black under Chat with moves: each attempt records only what it added. */
+  const chatting = () =>
+    afterE5({
+      plies: plies(E4, E5, NF3, NC6),
+      settings: { ...afterE5().settings, black: { ...llm, turn_memory: 'chat_moves' } },
+      llm_turns: [aTurn('e5', { remembered: 0 }), aTurn('Nc6', { ply: 4, remembered: 0 })],
+    })
+  const llm = afterE5().settings.black as Extract<GameState['settings']['black'], { player: 'llm' }>
+  /** The second turn's whole Prompt as the API rebuilds it, `trimmed` of the side's earliest turns dropped. */
+  const rebuilt = (trimmed: number, turns: TurnPrompt['turns']): TurnPrompt => ({
+    system: { role: 'system', content: SYSTEM },
+    trimmed,
+    turns,
+  })
+  const opponent = (move: string) => ({ role: 'user' as const, content: `Opponent played ${move}.` })
+  const answer = (move: string) => ({ role: 'assistant' as const, content: JSON.stringify({ move }) })
+
+  function renderChat() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TurnPanel game={chatting()} ply={4} live />
+      </QueryClientProvider>,
+    )
+  }
+
+  test('the Prompt tab shows the whole conversation the API rebuilt, turn by turn', async () => {
+    const backend = fakeBackend().on(
+      PROMPT_ROUTE,
+      Response.json(rebuilt(0, [{ number: 1, messages: [opponent('e4'), answer('e5')] }, { number: 2, messages: [opponent('Nf3')] }])),
+    )
+    renderChat()
+
+    await userEvent.click(tab('Prompt'))
+
+    const turns = await within(panel()).findAllByRole('listitem', { name: /^Turn \d$/ })
+    expect(turns.map((turn) => turn.getAttribute('aria-label'))).toEqual(['Turn 1', 'Turn 2'])
+    expect(within(turns[0]).getByText('Opponent played e4.')).toBeVisible()
+    expect(within(turns[0]).getByText("Opponent's move")).toBeVisible()
+    expect(within(turns[0]).getByText('{"move":"e5"}')).toBeVisible()
+    expect(within(turns[1]).getByText('Opponent played Nf3.')).toBeVisible()
+    expect(within(panel()).getByRole('button', { name: /System prompt/ })).toBeVisible()
+    expect(within(panel()).queryByText(/trimmed/)).not.toBeInTheDocument()
+    expect(backend.sentTo(PROMPT_ROUTE)).toHaveLength(1)
+  })
+
+  test('where turns were trimmed, a marker names them, why in its tooltip', async () => {
+    fakeBackend().on(PROMPT_ROUTE, Response.json(rebuilt(5, [{ number: 6, messages: [opponent('Nf3')] }])))
+    renderChat()
+
+    await userEvent.click(tab('Prompt'))
+
+    const marker = await within(panel()).findByText('Turns 1–5 trimmed')
+    expect(marker).toHaveAttribute('aria-description', TRIMMED)
+    await userEvent.hover(marker)
+    expect((await screen.findByText(TRIMMED)).closest('[data-slot=tooltip-content]')).toBeInTheDocument()
+  })
+
+  test('one turn trimmed is named alone', async () => {
+    fakeBackend().on(PROMPT_ROUTE, Response.json(rebuilt(1, [{ number: 2, messages: [opponent('Nf3')] }])))
+    renderChat()
+
+    await userEvent.click(tab('Prompt'))
+
+    expect(await within(panel()).findByText('Turn 1 trimmed')).toBeVisible()
+  })
 })
 
 describe('Legal counterpart', () => {

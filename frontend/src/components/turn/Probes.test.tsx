@@ -17,13 +17,15 @@ const template = (id: string, name: string | null, fits = FREE, isDefault = fals
   system_prompt: `The System prompt of ${id}.`,
   turn_template: 'PGN: $moves\nFEN: $fen',
   fits,
+  turn_memories: id.startsWith('moves') ? ['chat_moves'] : ['fresh', 'chat_position'],
   default_for: isDefault ? fits : [],
 })
 
-/** The Prompt library as GET /api/prompt-templates lists it. */
+/** The Prompt library as GET /api/prompt-templates lists it; Moves, for Chat with moves alone, is never probed with. */
 const LIBRARY = [
   template('default@1', 'Default', FREE, true),
   template('described@1', 'Described'),
+  template('moves@1', 'Moves', FREE, true),
   template('default-listed@1', 'Default listed', ['listed', 'listed_enforced'], true),
   template('terse@1', null),
 ]

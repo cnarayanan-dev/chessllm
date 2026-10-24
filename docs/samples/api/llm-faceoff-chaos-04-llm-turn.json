@@ -267,14 +267,16 @@
       "model": "gemma3:12b",
       "thinking": false,
       "llm_constraints": "listed",
-      "retry_feedback": "explained"
+      "retry_feedback": "explained",
+      "turn_memory": "fresh"
     },
     "black": {
       "player": "llm",
       "model": "llama3:8b",
       "thinking": false,
       "llm_constraints": "free",
-      "retry_feedback": "explained"
+      "retry_feedback": "explained",
+      "turn_memory": "fresh"
     },
     "sampling": {
       "temperature": 0.7,

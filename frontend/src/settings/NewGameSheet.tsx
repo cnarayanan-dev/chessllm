@@ -15,7 +15,7 @@ import { RadioGroup } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { COLOR_NAMES, LLM_CONSTRAINT_WORDS, RETRY_FEEDBACK_WORDS, RULES_WORDS } from '@/game/wording'
+import { COLOR_NAMES, LLM_CONSTRAINT_WORDS, RETRY_FEEDBACK_WORDS, RULES_WORDS, TURN_MEMORY_WORDS } from '@/game/wording'
 import { cn } from '@/lib/utils'
 import {
   COLORS,
@@ -26,6 +26,7 @@ import {
   type NextGame,
   type RetryFeedback,
   type Rules,
+  type TurnMemory,
   canThink,
   chaosAllowed,
   chooseConstraints,
@@ -36,6 +37,7 @@ import {
   choosePromptTemplate,
   chosenTemplate,
   chooseRules,
+  chooseTurnMemory,
   enforced,
   everyLlmEnforced,
   fittingTemplates,
@@ -54,7 +56,7 @@ import {
 import { usePromptLab } from '@/settings/promptLab'
 
 const THINKING = 'Reasons before each move. Slower, likely stronger.'
-const ADVANCED = 'What the LLM sees, retries, forfeit'
+const ADVANCED = 'What the LLM sees and remembers, retries, forfeit'
 const LEGAL_COUNTERPART =
   'After a Chaos move, the LLM is asked once more for a legal move: recorded, never played. One more call per Chaos move.'
 const PROMPT =
@@ -306,13 +308,17 @@ function ModelSelect({
   )
 }
 
-/** What the LLM is given, its Prompt (Prompt lab), Retry feedback, the forfeit limit and Customize per LLM. */
+/**
+ * What the LLM is given, its Prompt (Prompt lab), Retry feedback, Turn memory, the forfeit limit and Customize per
+ * LLM.
+ */
 function Advanced({ next, models, set, library }: SideProps) {
   return (
     <>
       {!next.custom && <Constraints next={next} set={set} library={library} color="white" />}
       {!next.custom && library !== undefined && <PromptPicker next={next} set={set} library={library} color="white" />}
       {!next.custom && !enforced(next, 'white') && <Feedback next={next} set={set} color="white" />}
+      {!next.custom && <Memory next={next} set={set} library={library} color="white" />}
       {!everyLlmEnforced(next) && (
         <Row label="Illegal moves before forfeit" description={maxAttemptsHint(next)}>
           <Select value={String(next.max_attempts)} onValueChange={(choice) => choice && set(chooseMaxAttempts(next, Number(choice)))}>
@@ -361,6 +367,7 @@ function Advanced({ next, models, set, library }: SideProps) {
               <Constraints next={next} set={set} library={library} color={color} />
               {library !== undefined && <PromptPicker next={next} set={set} library={library} color={color} />}
               {!enforced(next, color) && <Feedback next={next} set={set} color={color} />}
+              <Memory next={next} set={set} library={library} color={color} />
             </section>
           )
         })}
@@ -399,7 +406,7 @@ function PromptPicker({
   color,
 }: Omit<SideProps, 'models' | 'library'> & { library: PromptTemplateInfo[] | null; color: Color }) {
   const label = perSide(next, color, 'Prompt')
-  const templates = fittingTemplates(library ?? [], value(next, color, 'llm_constraints'))
+  const templates = fittingTemplates(library ?? [], value(next, color, 'llm_constraints'), value(next, color, 'turn_memory'))
   const chosen = chosenTemplate(next, library ?? [], color)
   const name = (template: PromptTemplateInfo) => template.name ?? template.id
   return (
@@ -437,6 +444,25 @@ function Feedback({ next, set, color }: Omit<SideProps, 'models' | 'library'> & 
         name: RETRY_FEEDBACK_WORDS[choice].name,
         icon: <SettingIcon setting="retry_feedback" value={choice} />,
         description: RETRY_FEEDBACK_WORDS[choice].description,
+      }))}
+    />
+  )
+}
+
+/** A side's Turn memory: whether its turns share one conversation for the game. */
+function Memory({ next, set, library, color }: Omit<SideProps, 'models'> & { color: Color }) {
+  return (
+    <Choice<TurnMemory>
+      label="What the LLM remembers"
+      ariaLabel={perSide(next, color, 'What the LLM remembers')}
+      columns={3}
+      value={value(next, color, 'turn_memory')}
+      onChange={(choice) => set(chooseTurnMemory(next, library ?? null, color, choice))}
+      options={(Object.keys(TURN_MEMORY_WORDS) as TurnMemory[]).map((choice) => ({
+        value: choice,
+        name: TURN_MEMORY_WORDS[choice].name,
+        icon: <SettingIcon setting="turn_memory" value={choice} />,
+        description: TURN_MEMORY_WORDS[choice].description,
       }))}
     />
   )
@@ -489,7 +515,13 @@ function Players({ first: First }: { first: LucideIcon }) {
 }
 
 /** A setting value's icon, as the Game card shows it. */
-function SettingIcon({ setting, value: choice }: { setting: 'rules' | 'llm_constraints' | 'retry_feedback'; value: string }) {
+function SettingIcon({
+  setting,
+  value: choice,
+}: {
+  setting: 'rules' | 'llm_constraints' | 'retry_feedback' | 'turn_memory'
+  value: string
+}) {
   const Icon = settingIcon({ setting, value: choice })
   return <Icon className="size-5" strokeWidth={1.75} aria-hidden="true" />
 }

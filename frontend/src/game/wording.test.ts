@@ -112,7 +112,7 @@ test('an LLM under an enforced constraint has no Retry feedback; with no other L
     'rules=standard',
     'thinking=off',
   ])
-  expect(shown(faceoffOf({ llm_constraints: 'listed_enforced' }, { retry_feedback: 'hinted' }))).toEqual([
+  expect(shown(faceoffOf({ llm_constraints: 'listed_enforced' }, { retry_feedback: 'hinted', turn_memory: 'fresh' }))).toEqual([
     'llm_constraints=listed_enforced (white)',
     'llm_constraints=free (black)',
     'rules=standard',

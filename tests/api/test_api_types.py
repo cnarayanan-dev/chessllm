@@ -31,6 +31,9 @@ def test_every_api_endpoint_describes_its_response_with_a_named_model():
         ("GET", "/api/games/current"): {"$ref": "#/components/schemas/GameState"},
         ("POST", "/api/games/current/moves"): {"$ref": "#/components/schemas/GameState"},
         ("POST", "/api/games/current/llm-turn"): {"$ref": "#/components/schemas/GameState"},
+        ("GET", "/api/games/current/llm-turns/{ply}/attempts/{attempt}/prompt"): {
+            "$ref": "#/components/schemas/TurnPrompt"
+        },
         ("POST", "/api/games/current/probes"): {"$ref": "#/components/schemas/Probe"},
         ("GET", "/api/games/{game_id}/probes"): {
             "type": "array",

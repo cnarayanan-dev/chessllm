@@ -8,6 +8,10 @@
       "free",
       "blind_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": [
       "free",
       "blind_enforced"
@@ -22,7 +26,28 @@
       "free",
       "blind_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": []
+  },
+  {
+    "id": "moves@1d285de3",
+    "name": "Moves",
+    "system_prompt": "You are playing chess as $color against a human playing $opponent.\nThe game starts from the standard starting position.\nEach turn you get only your opponent's last move, in SAN. Keep track of the board yourself.\nReply with your next move in SAN (e.g. Nf6, exd5, O-O, e8=Q).\nThe move must be legal in the current position.\n\nExample:\n$example_opponent_move\nAnswer: {\"move\": \"$example_move\"}\n$example_next_opponent_move\nAnswer: {\"move\": \"$example_next_move\"}",
+    "turn_template": "$opponent_move",
+    "fits": [
+      "free",
+      "blind_enforced"
+    ],
+    "turn_memories": [
+      "chat_moves"
+    ],
+    "default_for": [
+      "free",
+      "blind_enforced"
+    ]
   },
   {
     "id": "default-listed@7d131053",
@@ -32,6 +57,10 @@
     "fits": [
       "listed",
       "listed_enforced"
+    ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
     ],
     "default_for": [
       "listed",
@@ -47,6 +76,27 @@
       "listed",
       "listed_enforced"
     ],
+    "turn_memories": [
+      "fresh",
+      "chat_position"
+    ],
     "default_for": []
+  },
+  {
+    "id": "moves-listed@cb0712ef",
+    "name": "Moves listed",
+    "system_prompt": "You are playing chess as $color against a human playing $opponent.\nThe game starts from the standard starting position.\nEach turn you get only your opponent's last move, in SAN, and the list of legal moves in SAN. Keep track of the board yourself.\nThe list contains every legal move in the current position. Its order is random and means nothing.\nChoose your next move from the list and reply with it exactly as written there (e.g. Nf6, exd5, O-O, e8=Q).\n\nExample:\n$example_opponent_move\nLegal moves: $example_legal_moves\nAnswer: {\"move\": \"$example_move\"}\n$example_next_opponent_move\nLegal moves: $example_next_legal_moves\nAnswer: {\"move\": \"$example_next_move\"}",
+    "turn_template": "$opponent_move\nLegal moves: $legal_moves",
+    "fits": [
+      "listed",
+      "listed_enforced"
+    ],
+    "turn_memories": [
+      "chat_moves"
+    ],
+    "default_for": [
+      "listed",
+      "listed_enforced"
+    ]
   }
 ]

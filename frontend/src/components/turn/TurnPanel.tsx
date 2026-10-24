@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react'
 import type { Attempt, GameState, LlmTurn, ProbeRequest } from '@/api/types'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Probes } from '@/components/turn/Probes'
-import { Prompt } from '@/components/turn/PromptMessages'
+import { AttemptPrompt } from '@/components/turn/PromptMessages'
 import { mono, quiet, RESULT_NAMES } from '@/components/turn/styles'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -140,6 +140,7 @@ export function TurnPanel({
             kind={thinks(game, turn) ? 'Thinking' : 'Reasoning'}
             tab={tab}
             onTab={choose}
+            prompt={(number) => <AttemptPrompt game={game} turn={turn} attempt={number} />}
             probes={
               promptLab && (
                 <Probes
@@ -260,11 +261,13 @@ type TurnTabsProps = {
   kind: Decision
   tab: Tab
   onTab: (tab: Tab) => void
+  /** The Prompt tab's Prompt of the attempt shown (numbered from 1). */
+  prompt: (attempt: number) => ReactNode
   /** With Prompt lab on, the row to probe the turn and its probes, at the top of the Prompt tab. */
   probes?: ReactNode
 }
 
-function TurnTabs({ turn, kind, tab, onTab, probes }: TurnTabsProps) {
+function TurnTabs({ turn, kind, tab, onTab, prompt, probes }: TurnTabsProps) {
   const count = turn.attempts.length
   const [number, setNumber] = useState(count) // the attempt shown, from 1
   const attempt = turn.attempts[number - 1]
@@ -318,10 +321,10 @@ function TurnTabs({ turn, kind, tab, onTab, probes }: TurnTabsProps) {
         {probes ? (
           <div className="flex flex-col gap-3">
             {probes}
-            <Prompt messages={attempt?.prompt ?? null} />
+            {prompt(number)}
           </div>
         ) : (
-          <Prompt messages={attempt?.prompt ?? null} />
+          prompt(number)
         )}
       </TabsContent>
       <TabsContent className={pane} value="answer">{attempt && <Answer attempt={attempt} />}</TabsContent>

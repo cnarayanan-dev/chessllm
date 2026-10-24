@@ -1,5 +1,5 @@
 // The game endpoints, typed with the generated API types.
-import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo, Ranking } from '@/api/types'
+import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo, Ranking, TurnPrompt } from '@/api/types'
 
 /** A response other than 2xx, with the backend's detail as its message. */
 export class ApiError extends Error {
@@ -46,6 +46,13 @@ export const playMove = (uci: string, signal?: AbortSignal) =>
 
 export const playLlmTurn = (signal?: AbortSignal) =>
   api<GameState>('POST', '/api/games/current/llm-turn', undefined, signal)
+
+/**
+ * The whole Prompt of an attempt (numbered from 1) of the current game's LLM turn at `ply`, by turn, rebuilt by the API
+ * from the records: in a conversation the state holds only what each attempt added (ADR 0009).
+ */
+export const getTurnPrompt = (ply: number, attempt: number, signal?: AbortSignal) =>
+  api<TurnPrompt>('GET', `/api/games/current/llm-turns/${ply}/attempts/${attempt}/prompt`, undefined, signal)
 
 /** Asks a Probe about a past LLM turn of the current game; refused (409) while an LLM turn runs. */
 export const askProbe = (request: ProbeRequest, signal?: AbortSignal) =>

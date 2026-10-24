@@ -1,10 +1,10 @@
 """Turn memory: an LLM side's Turns either start fresh, or share one conversation for the whole game, each turn
 adding its message as a fresh turn has it (chat_position). In a conversation each attempt records only the messages
-it added, and the whole Prompt is rebuilt from the records (ADR 0009). Only the batch commands play it so far."""
+it added, and the whole Prompt is rebuilt from the records (ADR 0009)."""
 
 import json
 
-from tests.conftest import Raw, ScriptedAnchor, ScriptedPlayer, play_llm
+from tests.conftest import Raw, ScriptedAnchor, ScriptedPlayer
 
 from chessllm.analytics.leaderboard import llm_configuration, settings_configuration
 from chessllm.cli.anchor_match import main as anchor_match
@@ -118,7 +118,6 @@ def test_in_a_conversation_each_attempt_records_only_the_messages_it_added(tmp_p
     assert feedback.role == "user" and feedback.content.startswith('Your move "Qxf7" is illegal')
     logged = [event for event in events(tmp_path / "games") if event["type"] == "llm_attempt"]
     assert [event["remembered"] for event in logged if event["color"] == "white"] == [0, 1, 1]
-    assert "turn_memory" not in json.dumps(state.settings.model_dump())  # out of the API's output
 
 
 def test_the_rebuilt_prompt_of_every_attempt_is_what_the_llm_received_from_the_state_and_the_log(tmp_path):
@@ -230,14 +229,4 @@ def test_fresh_is_left_out_of_the_log_and_the_configuration_so_its_id_is_unchang
         {"model": "llama3:8b", "thinking": False, "llm_constraints": "free", "retry_feedback": "explained"},
     )
     assert sample.id() == "7ec8267cd89b"
-
-
-def test_the_app_refuses_turn_memory_until_the_page_shows_a_conversations_whole_prompt(scripted):
-    client, _ = scripted([])
-
-    for memory in ("chat_position", "chat_moves"):
-        response = client.post("/api/games", json=play_llm(turn_memory=memory))
-        assert response.status_code == 400, response.text
-        assert response.json()["code"] == "turn_memory_not_accepted"
-    assert client.post("/api/games", json=play_llm(turn_memory="fresh")).status_code == 200
 

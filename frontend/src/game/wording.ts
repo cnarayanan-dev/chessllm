@@ -1,5 +1,5 @@
 // The words around the board: the settings, in the Game card and the New game sheet, and the result.
-import type { Color, GameSettings, GameState } from '@/api/types'
+import type { Color, GameSettings, GameState, TurnMemory } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
 import { humanColor } from '@/game/gameLoop'
 
@@ -74,7 +74,7 @@ export function resultText(game: GameState): { result: string; detail: string | 
 /** A setting of the running game as the Game card shows it: the Rules as an icon, the rest as text, the meaning in
  * the tooltip. */
 export type GameSetting = {
-  setting: 'llm_constraints' | 'rules' | 'retry_feedback' | 'thinking' | 'max_attempts'
+  setting: 'llm_constraints' | 'rules' | 'retry_feedback' | 'turn_memory' | 'thinking' | 'max_attempts'
   /** The setting's value as the API names it ('free', 'chaos', …), 'on' / 'off' for thinking, the number of moves. */
   value: string
   /** The short name, e.g. "Board only (Free)"; in a faceoff whose LLMs differ in it, after the side ("White: …"). */
@@ -126,6 +126,19 @@ export const RETRY_FEEDBACK_WORDS: Record<LlmSide['retry_feedback'], Words> = {
     description: 'After an illegal move the LLM is sent the same prompt again, never told its move was illegal.',
   },
 }
+/** The Turn memories: the New game sheet's options, and in the Game card "Chat with position". */
+export const TURN_MEMORY_WORDS: Record<TurnMemory, Words> = {
+  fresh: { name: 'Fresh', description: 'Every turn starts a new conversation, showing the position.' },
+  chat_position: {
+    name: 'Chat with position',
+    description: 'One conversation for the whole game, each turn adding the position as a fresh turn shows it.',
+  },
+  chat_moves: {
+    name: 'Chat with moves',
+    description:
+      "One conversation for the whole game, each turn adding only the opponent's last move: the LLM keeps track of the board.",
+  },
+}
 const shown = <T extends string, W extends Words>(words: Record<T, W>, name: (word: W) => string) =>
   Object.fromEntries(
     Object.entries<W>(words).map(([value, word]) => [value, { value, name: name(word), description: word.description }]),
@@ -133,6 +146,7 @@ const shown = <T extends string, W extends Words>(words: Record<T, W>, name: (wo
 const LLM_CONSTRAINTS = shown(LLM_CONSTRAINT_WORDS, ({ name, term }) => `${name} (${term})`)
 const RULES = shown(RULES_WORDS, ({ name }) => `${name} rules`)
 const RETRY_FEEDBACK = shown(RETRY_FEEDBACK_WORDS, ({ name }) => `${name} feedback`)
+const TURN_MEMORY = shown(TURN_MEMORY_WORDS, ({ name }) => name)
 const THINKING: Record<'on' | 'off', Shown> = {
   on: { value: 'on', name: 'Thinking on', description: 'The LLM reasons before each move.' },
   off: { value: 'off', name: 'Thinking off', description: 'The LLM answers without reasoning first.' },
@@ -141,9 +155,10 @@ const THINKING: Record<'on' | 'off', Shown> = {
 const enforced = (side: LlmSide) => side.llm_constraints === 'blind_enforced' || side.llm_constraints === 'listed_enforced'
 
 /**
- * The Game card's settings, one item each: the LLM constraints, the rules, the Retry feedback, thinking and the
- * illegal moves before forfeit. An LLM under an enforced constraint has no Retry feedback, and when every LLM is, there
- * is no forfeit limit. A setting that differs between the two LLMs of a faceoff gives one item per side.
+ * The Game card's settings, one item each: the LLM constraints, the rules, the Retry feedback, the Turn memory,
+ * thinking and the illegal moves before forfeit. An LLM under an enforced constraint has no Retry feedback, and when
+ * every LLM is, there is no forfeit limit. A setting that differs between the two LLMs of a faceoff gives one item per
+ * side. The Turn memory is always the side's own, and shown only when it isn't fresh.
  */
 export function gameSettings(game: GameState): GameSetting[] {
   const colors = llmColors(game)
@@ -166,6 +181,12 @@ export function gameSettings(game: GameState): GameSetting[] {
     ...perSide('llm_constraints', (side) => LLM_CONSTRAINTS[side.llm_constraints]),
     { setting: 'rules', ...rules, plainName: rules.name, color: null },
     ...perSide('retry_feedback', (side) => (enforced(side) ? null : RETRY_FEEDBACK[side.retry_feedback])),
+    ...colors.flatMap((color, i) => {
+      const memory = sides[i].turn_memory
+      if (memory === 'fresh') return []
+      const value = TURN_MEMORY[memory]
+      return [{ setting: 'turn_memory' as const, ...value, name: `${COLOR_NAMES[color]}: ${value.name}`, plainName: value.name, color }]
+    }),
     ...perSide('thinking', (side) => THINKING[side.thinking ? 'on' : 'off']),
     ...(sides.some((side) => !enforced(side))
       ? [

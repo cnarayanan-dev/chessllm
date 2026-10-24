@@ -66,7 +66,7 @@ test('the other values: Chaos rules as a zap', () => {
 })
 
 test('under an enforced constraint there is no Retry feedback and no forfeit limit', () => {
-  renderCard(faceoffOf({ llm_constraints: 'blind_enforced' }, { llm_constraints: 'listed_enforced', retry_feedback: 'bare' }))
+  renderCard(faceoffOf({ llm_constraints: 'blind_enforced' }, { llm_constraints: 'listed_enforced', retry_feedback: 'bare', turn_memory: 'fresh' }))
 
   expect(line("White's settings")).toEqual(['Kept legal, not told (Blind enforced)'])
   expect(line("Black's settings")).toEqual(['Shown and kept legal (Listed enforced)'])
@@ -91,7 +91,7 @@ test("a setting's meaning shows in its tooltip on hover and keyboard focus, and 
 })
 
 test("in a faceoff a setting the LLMs share is not shown; one that differs is on each player's row", () => {
-  renderCard(faceoffOf({ thinking: true }, { retry_feedback: 'bare' }))
+  renderCard(faceoffOf({ thinking: true }, { retry_feedback: 'bare', turn_memory: 'fresh' }))
 
   expect(within(gameCard()).queryByText('Board only (Free)')).not.toBeInTheDocument()
   expect(line("White's settings")).toEqual(['Explained feedback', 'Thinking on'])
@@ -100,7 +100,7 @@ test("in a faceoff a setting the LLMs share is not shown; one that differs is on
 })
 
 test("Repeat feedback is on the player's row of the LLM that plays under it, its meaning in aria-description", () => {
-  renderCard(faceoffOf({}, { retry_feedback: 'repeat' }))
+  renderCard(faceoffOf({}, { retry_feedback: 'repeat', turn_memory: 'fresh' }))
 
   expect(line("White's settings")).toEqual(['Explained feedback'])
   expect(line("Black's settings")).toEqual(['Repeat feedback'])
@@ -108,6 +108,25 @@ test("Repeat feedback is on the player's row of the LLM that plays under it, its
     'aria-description',
     'After an illegal move the LLM is sent the same prompt again, never told its move was illegal.',
   )
+})
+
+test("a Turn memory other than fresh is on the player's row of each LLM that keeps it, shared or not", () => {
+  renderCard(faceoffOf({ turn_memory: 'chat_moves' }, { turn_memory: 'chat_moves' }))
+
+  expect(line("White's settings")).toEqual(['Chat with moves'])
+  expect(line("Black's settings")).toEqual(['Chat with moves'])
+  expect(within(gameCard()).getAllByText('Chat with moves')[0]).toHaveAttribute(
+    'aria-description',
+    "One conversation for the whole game, each turn adding only the opponent's last move: the LLM keeps track of the board.",
+  )
+})
+
+test('Play LLM: the LLM keeping a conversation shows it on its row; a fresh one shows nothing', () => {
+  const chat = aGame({ settings: { ...aGame().settings, black: { ...llm, turn_memory: 'chat_position' } } })
+  renderCard(chat)
+
+  expect(line("Black's settings")).toEqual(['Chat with position'])
+  expect(within(gameCard()).queryByRole('list', { name: "White's settings" })).not.toBeInTheDocument()
 })
 
 test('the players are shown by name with their colour, without a model logo', () => {

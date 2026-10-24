@@ -3,6 +3,10 @@ import type { components } from '@/api/schema'
 
 type Schemas = components['schemas']
 
+/** An LLM side, with the settings it plays under. */
+export type LlmSide = Schemas['LlmSide']
+/** The Turn memory of an LLM side (CONTEXT.md): fresh, chat_position or chat_moves. */
+export type TurnMemory = LlmSide['turn_memory']
 // The page only shows games it starts, Play LLM and LLM faceoffs: an Anchor match is played from the command
 // line, so its Mode and Anchor side never reach the page.
 type PageSide = Exclude<Schemas['GameSettings']['white'], Schemas['AnchorSide']>
@@ -16,6 +20,8 @@ export type GameState = Omit<Schemas['GameState'], 'settings'> & { settings: Gam
 export type LlmTurn = Schemas['LlmTurn']
 export type Attempt = Schemas['Attempt']
 export type PromptMessage = Schemas['PromptMessage']
+/** The whole Prompt of an attempt by turn, rebuilt by the API from the records, with the turns trimmed from it. */
+export type TurnPrompt = Schemas['TurnPrompt']
 export type Ply = Schemas['Ply']
 /** Stockfish's judgement of the position after a ply, from White's point of view; `unjudged` says why there is none. */
 export type Evaluation = NonNullable<Ply['evaluation']>

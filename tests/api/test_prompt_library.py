@@ -11,6 +11,8 @@ from chessllm.game.llm_turn.prompt import SYSTEM_PROMPT_FILES
 
 FREE = ["free", "blind_enforced"]
 LISTED = ["listed", "listed_enforced"]
+# The Turn memories under which a turn shows the position: every one but chat_moves.
+SHOWN = ["fresh", "chat_position"]
 
 
 def library(client) -> dict[str, dict]:
@@ -39,15 +41,17 @@ def test_the_library_lists_the_default_templates_with_the_llm_constraints_each_f
 
     entries = list(library(client).values())
 
-    assert [(entry["name"], entry["fits"], entry["default_for"]) for entry in entries] == [
-        ("Default", FREE, FREE),
-        ("Described", FREE, []),
-        ("Default listed", LISTED, LISTED),
-        ("Described listed", LISTED, []),
+    assert [(entry["name"], entry["fits"], entry["turn_memories"], entry["default_for"]) for entry in entries] == [
+        ("Default", FREE, SHOWN, FREE),
+        ("Described", FREE, SHOWN, []),
+        ("Moves", FREE, ["chat_moves"], FREE),  # the Default under chat_moves
+        ("Default listed", LISTED, SHOWN, LISTED),
+        ("Described listed", LISTED, SHOWN, []),
+        ("Moves listed", LISTED, ["chat_moves"], LISTED),
     ]
-    assert re.fullmatch("described-listed@[0-9a-f]{8}", entries[3]["id"])
-    assert entries[3]["system_prompt"] == SYSTEM_PROMPT_FILES["listed"].read_text(encoding="utf-8")
-    assert entries[3]["turn_template"] == "PGN: $moves\nFEN: $fen\n$description\nLegal moves: $legal_moves"
+    assert re.fullmatch("described-listed@[0-9a-f]{8}", entries[4]["id"])
+    assert entries[4]["system_prompt"] == SYSTEM_PROMPT_FILES["listed"].read_text(encoding="utf-8")
+    assert entries[4]["turn_template"] == "PGN: $moves\nFEN: $fen\n$description\nLegal moves: $legal_moves"
 
 
 def test_a_game_started_with_a_templates_id_sends_its_prompts_and_records_its_text(scripted, tmp_path):
@@ -122,6 +126,7 @@ def test_a_saved_template_is_listed_from_its_file_and_can_be_played(scripted, tm
         "Terse", FREE, []
     )
     assert (entries["nameless@1"]["name"], entries["nameless@1"]["fits"]) == (None, LISTED)
+    assert entries["terse@1"]["turn_memories"] == ["fresh", "chat_position", "chat_moves"]  # theirs to fit
     assert [message.content for message in player.prompts[0]] == ["You are Black.", "1. e4"]
 
 

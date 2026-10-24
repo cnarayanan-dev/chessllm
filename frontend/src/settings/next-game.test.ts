@@ -26,6 +26,7 @@ const llm = (model: string, more: Partial<SideValues> = {}) => ({
   thinking: false,
   llm_constraints: 'free' as const,
   retry_feedback: 'explained' as const,
+  turn_memory: 'fresh' as const,
   ...more,
 })
 
@@ -41,7 +42,7 @@ const playLlm: GameSettings = {
 const faceoff: GameSettings = {
   mode: 'llm_faceoff',
   white: llm('qwen3.5:9b', { thinking: true }),
-  black: llm('gemma3:4b', { llm_constraints: 'listed_enforced', retry_feedback: 'bare' }),
+  black: llm('gemma3:4b', { llm_constraints: 'listed_enforced', retry_feedback: 'bare', turn_memory: 'fresh' }),
   sampling: {},
   rules: 'standard',
   max_attempts: 5,
@@ -209,8 +210,8 @@ describe('Customize per LLM', () => {
     const next = setValue(nextGameFrom(shared), 'black', 'retry_feedback', 'hinted')
 
     expect(newGameRequest(next, models)).toMatchObject({
-      white: { retry_feedback: 'hinted' },
-      black: { retry_feedback: 'hinted' },
+      white: { retry_feedback: 'hinted', turn_memory: 'fresh' },
+      black: { retry_feedback: 'hinted', turn_memory: 'fresh' },
     })
   })
 
@@ -264,7 +265,7 @@ describe('thinking', () => {
   })
 
   test('customized, each LLM thinks if its own model can', () => {
-    const next = nextGameFrom({ ...faceoff, black: llm('gemma3:4b', { thinking: true, retry_feedback: 'bare' }) })
+    const next = nextGameFrom({ ...faceoff, black: llm('gemma3:4b', { thinking: true, retry_feedback: 'bare', turn_memory: 'fresh' }) })
 
     expect(newGameRequest(next, models)).toMatchObject({ white: { thinking: true }, black: { thinking: false } })
   })

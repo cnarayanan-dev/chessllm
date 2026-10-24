@@ -66,10 +66,9 @@ class LlmSide:
     # (llm_turn.prompt.side_template). The API takes it only by its ID, so it is left out of the API's schema and
     # output; the benchmark's commands give it in full.
     prompt_template: Annotated[SkipJsonSchema[PromptTemplate | None], Field(exclude=True)] = None
-    # Whether its turns share one conversation (game/llm_turn/conversation.py). Only the benchmark's commands set it
-    # so far: the API refuses any but fresh and leaves it out of its schema and output until the page shows a
-    # conversation's whole Prompt (#108). Left out of the game log when fresh, so games from before it log the same.
-    turn_memory: Annotated[SkipJsonSchema[TurnMemory], Field(exclude=True)] = "fresh"
+    # Whether its turns share one conversation (game/llm_turn/conversation.py). Always in the API's output, as its
+    # schema says; left out of the game log when fresh, so games from before it log the same.
+    turn_memory: TurnMemory = "fresh"
 
     def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
         """The side as game_start logs it, with the Prompt template it plays the game with in full, last, and its

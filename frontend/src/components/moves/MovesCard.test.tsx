@@ -350,7 +350,7 @@ test('under Enforced decoding illegal tries are not applicable, unless one gets 
 })
 
 test('in a faceoff the sides are head to head, White left and Black right, the side with more in red', () => {
-  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' } as const
   const white = aTurn('e4', { ply: 1, color: 'white', attempts: [anAttempt('Ke2', 'illegal'), anAttempt('e4', 'legal')] })
   const game = aGame({
     pgn: '1. e4 e5',
@@ -384,7 +384,7 @@ test("a metric's name and meaning show in its tooltip on hover, and in aria-desc
 })
 
 test('in a faceoff a tie is not in red', () => {
-  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained' } as const
+  const llm = { player: 'llm', model: 'qwen3.5:9b', thinking: false, llm_constraints: 'free', retry_feedback: 'explained', turn_memory: 'fresh' } as const
   const white = aTurn('e4', { ply: 1, color: 'white', attempts: [anAttempt('Ke2', 'illegal'), anAttempt('e4', 'legal')] })
   const black = aTurn('e5', { attempts: [anAttempt('Ke7', 'illegal'), anAttempt('e5', 'legal')] })
   const game = aGame({

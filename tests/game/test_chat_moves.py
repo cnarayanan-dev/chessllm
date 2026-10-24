@@ -85,12 +85,13 @@ def test_the_system_prompt_file_is_chosen_by_the_llm_constraints_and_the_turn_me
     assert side_template(side).system_prompt == (PROMPTS_DIR / expected).read_text(encoding="utf-8")
 
 
-def test_the_moves_templates_are_left_out_of_the_librarys_list_but_resolve(tmp_path):
+def test_the_moves_templates_are_listed_in_the_library_for_chat_with_moves_alone(tmp_path):
     library = PromptLibrary(tmp_path / "prompt_library")
     moves = default_template("listed", "moves")
 
+    [entry] = [entry for entry in library.entries() if entry.template.id == moves.id]
     assert re.fullmatch("moves-listed@[0-9a-f]{8}", moves.id) and moves.name == "Moves listed"
-    assert moves.id not in [entry.template.id for entry in library.entries()]
+    assert (entry.turn_memories, entry.default_for) == (["chat_moves"], ["listed", "listed_enforced"])
     assert library.template(moves.id) == moves
 
 
