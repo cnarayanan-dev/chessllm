@@ -3,9 +3,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test } from 'vitest'
 import type { GameState, Probe, PromptTemplateInfo } from '@/api/types'
+import { GameLayout } from '@/components/game-layout/GameLayout'
 import { TurnPanel } from '@/components/turn/TurnPanel'
 import { fakeBackend, later } from '@/test/fakeBackend'
-import { AFTER_NF3, aTurn, afterE5, E4, E5, NC6, NF3, plies } from '@/test/games'
+import { AFTER_NC6, AFTER_NF3, aTurn, afterE5, E4, E5, NC6, NF3, plies } from '@/test/games'
 import { setPromptLabOn } from '@/settings/promptLab'
 
 beforeEach(() => localStorage.clear())
@@ -19,6 +20,7 @@ const template = (id: string, name: string | null, fits = FREE, isDefault = fals
   fits,
   turn_memories: id.startsWith('moves') ? ['chat_moves'] : ['fresh', 'chat_position'],
   default_for: isDefault ? fits : [],
+  saved: !['default', 'described'].includes(id.split(/[-@]/)[0]),
 })
 
 /** The Prompt library as GET /api/prompt-templates lists it; Moves, for Chat with moves alone, is never probed with. */
@@ -73,18 +75,24 @@ function aProbe(move: string, legal: boolean, templateId = 'described@1', ply = 
 
 function renderPanel(game: GameState, llmTurnRunning = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const panel = (running: boolean) => (
+  const panel = (running: boolean, shown = game, ply = 4) => (
     <QueryClientProvider client={queryClient}>
-      <TurnPanel game={game} ply={4} live llmTurnRunning={running} />
+      <GameLayout
+        game={<TurnPanel game={shown} ply={ply} live llmTurnRunning={running} />}
+        board={<div data-testid="board" />}
+        moves={<div />}
+      />
     </QueryClientProvider>
   )
   const { rerender } = render(panel(llmTurnRunning))
-  return { rerender: (running: boolean) => rerender(panel(running)) }
+  /** Renders the panel again: an LLM turn starting or landing, or the game going on (another game, or ply). */
+  return { rerender: (running: boolean, shown?: GameState, ply?: number) => rerender(panel(running, shown, ply)) }
 }
 
 const panel = () => screen.getByRole('region', { name: 'Turn' })
 const openPromptTab = () => userEvent.click(within(panel()).getByRole('tab', { name: 'Prompt' }))
 const picker = () => within(panel()).getByRole('combobox', { name: 'Prompt to probe with' })
+const promptName = () => within(panel()).getByRole('button', { name: /^Prompt:/ })
 const tryButton = () => within(panel()).getByRole('button', { name: 'Try' })
 const probes = () => within(panel()).queryByRole('list', { name: 'Probes' })
 
@@ -105,7 +113,7 @@ test("on, the row names the game's own template, and its list the templates that
   renderPanel(twoMovesIn())
   await openPromptTab()
 
-  await waitFor(() => expect(picker()).toHaveTextContent('Prompt: Default'))
+  await waitFor(() => expect(promptName()).toHaveTextContent('Prompt: Default'))
   await userEvent.click(picker())
 
   const options = (await screen.findAllByRole('option')).map((option) => option.textContent)
@@ -121,7 +129,7 @@ test.each([
   renderPanel(twoMovesIn({ prompt_templates: { black: played } }))
   await openPromptTab()
 
-  await waitFor(() => expect(picker()).toHaveTextContent(`Prompt: ${first}`))
+  await waitFor(() => expect(promptName()).toHaveTextContent(`Prompt: ${first}`))
   await userEvent.click(picker())
 
   expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual(listed)
@@ -155,7 +163,7 @@ test('Try asks about the turn shown with the template picked, and shows the prob
     .on('POST /api/games/current/probes', answer.promise)
   renderPanel(twoMovesIn())
   await openPromptTab()
-  await waitFor(() => expect(picker()).toHaveTextContent('Prompt: Default'))
+  await waitFor(() => expect(promptName()).toHaveTextContent('Prompt: Default'))
   await userEvent.click(picker())
   await userEvent.click(await screen.findByRole('option', { name: 'Described' }))
 
@@ -199,7 +207,7 @@ test('Try is disabled while an LLM turn runs, why on hover', async () => {
   fakeBackend().on('GET /api/prompt-templates', Response.json(LIBRARY)).on('GET /api/games/game-1/probes', Response.json([]))
   const { rerender } = renderPanel(twoMovesIn(), true)
   await openPromptTab()
-  await waitFor(() => expect(picker()).toHaveTextContent('Prompt: Default'))
+  await waitFor(() => expect(promptName()).toHaveTextContent('Prompt: Default'))
 
   expect(tryButton()).toBeDisabled()
   expect(tryButton()).toHaveAttribute('aria-description', expect.stringMatching(/An LLM turn is running/))
@@ -220,10 +228,206 @@ test('a refused probe says why under the row', async () => {
     .on('POST /api/games/current/probes', Response.json(refused, { status: 409 }))
   renderPanel(twoMovesIn())
   await openPromptTab()
-  await waitFor(() => expect(picker()).toHaveTextContent('Prompt: Default'))
+  await waitFor(() => expect(promptName()).toHaveTextContent('Prompt: Default'))
 
   await userEvent.click(tryButton())
 
   expect(await within(panel()).findByRole('alert')).toHaveTextContent(refused.detail)
   expect(probes()).not.toBeInTheDocument()
+})
+
+// The dock (Prompt lab): the template in a text box over the lower half of the page, the board in view above.
+const dock = () => screen.getByRole('region', { name: 'Dock' })
+const line = (label: string) => within(dock()).getByText(label).parentElement!
+const openDock = async () => {
+  await openPromptTab()
+  await waitFor(() => expect(promptName()).toHaveTextContent('Prompt: Default'))
+  await userEvent.click(promptName())
+  return dock()
+}
+const withLibrary = () =>
+  fakeBackend().on('GET /api/prompt-templates', Response.json(LIBRARY)).on('GET /api/games/game-1/probes', Response.json([]))
+
+test("the prompt's name opens the dock on its template, the side columns inert; closing it restores the page", async () => {
+  setPromptLabOn(true)
+  withLibrary()
+  renderPanel(twoMovesIn())
+
+  const opened = await openDock()
+
+  expect(within(opened).getByText('based on Default')).toBeVisible()
+  expect(within(opened).getByRole('textbox', { name: 'System prompt' })).toHaveValue('The System prompt of default@1.')
+  await userEvent.click(within(opened).getByRole('tab', { name: 'Turn template' }))
+  expect(within(opened).getByRole('textbox', { name: 'Turn template' })).toHaveValue('PGN: $moves\nFEN: $fen')
+  expect(line('In the game')).toHaveTextContent('Nc6 · Legal')
+  expect(line('This version')).toHaveTextContent('Not tried yet')
+  expect(screen.getByTestId('game-column')).toHaveAttribute('inert')
+  expect(screen.getByTestId('moves-column')).toHaveAttribute('inert')
+  expect(screen.getByTestId('board-column')).not.toHaveAttribute('inert')
+  expect(document.body).toHaveClass('prompt-dock-open')
+
+  await userEvent.click(within(opened).getByRole('button', { name: 'Close' }))
+
+  expect(screen.queryByRole('region', { name: 'Dock' })).not.toBeInTheDocument()
+  expect(screen.getByTestId('game-column')).not.toHaveAttribute('inert')
+  expect(screen.getByTestId('moves-column')).not.toHaveAttribute('inert')
+  expect(document.body).not.toHaveClass('prompt-dock-open')
+})
+
+test("Try in the dock probes with the text as it is: the template's ID until it is changed, then the unsaved text", async () => {
+  setPromptLabOn(true)
+  const backend = withLibrary()
+  const edited = 'The System prompt of default@1. Be brief.'
+  const unsavedProbe = aProbe('Nf6', true, 'default@1')
+  unsavedProbe.prompt_template = { id: 'unsaved', name: null, system_prompt: edited, turn_template: 'PGN: $moves\nFEN: $fen' }
+  backend.on('POST /api/games/current/probes', Response.json(aProbe('d6', true, 'default@1')), Response.json(unsavedProbe))
+  renderPanel(twoMovesIn())
+  const opened = await openDock()
+
+  await userEvent.click(within(opened).getByRole('button', { name: 'Try' }))
+  await waitFor(() => expect(line('This version')).toHaveTextContent('d6 · Legal'))
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'System prompt' }), ' Be brief.')
+  expect(line('This version')).toHaveTextContent('Not tried yet')
+  await userEvent.click(within(opened).getByRole('button', { name: 'Try' }))
+
+  expect(backend.sentTo('POST /api/games/current/probes').map((request) => request.body)).toEqual([
+    { ply: 4, color: 'black', prompt_template_id: 'default@1' },
+    { ply: 4, color: 'black', system_prompt: edited, turn_template: 'PGN: $moves\nFEN: $fen' },
+  ])
+  await waitFor(() => expect(line('This version')).toHaveTextContent('Nf6 · Legal'))
+  expect(within(panel()).getByText('unsaved: 1 of 1 legal')).toBeInTheDocument()
+})
+
+test('Save as new version adds a library entry, with its name if given, and the dock goes on from it', async () => {
+  setPromptLabOn(true)
+  const brief = { ...template('brief@abcd1234', 'Brief'), system_prompt: 'The System prompt of default@1. Be brief.' }
+  const backend = withLibrary().on('POST /api/prompt-templates', Response.json(brief))
+  renderPanel(twoMovesIn())
+  const opened = await openDock()
+  const save = () => within(opened).getByRole('button', { name: 'Save as new version' })
+  expect(save()).toBeDisabled()
+
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'System prompt' }), ' Be brief.')
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'Name' }), 'Brief')
+  await userEvent.click(save())
+
+  expect(backend.sentTo('POST /api/prompt-templates').map((request) => request.body)).toEqual([
+    {
+      name: 'Brief',
+      system_prompt: 'The System prompt of default@1. Be brief.',
+      turn_template: 'PGN: $moves\nFEN: $fen',
+      llm_constraints: 'free',
+    },
+  ])
+  await waitFor(() => expect(within(opened).getByText('based on Brief')).toBeVisible())
+  expect(save()).toBeDisabled()
+  await userEvent.click(within(opened).getByRole('button', { name: 'Close' }))
+  expect(promptName()).toHaveTextContent('Prompt: Brief')
+  await userEvent.click(picker())
+  expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toContain('Brief')
+})
+
+test('a refused save says why, and the text stays for fixing', async () => {
+  setPromptLabOn(true)
+  const refused = { detail: 'the System prompt has an unknown placeholder: $colour', code: 'invalid_prompt_template' }
+  withLibrary().on('POST /api/prompt-templates', Response.json(refused, { status: 400 }))
+  renderPanel(twoMovesIn())
+  const opened = await openDock()
+
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'System prompt' }), ' You are $colour.')
+  await userEvent.click(within(opened).getByRole('button', { name: 'Save as new version' }))
+
+  expect(await within(opened).findByRole('alert')).toHaveTextContent(refused.detail)
+  expect(within(opened).getByText('based on Default')).toBeVisible()
+  expect(within(opened).getByRole('textbox', { name: 'System prompt' })).toHaveValue(
+    'The System prompt of default@1. You are $colour.',
+  )
+})
+
+test("the dock's text outlives the panel's tabs: the board stepping back, or the game's next turn landing", async () => {
+  setPromptLabOn(true)
+  withLibrary()
+  const game = twoMovesIn()
+  const { rerender } = renderPanel(game)
+  const opened = await openDock()
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'System prompt' }), ' Be brief.')
+
+  rerender(false, game, 2)
+  const more = plies(E4, E5, NF3, NC6, ['f1c4', 'Bc4', AFTER_NC6], ['g8f6', 'Nf6', AFTER_NC6])
+  const next = { ...game, plies: more, llm_turns: [...game.llm_turns, aTurn('Nf6', { ply: 6 })] }
+  rerender(false, next, 6)
+
+  expect(within(dock()).getByRole('textbox', { name: 'System prompt' })).toHaveValue('The System prompt of default@1. Be brief.')
+  expect(line('In the game')).toHaveTextContent('Nc6 · Legal')
+  expect(within(panel()).getByTestId('turn-move')).toHaveTextContent('Nc6')
+  await userEvent.click(within(dock()).getByRole('button', { name: 'Close' }))
+  expect(within(panel()).getByTestId('turn-move')).toHaveTextContent('Nf6')
+})
+
+test("closed and opened again on the same template and turn, the dock has its text as it was", async () => {
+  setPromptLabOn(true)
+  withLibrary()
+  renderPanel(twoMovesIn())
+  const opened = await openDock()
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'System prompt' }), ' Be brief.')
+  await userEvent.keyboard('{Escape}')
+  expect(screen.queryByRole('region', { name: 'Dock' })).not.toBeInTheDocument()
+
+  await userEvent.click(promptName())
+
+  expect(within(dock()).getByRole('textbox', { name: 'System prompt' })).toHaveValue('The System prompt of default@1. Be brief.')
+})
+
+test("the dock's Try is disabled while an LLM turn runs, why on hover", async () => {
+  setPromptLabOn(true)
+  withLibrary()
+  const { rerender } = renderPanel(twoMovesIn())
+  const opened = await openDock()
+
+  rerender(true)
+
+  const asking = within(opened).getByRole('button', { name: 'Try' })
+  expect(asking).toBeDisabled()
+  expect(asking).toHaveAttribute('aria-description', expect.stringMatching(/An LLM turn is running/))
+  rerender(false)
+  expect(asking).toBeEnabled()
+})
+
+test('a saved Prompt template can be hidden from the dock, leaving it out of the list; a default one cannot', async () => {
+  setPromptLabOn(true)
+  const backend = withLibrary().on(
+    'POST /api/prompt-templates/terse%401/hide',
+    Response.json(LIBRARY.filter((each) => each.id !== 'terse@1')),
+  )
+  renderPanel(twoMovesIn())
+  expect(within(await openDock()).queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument()
+  await userEvent.click(within(dock()).getByRole('button', { name: 'Close' }))
+  await userEvent.click(picker())
+  await userEvent.click(await screen.findByRole('option', { name: 'terse@1' }))
+  await userEvent.click(promptName())
+
+  await userEvent.click(within(dock()).getByRole('button', { name: 'Hide' }))
+
+  expect(backend.sentTo('POST /api/prompt-templates/terse%401/hide')).toHaveLength(1)
+  await waitFor(() => expect(within(dock()).getByRole('button', { name: 'Hidden' })).toBeDisabled())
+  await userEvent.click(within(dock()).getByRole('button', { name: 'Close' }))
+  await userEvent.click(picker())
+  expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual([
+    'Default · in the game',
+    'Described',
+  ])
+})
+
+test("a closed dock's text stays with its game: another game's dock on the same turn and template opens afresh", async () => {
+  setPromptLabOn(true)
+  withLibrary().on('GET /api/games/game-2/probes', Response.json([]))
+  const { rerender } = renderPanel(twoMovesIn())
+  const opened = await openDock()
+  await userEvent.type(within(opened).getByRole('textbox', { name: 'System prompt' }), ' Be brief.')
+  await userEvent.keyboard('{Escape}')
+
+  rerender(false, twoMovesIn({ game_id: 'game-2' }))
+  await userEvent.click(promptName())
+
+  expect(within(dock()).getByRole('textbox', { name: 'System prompt' })).toHaveValue('The System prompt of default@1.')
 })

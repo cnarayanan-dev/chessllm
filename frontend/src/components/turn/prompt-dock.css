@@ -1,0 +1,32 @@
+/* While the Prompt lab's dock is open over the lower half of the page, the page shrinks into the top half: the top
+   bar, the player strips and the footer hidden, the board as large as the half allows, and the side columns greyed
+   out (the dock makes them inert too). */
+body.prompt-dock-open .page {
+  height: 50svh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.prompt-dock-open .page > header,
+body.prompt-dock-open .page > footer,
+body.prompt-dock-open .board-stack > [data-testid^="strip-"] {
+  display: none;
+}
+body.prompt-dock-open .page > .game-layout {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  grid-template-rows: minmax(0, 1fr);
+}
+body.prompt-dock-open .board-stack {
+  width: min(100%, calc(50svh - 16px));
+}
+body.prompt-dock-open .game-column,
+body.prompt-dock-open .moves-column {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+  transition: opacity 0.2s, filter 0.2s;
+}

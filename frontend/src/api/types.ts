@@ -34,6 +34,11 @@ export type ModelInfo = Schemas['ModelInfo']
 export type PromptTemplateInfo = Schemas['PromptTemplateInfo']
 /** A Probe (CONTEXT.md): the LLM asked again about a past turn's position with a Prompt template, outside the game. */
 export type Probe = Schemas['Probe']
-/** Which past LLM turn of the current game a Probe asks about, and with which Prompt template of the library. */
+/**
+ * Which past LLM turn of the current game a Probe asks about, and with which Prompt template: of the library by its
+ * ID, or the System prompt and Turn template text, saved or not, recorded as "unsaved".
+ */
 export type ProbeRequest = Schemas['ProbeRequest']
+/** A Prompt template to save in the library as a new one, for a side under the LLM constraints, which it must fit. */
+export type NewPromptTemplate = Schemas['NewPromptTemplate']
 export type Color = GameState['turn']

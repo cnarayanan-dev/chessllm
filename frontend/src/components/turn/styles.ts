@@ -1,4 +1,4 @@
-// What the Turn panel's parts share: the text styles of an attempt, and the names of its results.
+// What the Turn panel's parts share: the text styles of an attempt, the names of its results, and of a Prompt template.
 import type { Attempt } from '@/api/types'
 
 export const quiet = 'text-sm text-muted-foreground'
@@ -13,3 +13,6 @@ export const RESULT_NAMES: Record<NonNullable<Attempt['result']>, string> = {
   error: 'Error',
   cut_off: 'Cut off',
 }
+
+/** A Prompt template's name, or its ID if it has none. */
+export const nameOf = (template: { id: string; name: string | null }) => template.name ?? template.id

@@ -4,6 +4,7 @@ the game, each recorded in the probe log next to the game's log, which no probe 
 from tests.conftest import BlockingPlayer, FakeClock, Raw, ScriptedPlayer, play_llm, play_move
 
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -242,6 +243,50 @@ def test_a_probe_is_refused_for_a_turn_the_game_has_not_played_or_a_template_tha
         (400, "invalid_prompt_template"),
         (400, "unknown_prompt_template"),
     ]
+    assert len(player.prompts) == 2
+
+
+def test_a_probe_with_unsaved_text_sends_it_and_is_recorded_as_unsaved_with_its_text(scripted, tmp_path):
+    client, player = scripted(["e5", "Nc6", "Nf6", "Nf6", "d6"])
+    two_moves_in(client)
+    unsaved = {"system_prompt": "You play $color.", "turn_template": "Recent moves: $recent_moves"}
+    other = unsaved | {"system_prompt": "You play $color. Be brief."}
+
+    responses = [
+        client.post("/api/games/current/probes", json={"ply": 4, "color": "black", **text})
+        for text in (unsaved, unsaved, other)
+    ]
+
+    assert [response.status_code for response in responses] == [200] * 3, responses[0].text
+    assert [message.content for message in player.prompts[2]] == ["You play Black.", "Recent moves: 1. e4 e5 2. Nf3"]
+    logged = probe_log(tmp_path / "games")
+    assert [response.json()["prompt_template"] for response in responses] == [probe["prompt_template"] for probe in logged]
+    first, again, edited = (probe["prompt_template"] for probe in logged)
+    assert first == {"id": first["id"], "name": None, **unsaved}
+    assert edited == {"id": edited["id"], "name": None, **other}
+    # An ID always means one text: the same unsaved text is tallied as one, another as another.
+    assert re.fullmatch("unsaved@[0-9a-f]{8}", first["id"]) and again["id"] == first["id"] != edited["id"]
+    assert not (tmp_path / "prompt_library").exists()  # a probe saves nothing in the Prompt library
+
+
+def test_a_probe_takes_either_a_templates_id_or_unsaved_text_and_the_text_must_fit_the_side(scripted):
+    client, player = scripted(["e5", "Nc6"])
+    two_moves_in(client)
+    asked = {"ply": 4, "color": "black"}
+    default = template_id(client, "Default")
+
+    responses = [
+        client.post("/api/games/current/probes", json=asked),
+        client.post("/api/games/current/probes", json=asked | {"system_prompt": "$color"}),
+        client.post("/api/games/current/probes",
+                    json=asked | {"prompt_template_id": default, "system_prompt": "$color", "turn_template": "$fen"}),
+        client.post("/api/games/current/probes", json=asked | {"system_prompt": "$color", "turn_template": "$colour"}),
+    ]
+
+    assert [response.status_code for response in responses] == [422, 422, 422, 400]
+    assert responses[3].json() == {
+        "detail": "the Turn template has an unknown placeholder: $colour", "code": "invalid_prompt_template"
+    }
     assert len(player.prompts) == 2
 
 

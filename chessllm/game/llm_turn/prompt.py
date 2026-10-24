@@ -78,6 +78,11 @@ OPPONENT_MOVE = "$opponent_move"
 DefaultTemplate = Literal["default", "described", "moves", "tools"]
 
 
+def text_version(system_prompt: str, turn_template: str) -> str:
+    """The version an ID takes from a Prompt template's text after its @: the same text, the same version."""
+    return hashlib.sha256(f"{system_prompt}\0{turn_template}".encode("utf-8")).hexdigest()[:8]
+
+
 def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "default") -> PromptTemplate:
     """A default Prompt template for the LLM constraints, placing the Legal-move list under Listed. Its System prompt
     is read from its file now, so an edit to the file is played from the next game.
@@ -89,9 +94,8 @@ def default_template(llm_constraints: LlmConstraints, kind: DefaultTemplate = "d
     described = DESCRIPTION if kind == "described" else ""
     position = OPPONENT_MOVE if kind in ("moves", "tools") else PGN_AND_FEN + described
     turn_template = position + (LEGAL_MOVES if listed else "")
-    version = hashlib.sha256(f"{system_prompt}\0{turn_template}".encode("utf-8")).hexdigest()[:8]
     return PromptTemplate(
-        id=f"{kind}{'-listed' * listed}@{version}",
+        id=f"{kind}{'-listed' * listed}@{text_version(system_prompt, turn_template)}",
         name=f"{kind.capitalize()}{' listed' * listed}",
         system_prompt=system_prompt,
         turn_template=turn_template,

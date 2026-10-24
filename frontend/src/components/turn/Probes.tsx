@@ -2,17 +2,21 @@
 // template to probe with and Try, which asks the LLM about the turn's position again, outside the game; then the turn's
 // probes, newest first, with a tally per template. The probes come from the game's probe log, so a reload keeps them.
 // In a game that can pause, Try pauses it first and the probe is asked once it is paused (`@/game/gameLoop`).
+// The template's name opens it in the dock (PromptDock), to change it, probe with it and save it as a new version; ▾
+// lists the library.
 import { useMutationState, useQuery } from '@tanstack/react-query'
 import { ChevronRight, PenLine, Play } from 'lucide-react'
 import { probeMutationKey, probesQuery, useAskProbe } from '@/api/probes'
 import { promptLibraryQuery } from '@/api/promptLibrary'
 import type { GameState, LlmTurn, Probe, ProbeRequest, PromptTemplateInfo } from '@/api/types'
+import { draftFor, draftOf, type DockDraft } from '@/components/turn/dockDraft'
+import { PromptDock } from '@/components/turn/PromptDock'
 import { Prompt } from '@/components/turn/PromptMessages'
-import { quiet, RESULT_NAMES } from '@/components/turn/styles'
+import { nameOf, quiet, RESULT_NAMES } from '@/components/turn/styles'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PauseState } from '@/game/gameLoop'
 import { fittingTemplates } from '@/settings/next-game'
@@ -22,7 +26,8 @@ const PAUSES_FIRST =
   "Pauses the game after the turn running, then asks the LLM about this turn's position again with this prompt, outside the game: a Probe."
 const TURN_RUNNING = 'An LLM turn is running. Probe once it has landed: a Probe never runs alongside a turn.'
 const LOADING = 'The Prompt library is loading.'
-const PICKER = 'The Prompt template a Probe asks with. "In the game" is the one the LLM played this game with.'
+const PICKER = 'Pick the Prompt template a Probe asks with. "In the game" is the one the LLM played this game with.'
+const OPEN = 'Open this Prompt template in the dock, the board in view: change it, probe with it, save it as a new version.'
 
 type ProbesProps = {
   game: GameState
@@ -38,9 +43,11 @@ type ProbesProps = {
   onProbeAfterPause?: (request: ProbeRequest) => void
   /** The Probes waiting for the pause. */
   waiting?: readonly ProbeRequest[]
+  /** The dock's text, kept by the Turn panel, so the panel's tabs coming and going never lose it; null before any. */
+  dock?: DockDraft | null
+  onDock?: (draft: DockDraft) => void
 }
 
-const nameOf = (template: { id: string; name: string | null }) => template.name ?? template.id
 const sameTurn = (turn: LlmTurn) => (probe: { ply: number; color: string }) =>
   probe.ply === turn.ply && probe.color === turn.color
 
@@ -55,6 +62,8 @@ export function Probes({
   pause = null,
   onProbeAfterPause,
   waiting = NONE,
+  dock = null,
+  onDock,
 }: ProbesProps) {
   const side = game.settings[turn.color]
   const constraints = side.player === 'llm' ? side.llm_constraints : 'free'
@@ -85,47 +94,80 @@ export function Probes({
   // While the game runs, Try pauses it first, so a probe never runs alongside a turn.
   const pausesFirst = pause === 'playing' || pause === 'pausing'
   const disabled = llmTurnRunning && pause === null ? TURN_RUNNING : picked ? undefined : LOADING
-  const ask = () => {
-    if (!picked) return
-    const request = { ply: turn.ply, color: turn.color, prompt_template_id: picked.id }
+  const ask = (request: ProbeRequest) => {
     if (pausesFirst && onProbeAfterPause) onProbeAfterPause(request)
     else asking.mutate(request)
   }
+  // The dock opens on the draft left for this template and turn of the game, or a new one.
+  const ours = dock && draftFor(dock, game.game_id, turn) ? dock : null
+  const kept = ours && picked && ours.from.id === picked.id ? ours : null
+  const openDock = () => picked && onDock?.(kept ? { ...kept, open: true } : draftOf(picked, game.game_id, turn))
+  const docked = ours?.open ? ours : null
   const meaning = disabled ?? (pausesFirst ? PAUSES_FIRST : ASK)
   // The probes of the turn waiting for the pause, then those being asked.
   const asked = [...waiting.filter(sameTurn(turn)).map(() => 'after the pause…'), ...pending.map(() => 'asking…')]
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5">
-        <Select value={picked?.id ?? null} onValueChange={(id) => id && onPick(id)}>
-          <SelectTrigger aria-label="Prompt to probe with" aria-description={PICKER} size="sm" className="min-w-0 flex-1">
-            <SelectValue>
-              {() => (
-                <span className="truncate">
-                  <span className="text-muted-foreground">Prompt: </span>
-                  {picked ? nameOf(picked) : '…'}
-                </span>
+        <div className="flex min-w-0 flex-1 items-center rounded-3xl bg-input/50">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-description={OPEN}
+                  disabled={!picked}
+                  className="min-w-0 flex-1 justify-start"
+                  onClick={openDock}
+                />
+              }
+            >
+              <span className="truncate">
+                <span className="text-muted-foreground">Prompt: </span>
+                {picked ? nameOf(picked) : '…'}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{OPEN}</TooltipContent>
+          </Tooltip>
+          <Select value={picked?.id ?? null} onValueChange={(id) => id && onPick(id)}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <SelectTrigger
+                    aria-label="Prompt to probe with"
+                    aria-description={PICKER}
+                    size="sm"
+                    className="shrink-0"
+                  />
+                }
+              />
+              <TooltipContent side="bottom">{`Prompt to probe with. ${PICKER}`}</TooltipContent>
+            </Tooltip>
+            <SelectContent>
+              {fitting.map((template) => (
+                <SelectItem key={template.id} value={template.id}>
+                  {nameOf(template)}
+                  {inGame(template) && <span className="text-xs text-muted-foreground"> · in the game</span>}
+                </SelectItem>
+              ))}
+              {unlisted && (
+                <p role="note" className="px-3 py-1.5 text-xs text-muted-foreground">
+                  {`In the game: ${nameOf(unlisted)}, not in this list.`}
+                </p>
               )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {fitting.map((template) => (
-              <SelectItem key={template.id} value={template.id}>
-                {nameOf(template)}
-                {inGame(template) && <span className="text-xs text-muted-foreground"> · in the game</span>}
-              </SelectItem>
-            ))}
-            {unlisted && (
-              <p role="note" className="px-3 py-1.5 text-xs text-muted-foreground">
-                {`In the game: ${nameOf(unlisted)}, not in this list.`}
-              </p>
-            )}
-          </SelectContent>
-        </Select>
+            </SelectContent>
+          </Select>
+        </div>
         {/* The tooltip hangs on a wrapper, as a disabled button takes no hover. */}
         <Tooltip>
           <TooltipTrigger render={<span />}>
-            <Button size="sm" aria-description={meaning} disabled={disabled !== undefined} onClick={ask}>
+            <Button
+              size="sm"
+              aria-description={meaning}
+              disabled={disabled !== undefined}
+              onClick={() => picked && ask({ ply: turn.ply, color: turn.color, prompt_template_id: picked.id })}
+            >
               <Play aria-hidden="true" />
               Try
             </Button>
@@ -137,6 +179,20 @@ export function Probes({
         <p role="alert" className="text-sm text-destructive">
           {failed.message}
         </p>
+      )}
+      {docked && onDock && (
+        <PromptDock
+          turn={turn}
+          draft={docked}
+          onDraft={onDock}
+          llmConstraints={constraints}
+          probes={probes}
+          asked={[...waiting.filter(sameTurn(turn)), ...pending]}
+          onAsk={ask}
+          askDisabled={disabled === TURN_RUNNING ? disabled : undefined}
+          pausesFirst={pausesFirst}
+          onSaved={(saved) => onPick(saved.id)}
+        />
       )}
       {(probes.length > 0 || asked.length > 0) && (
         <>

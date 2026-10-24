@@ -166,3 +166,39 @@ test("with Prompt lab on, Try probes an illegal move's turn again, its probes an
   await expect(panel(page)).toContainText('Described: 1 of 2 legal')
   await expect(panel(page).getByRole('list', { name: 'Probes' }).getByRole('button')).toHaveCount(2)
 })
+
+test('with Prompt lab on, the dock opens over the lower half, the board enlarged above, and tries and saves an edit', async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await page.addInitScript(() => localStorage.setItem('chessllm.promptLab', 'on'))
+  await playLlm(page, ['e5', 'Qxf2'])
+  await clickMove(page, 'e2e4')
+  await expect(lastMove(page)).toHaveText('e5')
+  await tab(page, 'Prompt').click()
+  const board = page.locator('.chessboard')
+  const before = (await board.boundingBox())!
+
+  await panel(page).getByRole('button', { name: /^Prompt:/ }).click()
+  const dock = page.getByRole('region', { name: 'Dock' })
+  await expect(dock).toBeVisible()
+  const docked = (await dock.boundingBox())!
+  expect(docked.y).toBeCloseTo(450, -1)
+  await expect(page.getByRole('banner')).toBeHidden()
+  await expect(page.getByTestId('strip-white')).toBeHidden()
+  await expect(page.getByTestId('game-column')).toHaveAttribute('inert', '')
+  const above = (await board.boundingBox())!
+  expect(above.y + above.height).toBeLessThanOrEqual(docked.y)
+
+  await dock.getByRole('textbox', { name: 'System prompt' }).fill('You are $color. Answer in JSON.')
+  await dock.getByRole('button', { name: 'Try' }).click()
+  await expect(dock.getByText('This version').locator('..')).toContainText('Qxf2 · Illegal')
+  await dock.getByRole('textbox', { name: 'Name' }).fill('Short')
+  await dock.getByRole('button', { name: 'Save as new version' }).click()
+  await expect(dock).toContainText('based on Short')
+  await dock.getByRole('button', { name: 'Close' }).click()
+
+  await expect(dock).toBeHidden()
+  await expect(page.getByRole('banner')).toBeVisible()
+  await expect(page.getByTestId('game-column')).not.toHaveAttribute('inert')
+  expect((await board.boundingBox())!.width).toBeCloseTo(before.width, 0)
+  await expect(panel(page).getByRole('button', { name: /^Prompt:/ })).toContainText('Short')
+})

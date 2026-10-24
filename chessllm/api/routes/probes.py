@@ -15,9 +15,13 @@ router = APIRouter()
 
 @router.post("/api/games/current/probes", responses=error_responses(InvalidSettings, NoGameStarted, RefusedProbe))
 def ask_probe(request: ProbeRequest, session: CurrentGame, library: PromptLibraryDep) -> Probe:
-    """Ask a Probe about a past LLM turn of the current game and append it to the game's probe log. Refused while an
-    LLM turn runs; a turn asked for while a probe runs waits for it."""
-    template = library.resolve(request.prompt_template_id, request.color)
+    """Ask a Probe about a past LLM turn of the current game, with a Prompt template of the library or unsaved text, and
+    append it to the game's probe log. Refused while an LLM turn runs; a turn asked for while a probe runs waits for
+    it."""
+    template = request.unsaved()
+    if template is None:
+        assert request.prompt_template_id is not None  # ProbeRequest takes an ID or text
+        template = library.resolve(request.prompt_template_id, request.color)
     return session.probe(request.ply, request.color, template)
 
 

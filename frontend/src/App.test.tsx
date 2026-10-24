@@ -536,12 +536,37 @@ test("with Prompt lab on, Try on the LLM's last turn waits while its next turn r
 
   await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
   const tryButton = await within(turnPanel()).findByRole('button', { name: 'Try' })
-  await waitFor(() => expect(within(turnPanel()).getByRole('combobox', { name: 'Prompt to probe with' })).toHaveTextContent('Default'))
+  await waitFor(() => expect(within(turnPanel()).getByRole('button', { name: /^Prompt:/ })).toHaveTextContent('Default'))
   expect(tryButton).toBeDisabled()
 
   await act(async () => turn.resolve(Response.json(afterNf3)))
 
   await waitFor(() => expect(within(turnPanel()).getByRole('button', { name: 'Try' })).toBeEnabled())
+  localStorage.clear()
+})
+
+test("with the dock open the board holds the docked turn's position, the one probed, and takes no move", async () => {
+  localStorage.setItem('chessllm.promptLab', 'on')
+  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], turn_memories: ['fresh'], default_for: ['free'] }]
+  fakeBackend()
+    .on('GET /api/games/current', Response.json(afterE5()))
+    .on('GET /api/prompt-templates', Response.json(library))
+    .on('GET /api/games/game-1/probes', Response.json([]))
+  renderApp()
+  const board = await waitFor(theBoard)
+  await waitFor(() => expect(board.input?.color).toBe('w'))
+  await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
+  const name = () => within(turnPanel()).getByRole('button', { name: /^Prompt:/ })
+  await waitFor(() => expect(name()).toHaveTextContent('Default'))
+
+  await userEvent.click(name())
+
+  // Black's e5 was asked about the position after 1. e4.
+  await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR'))
+  expect(board.input).toBeNull()
+  await userEvent.click(within(screen.getByRole('region', { name: 'Dock' })).getByRole('button', { name: 'Close' }))
+  await waitFor(() => expect(board.position).toBe('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR'))
+  expect(board.input?.color).toBe('w')
   localStorage.clear()
 })
 
@@ -614,7 +639,7 @@ describe('Pause', () => {
     await llmMoving('black')
 
     await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
-    await waitFor(() => expect(within(turnPanel()).getByRole('combobox', { name: 'Prompt to probe with' })).toHaveTextContent('Default'))
+    await waitFor(() => expect(within(turnPanel()).getByRole('button', { name: /^Prompt:/ })).toHaveTextContent('Default'))
     const tryButton = within(turnPanel()).getByRole('button', { name: 'Try' })
     expect(tryButton).toBeEnabled()
     expect(tryButton).toHaveAttribute('aria-description', expect.stringMatching(/^Pauses the game after the turn running, then asks/))
@@ -629,6 +654,45 @@ describe('Pause', () => {
     expect(backend.sentTo('POST /api/games/current/probes')[0].body).toEqual({ ply: 1, color: 'white', prompt_template_id: 'default@1' })
     expect(within(gameCard()).getByText('Paused')).toBeInTheDocument()
     expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(1)
+  })
+
+  test("the dock's Try pauses a running game first too, and ← and → leave the page on the dock's turn", async () => {
+    const turn = later()
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(afterWhite))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+      .on('GET /api/prompt-templates', Response.json(library))
+      .on('GET /api/games/game-1/probes', Response.json([]))
+      .on('POST /api/games/current/probes', later().promise)
+    renderApp()
+    await llmMoving('black')
+    await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
+    const name = () => within(turnPanel()).getByRole('button', { name: /^Prompt:/ })
+    await waitFor(() => expect(name()).toHaveTextContent('Default'))
+    await userEvent.click(name())
+    const dock = screen.getByRole('region', { name: 'Dock' })
+    await userEvent.type(within(dock).getByRole('textbox', { name: 'System prompt' }), 'You are $color.')
+
+    await userEvent.click(within(dock).getByText('based on Default'))
+    await userEvent.keyboard('{ArrowRight}')
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)))
+    // White's e4 was asked about the start position, which the board holds.
+    expect(theBoard()!.position).toBe('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Try' }))
+
+    expect(within(gameCard()).getByText('Pausing after this turn…')).toBeInTheDocument()
+    expect(within(dock).getByText('This version').parentElement).toHaveTextContent('asking…')
+    expect(backend.sentTo('POST /api/games/current/probes')).toHaveLength(0)
+    await act(async () => turn.resolve(Response.json(afterBlack)))
+
+    await waitFor(() => expect(backend.sentTo('POST /api/games/current/probes')).toHaveLength(1))
+    expect(backend.sentTo('POST /api/games/current/probes')[0].body).toEqual({
+      ply: 1,
+      color: 'white',
+      system_prompt: 'You are $color.',
+      turn_template: '',
+    })
+    expect(within(dock).getByRole('textbox', { name: 'System prompt' })).toHaveValue('You are $color.')
   })
 
   test('no Pause in Play LLM, or with Prompt lab off', async () => {

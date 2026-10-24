@@ -30,9 +30,13 @@ const NO_MOVES: readonly string[] = []
 const NO_ARROWS: readonly [string, string][] = []
 const EMPTY_BOARD = '8/8/8/8/8/8/8/8 w - - 0 1'
 
-/** Whether a key press belongs to a field or a dialog rather than to the move history. */
+/**
+ * Whether a key press belongs to a field or a dialog rather than to the move history; or the Prompt lab's dock is
+ * open, which holds the page on the turn it is about.
+ */
 const keyTakenElsewhere = (event: KeyboardEvent) =>
   event.defaultPrevented ||
+  document.body.classList.contains('prompt-dock-open') ||
   event.altKey ||
   event.ctrlKey ||
   event.metaKey ||
@@ -62,6 +66,15 @@ export default function App() {
     probesAsked(ready)
     for (const probe of ready) askProbe(probe)
   }, [ready, probesAsked, askProbe])
+  // While the Prompt lab's dock is open, the board holds the position its turn was asked about, the one before it, as a
+  // past position of the move history, which takes no move; closing it goes back to the position viewed before.
+  const viewedBeforeDock = useRef<number | null>(null)
+  const dockTurn = (ply: number | null) => {
+    if (ply !== null) {
+      viewedBeforeDock.current = history?.ply ?? null
+      viewPly(ply - 1)
+    } else viewPly(viewedBeforeDock.current ?? game?.plies.length ?? 0)
+  }
   // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
   const models: Models = modelsList.isError ? null : (modelsList.data ?? null)
@@ -165,6 +178,7 @@ export default function App() {
                 llmTurnRunning={waitingForLlm(state)}
                 pause={pauseShown}
                 onProbeAfterPause={probeAfterPause}
+                onDockTurn={dockTurn}
                 probesWaiting={state.probesWaiting}
               />
             </>

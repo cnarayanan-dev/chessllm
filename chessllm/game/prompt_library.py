@@ -1,21 +1,32 @@
 """The Prompt library (ADR 0010): the default Prompt templates, as their files say now, and the saved ones, each a
-JSON file in the library's folder, so saved prompts show up in git. A saved Prompt template never changes, and an
-old one is only hidden: left out of the list, it still resolves for the games that play it. A default can be hidden
-too, as the Tools template is, which only the benchmark's commands can play (ADR 0011)."""
+JSON file in the library's folder, so saved prompts show up in git. A saved Prompt template never changes: saving an
+edit makes a new one, and an old one is only hidden, left out of the list but still resolving for the games and probes
+that played it. A default can be hidden too, as the Tools template is, which only the benchmark's commands can play
+(ADR 0011)."""
 
 import json
+import re
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import get_args
 
 from chessllm.exceptions import InvalidSettings
-from chessllm.game.llm_turn.prompt import DefaultTemplate, check_prompt_template, default_template
+from chessllm.game.llm_turn.prompt import DefaultTemplate, check_prompt_template, default_template, text_version
 from chessllm.game.sides import LISTED, LlmConstraints, PromptTemplate, TurnMemory
 
 LLM_CONSTRAINTS: tuple[LlmConstraints, ...] = get_args(LlmConstraints)
 TURN_MEMORIES: list[TurnMemory] = list(get_args(TurnMemory))
 # The Turn memories whose turns show the position, which every default template but Moves fits.
 SHOWING_THE_POSITION: list[TurnMemory] = [memory for memory in TURN_MEMORIES if memory != "chat_moves"]
+UNSAVED = "unsaved"  # the ID of text not saved in the library, before the @ and its version
+
+
+def unsaved(system_prompt: str, turn_template: str) -> PromptTemplate:
+    """A Prompt template not saved in the library, as a Probe asks with it and records it: with no name, and the ID
+    "unsaved" with a version from its text, e.g. "unsaved@1f0c2a9e", so an ID still means one text and probes with the
+    same text are tallied together."""
+    return PromptTemplate(f"{UNSAVED}@{text_version(system_prompt, turn_template)}", None, system_prompt, turn_template)
 
 
 @dataclass(frozen=True)
@@ -30,6 +41,7 @@ class LibraryEntry:
     hidden: bool = False
     # A default template's own: chat_moves alone for Moves, every other for the rest; a saved one's, all of them.
     turn_memories: list[TurnMemory] = field(default_factory=lambda: list(TURN_MEMORIES))
+    saved: bool = False  # saved in the library's folder, rather than a default: only a saved one can be hidden
 
 
 class PromptLibrary:
@@ -56,8 +68,46 @@ class PromptLibrary:
             raise InvalidSettings(refused, code="unknown_prompt_template")
         return template
 
+    def save(
+        self, name: str | None, system_prompt: str, turn_template: str, llm_constraints: LlmConstraints
+    ) -> LibraryEntry:
+        """Save a new Prompt template, written for a side under the LLM constraints, in a file of its own, and return
+        it with its new ID: its name's (or "saved") and a random version, so saving the same text twice still makes
+        two. It never changes an existing one. Raises InvalidSettings (check_prompt_template) if the side couldn't play
+        it, and then writes nothing."""
+        check_prompt_template(unsaved(system_prompt, turn_template), llm_constraints)
+        slug = re.sub("[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "saved"
+        self._folder.mkdir(parents=True, exist_ok=True)
+        while True:
+            template = PromptTemplate(f"{slug}@{secrets.token_hex(4)}", name, system_prompt, turn_template)
+            shape = {"id": template.id, "name": name, "hidden": False}
+            shape |= {"system_prompt": system_prompt, "turn_template": turn_template}
+            try:
+                with (self._folder / f"{template.id}.json").open("x", encoding="utf-8") as file:
+                    file.write(json.dumps(shape, indent=2, ensure_ascii=False) + "\n")
+            except FileExistsError:  # the version taken: draw another
+                continue
+            return LibraryEntry(template, fits(template), default_for=[], saved=True)
+
+    def hide(self, template_id: str) -> None:
+        """Leave a saved Prompt template out of the list from now on; it still resolves for the games and probes that
+        played it. Raises InvalidSettings if the library has no saved template with this ID: a default can't be
+        hidden, as its file is the code's."""
+        path = next((path for path in self._saved_files() if saved(path).template.id == template_id), None)
+        if path is None:
+            if any(entry.template.id == template_id for entry in default_entries()):
+                refused = f"{template_id} is a default Prompt template: only a saved one can be hidden"
+                raise InvalidSettings(refused, code="default_prompt_template")
+            refused = f"The Prompt library has no Prompt template {template_id}"
+            raise InvalidSettings(refused, code="unknown_prompt_template")
+        shape = json.loads(path.read_text(encoding="utf-8"))
+        path.write_text(json.dumps(shape | {"hidden": True}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
     def _all(self) -> list[LibraryEntry]:
-        return default_entries() + [saved(path) for path in sorted(self._folder.glob("*.json"))]
+        return default_entries() + [saved(path) for path in self._saved_files()]
+
+    def _saved_files(self) -> list[Path]:
+        return sorted(self._folder.glob("*.json"))
 
 
 def default_entries() -> list[LibraryEntry]:
@@ -109,4 +159,4 @@ def saved(path: Path) -> LibraryEntry:
         system_prompt=shape["system_prompt"],
         turn_template=shape["turn_template"],
     )
-    return LibraryEntry(template, fits(template), default_for=[], hidden=shape.get("hidden", False))
+    return LibraryEntry(template, fits(template), default_for=[], hidden=shape.get("hidden", False), saved=True)

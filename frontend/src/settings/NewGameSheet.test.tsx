@@ -72,6 +72,7 @@ const template = (
   fits,
   turn_memories,
   default_for: isDefault ? fits : [],
+  saved: !id.includes('default') && !id.includes('described'),
 })
 /**
  * The Prompt library as GET /api/prompt-templates lists it: the defaults, Moves for Chat with moves alone, then a

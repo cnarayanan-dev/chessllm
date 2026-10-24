@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import type { Attempt, GameState, LlmTurn, ProbeRequest } from '@/api/types'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Probes } from '@/components/turn/Probes'
+import { draftFor, type DockDraft } from '@/components/turn/dockDraft'
 import { AttemptPrompt } from '@/components/turn/PromptMessages'
 import { mono, quiet, RESULT_NAMES } from '@/components/turn/styles'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +42,8 @@ type TurnPanelProps = {
   onProbeAfterPause?: (request: ProbeRequest) => void
   /** The Probes waiting for the pause. */
   probesWaiting?: readonly ProbeRequest[]
+  /** The dock opened on the LLM turn at this ply, so the board shows the position it is about; or closed (null). */
+  onDockTurn?: (ply: number | null) => void
 }
 
 /**
@@ -109,11 +112,21 @@ export function TurnPanel({
   pause = null,
   onProbeAfterPause,
   probesWaiting,
+  onDockTurn,
 }: TurnPanelProps) {
-  const turn = turnShown(game, ply, live)
   const promptLab = usePromptLab()
   // The Prompt template last picked to probe with, kept from turn to turn; null for the game's own.
   const [pickedTemplateId, pickTemplate] = useState<string | null>(null)
+  // The dock's text, kept here as the tabs below come and go with each turn and attempt. While the dock is open the
+  // panel stays on the turn it was opened on, even as the game's next turns land.
+  const [dock, setDock] = useState<DockDraft | null>(null)
+  const docked = dock?.open ? game.llm_turns.find((each) => draftFor(dock, game.game_id, each)) : undefined
+  const changeDock = (next: DockDraft) => {
+    const open = (draft: DockDraft | null) => (draft?.open ? `${draft.gameId}:${draft.ply}:${draft.color}` : null)
+    if (open(next) !== open(dock)) onDockTurn?.(next.open ? next.ply : null)
+    setDock(next)
+  }
+  const turn = docked ?? turnShown(game, ply, live)
   const move = turn && moveName(game, turn)
   const gain = turn ? shownGain(game, turn) : undefined
   const [tab, setTab] = useState(storedTab)
@@ -152,6 +165,8 @@ export function TurnPanel({
                   pause={pause}
                   onProbeAfterPause={onProbeAfterPause}
                   waiting={probesWaiting}
+                  dock={dock}
+                  onDock={changeDock}
                 />
               )
             }

@@ -26,6 +26,12 @@ def test_every_api_endpoint_describes_its_response_with_a_named_model():
             "items": {"$ref": "#/components/schemas/PromptTemplateInfo"},
             "title": "Response List Prompt Templates Api Prompt Templates Get",
         },
+        ("POST", "/api/prompt-templates"): {"$ref": "#/components/schemas/PromptTemplateInfo"},
+        ("POST", "/api/prompt-templates/{template_id}/hide"): {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/PromptTemplateInfo"},
+            "title": "Response Hide Prompt Template Api Prompt Templates  Template Id  Hide Post",
+        },
         ("GET", "/api/games/defaults"): {"$ref": "#/components/schemas/NewGame"},
         ("POST", "/api/games"): {"$ref": "#/components/schemas/GameState"},
         ("GET", "/api/games/current"): {"$ref": "#/components/schemas/GameState"},

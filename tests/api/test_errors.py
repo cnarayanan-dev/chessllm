@@ -108,6 +108,8 @@ def test_every_refusal_a_route_can_give_is_described_with_the_error_detail(scrip
     assert declared == {
         ("GET", "/api/models"): {"500"},
         ("GET", "/api/prompt-templates"): set(),
+        ("POST", "/api/prompt-templates"): {"400"},
+        ("POST", "/api/prompt-templates/{template_id}/hide"): {"400"},
         ("GET", "/api/games/defaults"): set(),
         ("POST", "/api/games"): {"400", "500"},
         ("GET", "/api/games/current"): {"404"},

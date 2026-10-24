@@ -1,5 +1,14 @@
 // The game endpoints, typed with the generated API types.
-import type { GameState, NewGame, Probe, ProbeRequest, PromptTemplateInfo, Ranking, TurnPrompt } from '@/api/types'
+import type {
+  GameState,
+  NewGame,
+  NewPromptTemplate,
+  Probe,
+  ProbeRequest,
+  PromptTemplateInfo,
+  Ranking,
+  TurnPrompt,
+} from '@/api/types'
 
 /** A response other than 2xx, with the backend's detail as its message. */
 export class ApiError extends Error {
@@ -36,6 +45,14 @@ export const getNewGameDefaults = (signal?: AbortSignal) => api<NewGame>('GET', 
 /** The Prompt library's templates that aren't hidden, the defaults first. */
 export const getPromptTemplates = (signal?: AbortSignal) =>
   api<PromptTemplateInfo[]>('GET', '/api/prompt-templates', undefined, signal)
+
+/** Saves a new Prompt template in the library, with a new ID; refused (400), saying why, if its side couldn't play it. */
+export const savePromptTemplate = (template: NewPromptTemplate, signal?: AbortSignal) =>
+  api<PromptTemplateInfo>('POST', '/api/prompt-templates', template, signal)
+
+/** Leaves a saved Prompt template out of the library's list, and answers the list as it is now. */
+export const hidePromptTemplate = (templateId: string, signal?: AbortSignal) =>
+  api<PromptTemplateInfo[]>('POST', `/api/prompt-templates/${encodeURIComponent(templateId)}/hide`, undefined, signal)
 
 /** Starts a game with these settings, or the backend's default settings with null. */
 export const startGame = (newGame: NewGame | null, signal?: AbortSignal) =>
