@@ -17,7 +17,7 @@ beforeEach(() => {
 
 function renderApp() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>,
@@ -543,6 +543,109 @@ test("with Prompt lab on, Try on the LLM's last turn waits while its next turn r
 
   await waitFor(() => expect(within(turnPanel()).getByRole('button', { name: 'Try' })).toBeEnabled())
   localStorage.clear()
+})
+
+describe('Pause', () => {
+  const llm = afterE4().settings.black
+  const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+  const white = aTurn('e4', { ply: 1, color: 'white' })
+  const black = aTurn('e5', { ply: 2, color: 'black' })
+  // A faceoff loaded as Black's turn runs, then that turn landed.
+  const afterWhite = afterE4({ settings, human_legal_moves: [], llm_turn: white, llm_turns: [white] })
+  const afterBlack = afterE5({ settings, human_legal_moves: [], llm_turn: black, llm_turns: [white, black], running_s: null })
+  const library = [{ id: 'default@1', name: 'Default', system_prompt: '', turn_template: '', fits: ['free'], default_for: ['free'] }]
+  const pauseButton = (name: 'Pause' | 'Resume') => within(gameCard()).getByRole('button', { name })
+  beforeEach(() => localStorage.setItem('chessllm.promptLab', 'on'))
+  afterEach(() => localStorage.clear())
+
+  test('the turn running finishes, then no turn is asked for until Resume, and Time used stands still meanwhile', async () => {
+    const turn = later()
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(afterWhite))
+      .on('POST /api/games/current/llm-turn', turn.promise, later().promise)
+    renderApp()
+    await llmMoving('black')
+
+    await userEvent.click(pauseButton('Pause'))
+    expect(within(gameCard()).getByText('Pausing after this turn…')).toBeInTheDocument()
+    expect(pauseButton('Pause')).toBeDisabled()
+    await act(async () => turn.resolve(Response.json({ ...afterBlack, time_used: { white: 0, black: 2 } })))
+
+    await waitFor(() => expect(within(gameCard()).getByText('Paused')).toBeInTheDocument())
+    expect(ticking()).toEqual([])
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 1100)))
+    expect(within(strip('white')).getByRole('timer')).toHaveTextContent('0m 00s')
+    expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(1)
+
+    await userEvent.click(pauseButton('Resume'))
+
+    await llmMoving('white')
+    expect(within(gameCard()).getByText('Playing')).toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(2)
+  })
+
+  test('a turn that fails while pausing leaves the game paused, its error shown, and Resume asks for it again', async () => {
+    const turn = later()
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(afterWhite))
+      .on('POST /api/games/current/llm-turn', turn.promise, later().promise)
+    renderApp()
+    await llmMoving('black')
+
+    await userEvent.click(pauseButton('Pause'))
+    await act(async () => turn.resolve(Response.json({ detail: 'Ollama is not running' }, { status: 503 })))
+
+    await waitFor(() => expect(within(gameCard()).getByText('Paused')).toBeInTheDocument())
+    expect(within(gameCard()).getByRole('alert')).toHaveTextContent('Ollama is not running')
+    await userEvent.click(pauseButton('Resume'))
+
+    await waitFor(() => expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(2))
+  })
+
+  test('Try in a running game pauses it first, and probes only once paused', async () => {
+    const turn = later()
+    const backend = fakeBackend()
+      .on('GET /api/games/current', Response.json(afterWhite))
+      .on('POST /api/games/current/llm-turn', turn.promise)
+      .on('GET /api/prompt-templates', Response.json(library))
+      .on('GET /api/games/game-1/probes', Response.json([]))
+      .on('POST /api/games/current/probes', later().promise)
+    renderApp()
+    await llmMoving('black')
+
+    await userEvent.click(within(turnPanel()).getByRole('tab', { name: 'Prompt' }))
+    await waitFor(() => expect(within(turnPanel()).getByRole('combobox', { name: 'Prompt to probe with' })).toHaveTextContent('Default'))
+    const tryButton = within(turnPanel()).getByRole('button', { name: 'Try' })
+    expect(tryButton).toBeEnabled()
+    expect(tryButton).toHaveAttribute('aria-description', expect.stringMatching(/^Pauses the game after the turn running, then asks/))
+    await userEvent.click(tryButton)
+
+    expect(within(gameCard()).getByText('Pausing after this turn…')).toBeInTheDocument()
+    expect(within(turnPanel()).getByText('after the pause…')).toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games/current/probes')).toHaveLength(0)
+    await act(async () => turn.resolve(Response.json(afterBlack)))
+
+    await waitFor(() => expect(backend.sentTo('POST /api/games/current/probes')).toHaveLength(1))
+    expect(backend.sentTo('POST /api/games/current/probes')[0].body).toEqual({ ply: 1, color: 'white', prompt_template_id: 'default@1' })
+    expect(within(gameCard()).getByText('Paused')).toBeInTheDocument()
+    expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(1)
+  })
+
+  test('no Pause in Play LLM, or with Prompt lab off', async () => {
+    fakeBackend()
+      .on('GET /api/games/current', Response.json(afterE4()), Response.json(afterWhite))
+      .on('POST /api/games/current/llm-turn', later().promise, later().promise)
+    const { unmount } = renderApp()
+    await llmMoving('black')
+    expect(within(gameCard()).getByText('Playing')).toBeInTheDocument()
+    expect(within(gameCard()).queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+    unmount()
+
+    localStorage.setItem('chessllm.promptLab', 'off')
+    renderApp()
+    await llmMoving('black')
+    expect(within(gameCard()).queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+  })
 })
 
 describe('the New game sheet', () => {

@@ -6,6 +6,7 @@ import {
   initialGameLoop,
   orientation,
   phase,
+  probesReady,
   shownPosition,
   type GameLoop,
   type GameLoopAction,
@@ -373,6 +374,117 @@ describe('an LLM faceoff', () => {
     expect(state.moveSounds).toBe(before.moveSounds)
     expect(phase(state)).toBe('over')
     expect(state.request).toBeNull()
+  })
+})
+
+describe('Pause', () => {
+  const llm = afterE4().settings.black
+  const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }
+  const started = aGame({ human_legal_moves: [], settings })
+  const afterOne = { ...started, turn: 'black' as const, llm_turns: [aTurn('e4', { ply: 1, color: 'white' })] }
+  const playing = run(received(initialGameLoop, started))
+
+  test('pausing during a turn lets it finish, then no next turn is asked for until Resume, which asks for it', () => {
+    const pausing = gameLoop(playing, { type: 'pause' })
+    expect(pausing.pause).toBe('pausing')
+    expect(pausing.request).toBe(playing.request)
+
+    const paused = gameLoop(pausing, received(pausing, afterOne))
+    expect(paused.pause).toBe('paused')
+    expect(paused.game).toEqual(afterOne)
+    expect(paused.request).toBeNull()
+
+    const resumed = gameLoop(paused, { type: 'resume', at: 0 })
+    expect(resumed.pause).toBe('playing')
+    expect(resumed.request).toMatchObject({ kind: 'llm-turn', game: afterOne })
+  })
+
+  test('Time used shows no time for a pause: the side to move ticks again only from Resume', () => {
+    const pausing = gameLoop(playing, { type: 'pause' })
+    const landed = { ...afterOne, time_used: { white: 3, black: 0 }, running_s: null }
+    const paused = gameLoop(pausing, { type: 'received', requestId: pausing.request!.id, game: landed, at: 10_000 })
+    expect(paused.clock!.ticking).toBeNull()
+    expect(liveTotal(paused.clock!, 'black', 70_000)).toBe(0)
+
+    const resumed = gameLoop(paused, { type: 'resume', at: 70_000 })
+
+    expect(liveTotal(resumed.clock!, 'black', 75_000)).toBe(5)
+    expect(liveTotal(resumed.clock!, 'white', 75_000)).toBe(3)
+  })
+
+  test('another game arriving is not paused', () => {
+    const pausing = gameLoop(playing, { type: 'pause' })
+    const other = { ...afterOne, game_id: 'game-2' }
+
+    const state = gameLoop(pausing, received(pausing, other))
+
+    expect(state.pause).toBe('playing')
+    expect(state.request).toMatchObject({ kind: 'llm-turn', game: other })
+  })
+
+  test('with nothing running it pauses at once; a game that cannot start leaves it paused, a new one plays on', () => {
+    const failed = gameLoop(playing, { type: 'failed', requestId: playing.request!.id, message: 'no', at: 0 })
+    const paused = gameLoop(failed, { type: 'pause' })
+    expect(paused.pause).toBe('paused')
+
+    const starting = gameLoop(paused, { type: 'new-game', newGame: null })
+    const refused = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'no', at: 0 })
+    expect(refused.pause).toBe('paused')
+    expect(refused.request).toBeNull()
+    const again = gameLoop(refused, { type: 'new-game', newGame: null })
+    const state = gameLoop(again, received(again, { ...started, game_id: 'game-2' }))
+
+    expect(state.pause).toBe('playing')
+    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+  })
+
+  const probe = { ply: 1, color: 'white' as const, prompt_template_id: 'described@1' }
+
+  test('a Probe asked in a running game pauses it first, and is asked only once paused', () => {
+    const running = gameLoop(playing, received(playing, afterOne))
+    const pausing = gameLoop(running, { type: 'probe', probe })
+    expect(pausing.pause).toBe('pausing')
+    expect(probesReady(pausing)).toEqual([])
+
+    const paused = gameLoop(pausing, received(pausing, { ...afterOne, turn: 'white', llm_turns: [...afterOne.llm_turns, aTurn('e5')] }))
+    expect(paused.request).toBeNull()
+    expect(probesReady(paused)).toEqual([probe])
+
+    const asked = gameLoop(paused, { type: 'probes-asked', probes: probesReady(paused) })
+    expect(probesReady(asked)).toEqual([])
+    expect(asked.pause).toBe('paused')
+  })
+
+  test('a Probe asked in a paused game is asked at once', () => {
+    const failed = gameLoop(playing, { type: 'failed', requestId: playing.request!.id, message: 'no', at: 0 })
+    const paused = gameLoop(failed, { type: 'pause' })
+
+    expect(probesReady(gameLoop(paused, { type: 'probe', probe }))).toEqual([probe])
+  })
+
+  test('a turn that fails while pausing leaves the game paused, its waiting Probes asked, and Resume asks again', () => {
+    const pausing = gameLoop(playing, { type: 'probe', probe })
+    const failed = gameLoop(pausing, { type: 'failed', requestId: pausing.request!.id, message: 'no', at: 0 })
+
+    expect(failed.pause).toBe('paused')
+    expect(failed.error).toBe('no')
+    expect(probesReady(failed)).toEqual([probe])
+    expect(gameLoop(failed, { type: 'resume', at: 0 }).request).toMatchObject({ kind: 'llm-turn', game: started })
+  })
+
+  test('Probes waiting for the pause are dropped by Resume, or by another game', () => {
+    const pausing = gameLoop(playing, { type: 'probe', probe })
+
+    expect(gameLoop(pausing, { type: 'resume', at: 0 }).probesWaiting).toEqual([])
+    expect(gameLoop(pausing, received(pausing, { ...afterOne, game_id: 'game-2' })).probesWaiting).toEqual([])
+  })
+
+  test('a game with a human, or one that is over, never pauses', () => {
+    const human = run(received(initialGameLoop, afterE4()))
+    const over = run(received(initialGameLoop, { ...started, status: 'over', result: '1-0', end_reason: 'checkmate' }))
+
+    expect(gameLoop(human, { type: 'pause' })).toBe(human)
+    expect(gameLoop(over, { type: 'pause' })).toBe(over)
   })
 })
 

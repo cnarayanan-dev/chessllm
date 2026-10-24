@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getNewGameDefaults } from '@/api/client'
 import { modelsQuery } from '@/api/models'
+import { useAskProbe } from '@/api/probes'
 import type { Color, GameState } from '@/api/types'
 import { Board } from '@/components/board/Board'
 import { BoardFlashes } from '@/components/board/BoardFlashes'
@@ -17,7 +18,7 @@ import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, counterpartAt } from '@/game/chaos'
 import { evaluationBar, previewBar } from '@/game/evaluation'
-import { boardInput, orientation, shownPosition, waitingForLlm } from '@/game/gameLoop'
+import { boardInput, orientation, pausable, probesReady, shownPosition, waitingForLlm } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
@@ -40,13 +41,27 @@ const keyTakenElsewhere = (event: KeyboardEvent) =>
     (event.target.isContentEditable || !!event.target.closest('input, textarea, select, [role="dialog"]')))
 
 export default function App() {
-  const { state, newGame, humanMove, viewPly, step } = useGameLoop()
+  const { state, newGame, humanMove, viewPly, step, pause, resume, probeAfterPause, probesAsked } = useGameLoop()
   const { game, error, history } = state
   const shown = shownPosition(state)
   const [sheetOpen, setSheetOpen] = useState(false)
   // Off, a Rematch plays every LLM's default Prompt template, as a new game does.
   const promptLab = usePromptLab()
   const openSheet = useCallback(() => setSheetOpen(true), [])
+  // Pause, one of Prompt lab's tools, in a game LLMs play on their own; null: none shown. Prompt lab switched off
+  // while paused, the game goes on, as nothing would show it paused.
+  const pauseShown = promptLab && pausable(game) ? state.pause : null
+  useEffect(() => {
+    if (!promptLab && state.pause !== 'playing') resume()
+  }, [promptLab, state.pause, resume])
+  // The Probes that waited for the pause, asked once the game is paused, so none runs alongside a turn.
+  const ready = probesReady(state)
+  const { mutate: askProbe } = useAskProbe(game?.game_id ?? '')
+  useEffect(() => {
+    if (ready.length === 0) return
+    probesAsked(ready)
+    for (const probe of ready) askProbe(probe)
+  }, [ready, probesAsked, askProbe])
   // The models as the New game sheet last listed them, or null until it has: they decide whether thinking is on.
   const modelsList = useQuery({ ...modelsQuery, enabled: false })
   const models: Models = modelsList.isError ? null : (modelsList.data ?? null)
@@ -133,7 +148,14 @@ export default function App() {
           // The Turn panel follows the position on the board. (`shown` is set whenever `game` is.)
           game && shown ? (
             <>
-              <GameCard game={game} error={error} onRematch={() => newGame(rematchOf(game.settings, promptLab))} />
+              <GameCard
+                game={game}
+                error={error}
+                onRematch={() => newGame(rematchOf(game.settings, promptLab))}
+                pause={pauseShown}
+                onPause={pause}
+                onResume={resume}
+              />
               <TurnPanel
                 game={game}
                 ply={shown.ply}
@@ -141,6 +163,9 @@ export default function App() {
                 previewing={previewing}
                 onPreview={togglePreview}
                 llmTurnRunning={waitingForLlm(state)}
+                pause={pauseShown}
+                onProbeAfterPause={probeAfterPause}
+                probesWaiting={state.probesWaiting}
               />
             </>
           ) : (

@@ -11,8 +11,12 @@
   The move history lets the user look back through the game without changing it: the board shows a past position
   from the plies the backend sent, and takes no move until it is back at live. A state that lands meanwhile doesn't
   pull the view.
+
+  Pause (CONTEXT.md) is the page's: in a game in which LLMs move on their own, the turn running finishes and then no
+  next turn is asked for until Resume, so nobody drives the game and Time used doesn't grow. A Probe asked while such
+  a game runs pauses it first and waits for the pause, so a probe never runs alongside a real turn.
 */
-import type { Color, GameState, LlmTurn, NewGame, Ply } from '@/api/types'
+import type { Color, GameState, LlmTurn, NewGame, Ply, ProbeRequest } from '@/api/types'
 import { played } from '@/game/chaos'
 import { clockAt, resynced, stopped, type Clock } from '@/game/timeUsed'
 
@@ -41,8 +45,15 @@ export type GameLoop = {
   flash: Flash | null
   /** The past position viewed in the move history, or null when the board shows the game as it is (live). */
   history: History | null
+  /** Whether the game is paused, or pausing after the turn running (Pause). Only a game without a human pauses. */
+  pause: PauseState
+  /** The Probes asked while the game ran, waiting for the pause; the page asks them once it is paused. */
+  probesWaiting: readonly ProbeRequest[]
   nextId: number
 }
+
+/** playing → pausing (the turn running finishes) → paused; no LLM turn is asked for until Resume. */
+export type PauseState = 'playing' | 'pausing' | 'paused'
 
 /** An LLM turn that landed, with the square the last move landed on; `id` tells one landing from the next. */
 export type Flash = { id: number; turn: LlmTurn; landedOn: string | null }
@@ -64,6 +75,12 @@ export type GameLoopAction =
   // The move history: view the position after a ply (0: the start; the last ply: live), or step back or forward a ply.
   | { type: 'view'; ply: number }
   | { type: 'step'; by: -1 | 1 }
+  // Pause: no next LLM turn is asked for, once the one running has landed; Resume asks for it again.
+  | { type: 'pause' }
+  | { type: 'resume'; at: number }
+  // A Probe in a game that can pause: it pauses the game first; probes-asked once the page has asked them.
+  | { type: 'probe'; probe: ProbeRequest }
+  | { type: 'probes-asked'; probes: readonly ProbeRequest[] }
 
 /** idle: no game yet. human: the human to move. llm: waiting for an LLM. over: the game has ended. */
 export type Phase = 'idle' | 'human' | 'llm' | 'over'
@@ -77,6 +94,8 @@ export const initialGameLoop: GameLoop = {
   moveSounds: 0,
   flash: null,
   history: null,
+  pause: 'playing',
+  probesWaiting: [],
   nextId: 2,
 }
 
@@ -149,14 +168,28 @@ function movedByLlm(game: GameState | null, next: GameState): boolean {
   return llmTurnLanded(game, next) && (next.llm_turn?.attempts.some(played) ?? false)
 }
 
+/**
+ * Whether the game can be paused: it is running and LLMs move on their own, no human waited for. That is an LLM faceoff
+ * or an Anchor match; the app can't run an Anchor match (it is command-line only), but one without a human is covered.
+ */
+export const pausable = (game: GameState | null): boolean => game?.status === 'playing' && humanColor(game) === null
+
+const NO_PROBES: readonly ProbeRequest[] = []
+
+/** The Probes waiting for the pause that the page is to ask now: none until the game is paused. */
+export const probesReady = (state: GameLoop): readonly ProbeRequest[] =>
+  state.pause === 'paused' && !waitingForLlm(state) ? state.probesWaiting : NO_PROBES
+
 function send(state: GameLoop, request: NewRequest): GameLoop {
   return { ...state, request: { ...request, id: state.nextId }, nextId: state.nextId + 1 }
 }
 
 // A game is shown and, if an LLM is to move, its turn is asked for. Starting a turn clears the error line, unless
 // keepError: a new game that could not start leaves its error up as the running game's turn starts again.
+// Paused, the game is shown and nothing asked for; a game that was pausing is paused once nothing runs.
 function show(state: GameLoop, game: GameState, keepError = false): GameLoop {
   const shown = { ...state, game, request: null }
+  if (state.pause !== 'playing') return { ...shown, pause: 'paused' }
   if (!llmToMove(game)) return shown
   return send({ ...shown, error: keepError ? state.error : null }, { kind: 'llm-turn', game })
 }
@@ -165,6 +198,7 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
   switch (action.type) {
     case 'new-game':
       // Also during an LLM turn or a human move: their answers are dropped from here on.
+      // A Pause holds until the new game arrives: one that can't start leaves the running game paused.
       return send({ ...state, error: null, flash: null, history: null }, { kind: 'start', newGame: action.newGame })
     case 'human-move':
       if (!boardInput(state) || state.request) return state
@@ -177,12 +211,15 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       const flash = turn
         ? { id: request.id, turn, landedOn: action.game.last_move?.slice(2, 4) ?? null }
         : state.flash
-      // The view stays where it is in the same game; another game is shown live.
-      const history = state.game?.game_id === action.game.game_id ? state.history : null
+      // The view stays where it is in the same game, as does a Pause; another game is shown live, and plays on.
+      const same = state.game?.game_id === action.game.game_id
+      const history = same ? state.history : null
+      const pause = same ? state.pause : 'playing'
+      const probesWaiting = same ? state.probesWaiting : NO_PROBES
       const moveSounds = state.moveSounds + (sound ? 1 : 0)
-      // The page asks for the LLM's turn as the state arrives (show), so the LLM ticks from then.
-      const clock = clockAt(action.game, action.at, llmToMove(action.game))
-      return show({ ...state, clock, noGame: false, moveSounds, flash, history }, action.game)
+      // The page asks for the LLM's turn as the state arrives (show), so the LLM ticks from then; paused, it doesn't.
+      const clock = clockAt(action.game, action.at, llmToMove(action.game) && pause === 'playing')
+      return show({ ...state, clock, noGame: false, moveSounds, flash, history, pause, probesWaiting }, action.game)
     }
     case 'polled': {
       const { request, game, clock } = state
@@ -199,13 +236,32 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       // Nobody drives the game after its LLM turn failed: the clock stands where it was. A new game that could not
       // start leaves the running game's clock as it was, its turn asked for again.
       const clock = request.kind === 'llm-turn' && state.clock ? stopped(state.clock, action.at) : state.clock
-      const failed = { ...state, request: null, error: action.message, clock }
+      // A game pausing is paused once nothing runs, a failed turn too: Resume asks for it again.
+      const pause = state.pause === 'pausing' ? 'paused' : state.pause
+      const failed = { ...state, request: null, error: action.message, clock, pause }
       // The running game goes on, its LLM turn included.
       if (request.kind === 'start' && state.game) return show(failed, state.game, true)
       // The same position again, as a new object, so the board snaps a rejected move's piece back.
       if (request.kind === 'move' && state.game) return { ...failed, game: { ...state.game } }
       return failed
     }
+    case 'pause':
+      if (state.pause !== 'playing' || !pausable(state.game)) return state
+      return { ...state, pause: waitingForLlm(state) ? 'pausing' : 'paused' }
+    case 'resume': {
+      if (state.pause === 'playing') return state
+      const resumed = { ...state, pause: 'playing' as const, probesWaiting: NO_PROBES }
+      // The turn running goes on; else the next is asked for, its LLM ticking from now.
+      if (state.request || !state.game || !llmToMove(state.game)) return resumed
+      return show({ ...resumed, clock: clockAt(state.game, action.at, true) }, state.game)
+    }
+    case 'probe': {
+      if (!pausable(state.game)) return state
+      const waiting = { ...state, probesWaiting: [...state.probesWaiting, action.probe] }
+      return gameLoop(waiting, { type: 'pause' })
+    }
+    case 'probes-asked':
+      return { ...state, probesWaiting: state.probesWaiting.filter((probe) => !action.probes.includes(probe)) }
     case 'view':
       return view(state, action.ply)
     case 'step':

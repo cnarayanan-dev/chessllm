@@ -1,7 +1,7 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
 import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, Eye, MessageSquareText, Scale, Undo2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import type { Attempt, GameState, LlmTurn } from '@/api/types'
+import type { Attempt, GameState, LlmTurn, ProbeRequest } from '@/api/types'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Probes } from '@/components/turn/Probes'
 import { Prompt } from '@/components/turn/PromptMessages'
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { shownGain } from '@/game/chaosGain'
+import type { PauseState } from '@/game/gameLoop'
 import { faceoff } from '@/game/wording'
 import { usePromptLab } from '@/settings/promptLab'
 
@@ -35,6 +36,11 @@ type TurnPanelProps = {
   onPreview?: () => void
   /** Whether an LLM turn is running, so no Probe can be asked (Prompt lab). */
   llmTurnRunning?: boolean
+  /** The game's Pause, or null when it can't pause; Try while it runs pauses it first (Prompt lab). */
+  pause?: PauseState | null
+  onProbeAfterPause?: (request: ProbeRequest) => void
+  /** The Probes waiting for the pause. */
+  probesWaiting?: readonly ProbeRequest[]
 }
 
 /**
@@ -93,7 +99,17 @@ const trigger = 'gap-1 px-1 @max-[17rem]:text-xs @max-[17rem]:[&_svg]:hidden'
 const pane = 'max-h-80 overflow-y-auto'
 const prose = 'leading-relaxed whitespace-pre-wrap text-card-foreground'
 
-export function TurnPanel({ game, ply, live, previewing = false, onPreview, llmTurnRunning = false }: TurnPanelProps) {
+export function TurnPanel({
+  game,
+  ply,
+  live,
+  previewing = false,
+  onPreview,
+  llmTurnRunning = false,
+  pause = null,
+  onProbeAfterPause,
+  probesWaiting,
+}: TurnPanelProps) {
   const turn = turnShown(game, ply, live)
   const promptLab = usePromptLab()
   // The Prompt template last picked to probe with, kept from turn to turn; null for the game's own.
@@ -132,6 +148,9 @@ export function TurnPanel({ game, ply, live, previewing = false, onPreview, llmT
                   llmTurnRunning={llmTurnRunning}
                   pickedTemplateId={pickedTemplateId}
                   onPick={pickTemplate}
+                  pause={pause}
+                  onProbeAfterPause={onProbeAfterPause}
+                  waiting={probesWaiting}
                 />
               )
             }

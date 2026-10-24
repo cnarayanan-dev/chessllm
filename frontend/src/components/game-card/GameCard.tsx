@@ -1,12 +1,14 @@
 // The Game card, as a lichess game card without Elo: the Mode, the settings, the players, and the result and Rematch
-// once over.
-import { Bot, RotateCcw, User } from 'lucide-react'
+// once over; while playing, Pause with Prompt lab on.
+import { Bot, Pause, Play, RotateCcw, User } from 'lucide-react'
 import type { Color, GameState } from '@/api/types'
 import { settingIcon } from '@/components/game-card/settingIcons'
 import { SettingChip } from '@/components/setting-chip/SettingChip'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { PauseState } from '@/game/gameLoop'
 import { rematchDescription } from '@/game/rematch'
 import { COLORS, COLOR_NAMES, gameSettings, resultText, type GameSetting } from '@/game/wording'
 import { cn } from '@/lib/utils'
@@ -23,6 +25,47 @@ type GameCardProps = {
   error: string | null
   /** Starts the Rematch, once the game is over. */
   onRematch: () => void
+  /** The game's Pause, or null for no Pause button: Play LLM, or Prompt lab off. */
+  pause?: PauseState | null
+  onPause?: () => void
+  onResume?: () => void
+}
+
+const STATUS = 'text-[15px]/5 font-semibold tracking-tight text-muted-foreground'
+const STATUS_NAMES: Record<PauseState, string> = {
+  playing: 'Playing',
+  pausing: 'Pausing after this turn…',
+  paused: 'Paused',
+}
+const PAUSE_MEANING =
+  "Pauses the game after the turn running: no new LLM turn starts until you resume. Time used doesn't grow while paused."
+const RESUME_MEANING = 'Goes on with the game from the next turn. Until then, probe any turn: nothing in the game changes.'
+
+/** "Playing", "Pausing after this turn…" or "Paused", with a round Pause or Resume button, its meaning in its tooltip. */
+function PauseLine({ pause, onPause, onResume }: { pause: PauseState; onPause?: () => void; onResume?: () => void }) {
+  const paused = pause === 'paused'
+  const meaning = paused ? RESUME_MEANING : PAUSE_MEANING
+  return (
+    <div className="flex w-full items-center gap-2">
+      <span className={STATUS}>{STATUS_NAMES[pause]}</span>
+      {/* The tooltip hangs on a wrapper, as a disabled button takes no hover. */}
+      <Tooltip>
+        <TooltipTrigger delay={150} render={<span className="ml-auto" />}>
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            aria-label={paused ? 'Resume' : 'Pause'}
+            aria-description={meaning}
+            disabled={pause === 'pausing'}
+            onClick={paused ? onResume : onPause}
+          >
+            {paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="block max-w-64">{meaning}</TooltipContent>
+      </Tooltip>
+    </div>
+  )
 }
 
 /** A setting as muted text, its meaning in a tooltip and its `aria-description` (DESIGN.md: the hover rule). */
@@ -102,7 +145,7 @@ function SettingsLine({
   )
 }
 
-export function GameCard({ game, error, onRematch }: GameCardProps) {
+export function GameCard({ game, error, onRematch, pause = null, onPause, onResume }: GameCardProps) {
   const mode = MODES[game.settings.mode]
   const over = game.status === 'over' ? resultText(game) : null
   // The Rules, whether the game is wild, is the one setting shown, as an icon; the settings the LLMs share are not
@@ -173,8 +216,10 @@ export function GameCard({ game, error, onRematch }: GameCardProps) {
               onClick={onRematch}
             />
           </>
+        ) : pause ? (
+          <PauseLine pause={pause} onPause={onPause} onResume={onResume} />
         ) : (
-          <div className="text-[15px]/5 font-semibold tracking-tight text-muted-foreground">Playing</div>
+          <div className={STATUS}>Playing</div>
         )}
       </CardContent>
       {error !== null && (

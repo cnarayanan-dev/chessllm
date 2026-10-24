@@ -187,3 +187,39 @@ test("Rematch's tooltip and aria-description say which colour you will play, or 
     'Same settings, the LLMs swap colours',
   )
 })
+
+test('Pause: "Playing" with a round Pause button, "Pausing after this turn…" while the turn finishes, then "Paused" and Resume', async () => {
+  const onPause = vi.fn()
+  const onResume = vi.fn()
+  const card = (pause: 'playing' | 'pausing' | 'paused') => (
+    <GameCard game={faceoffOf({}, {})} error={null} onRematch={() => {}} pause={pause} onPause={onPause} onResume={onResume} />
+  )
+  const { rerender } = render(card('playing'))
+
+  expect(within(gameCard()).getByText('Playing')).toBeInTheDocument()
+  const pause = within(gameCard()).getByRole('button', { name: 'Pause' })
+  expect(pause).toHaveAttribute('aria-description', expect.stringMatching(/no new LLM turn starts until you resume/))
+  await userEvent.hover(pause)
+  expect(await screen.findByText(/Time used doesn't grow while paused/)).toBeInTheDocument()
+  await userEvent.click(pause)
+  expect(onPause).toHaveBeenCalledOnce()
+
+  rerender(card('pausing'))
+  expect(within(gameCard()).getByText('Pausing after this turn…')).toBeInTheDocument()
+  expect(within(gameCard()).getByRole('button', { name: 'Pause' })).toBeDisabled()
+
+  rerender(card('paused'))
+  expect(within(gameCard()).getByText('Paused')).toBeInTheDocument()
+  const resume = within(gameCard()).getByRole('button', { name: 'Resume' })
+  expect(resume).toHaveAttribute('aria-description', expect.stringMatching(/probe any turn: nothing in the game changes/))
+  expect(within(gameCard()).queryByText(/probe any turn/)).not.toBeInTheDocument()
+  await userEvent.click(resume)
+  expect(onResume).toHaveBeenCalledOnce()
+})
+
+test('no Pause button without a Pause (Play LLM, or Prompt lab off)', () => {
+  renderCard(faceoffOf({}, {}))
+
+  expect(within(gameCard()).getByText('Playing')).toBeInTheDocument()
+  expect(within(gameCard()).queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+})

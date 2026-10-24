@@ -1,10 +1,10 @@
 // Probes (CONTEXT.md, ADR 0010), at the top of the Turn panel's Prompt tab with Prompt lab on: one row, the Prompt
 // template to probe with and Try, which asks the LLM about the turn's position again, outside the game; then the turn's
 // probes, newest first, with a tally per template. The probes come from the game's probe log, so a reload keeps them.
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query'
+// In a game that can pause, Try pauses it first and the probe is asked once it is paused (`@/game/gameLoop`).
+import { useMutationState, useQuery } from '@tanstack/react-query'
 import { ChevronRight, PenLine, Play } from 'lucide-react'
-import { askProbe } from '@/api/client'
-import { probesQuery } from '@/api/probes'
+import { probeMutationKey, probesQuery, useAskProbe } from '@/api/probes'
 import { promptLibraryQuery } from '@/api/promptLibrary'
 import type { GameState, LlmTurn, Probe, ProbeRequest, PromptTemplateInfo } from '@/api/types'
 import { Prompt } from '@/components/turn/PromptMessages'
@@ -14,9 +14,12 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { PauseState } from '@/game/gameLoop'
 import { fittingTemplates } from '@/settings/next-game'
 
 const ASK = "Ask the LLM about this turn's position again with this prompt, outside the game: a Probe."
+const PAUSES_FIRST =
+  "Pauses the game after the turn running, then asks the LLM about this turn's position again with this prompt, outside the game: a Probe."
 const TURN_RUNNING = 'An LLM turn is running. Probe once it has landed: a Probe never runs alongside a turn.'
 const LOADING = 'The Prompt library is loading.'
 const PICKER = 'The Prompt template a Probe asks with. "In the game" is the one the LLM played this game with.'
@@ -29,13 +32,30 @@ type ProbesProps = {
   /** The Prompt template last picked to probe with, or null for the game's own. */
   pickedTemplateId: string | null
   onPick: (templateId: string) => void
+  /** The game's Pause, or null when it can't pause (Play LLM): then no Probe is asked while an LLM turn runs. */
+  pause?: PauseState | null
+  /** Asks a Probe once the game has paused, pausing it first: Try while the game runs. */
+  onProbeAfterPause?: (request: ProbeRequest) => void
+  /** The Probes waiting for the pause. */
+  waiting?: readonly ProbeRequest[]
 }
 
 const nameOf = (template: { id: string; name: string | null }) => template.name ?? template.id
 const sameTurn = (turn: LlmTurn) => (probe: { ply: number; color: string }) =>
   probe.ply === turn.ply && probe.color === turn.color
 
-export function Probes({ game, turn, llmTurnRunning, pickedTemplateId, onPick }: ProbesProps) {
+const NONE: readonly ProbeRequest[] = []
+
+export function Probes({
+  game,
+  turn,
+  llmTurnRunning,
+  pickedTemplateId,
+  onPick,
+  pause = null,
+  onProbeAfterPause,
+  waiting = NONE,
+}: ProbesProps) {
   const side = game.settings[turn.color]
   const constraints = side.player === 'llm' ? side.llm_constraints : 'free'
   const library = useQuery(promptLibraryQuery)
@@ -51,23 +71,29 @@ export function Probes({ game, turn, llmTurnRunning, pickedTemplateId, onPick }:
     fitting.find((template) => template.default_for.includes(constraints)) ??
     fitting[0]
 
-  const queryClient = useQueryClient()
-  const listed = probesQuery(game.game_id)
-  const probes = (useQuery(listed).data ?? []).filter(sameTurn(turn))
-  const mutationKey = ['probe', game.game_id]
-  const asking = useMutation({
-    mutationKey,
-    mutationFn: (request: ProbeRequest) => askProbe(request),
-    onSuccess: (probe) => queryClient.setQueryData(listed.queryKey, (before) => [...(before ?? []), probe]),
-  })
-  // Every probe of the turn still being asked, from this panel or another turn's.
+  const probes = (useQuery(probesQuery(game.game_id)).data ?? []).filter(sameTurn(turn))
+  const mutationKey = probeMutationKey(game.game_id)
+  const asking = useAskProbe(game.game_id)
+  // Every probe of the turn still being asked, from this panel, another turn's or after a Pause.
   const pending = useMutationState({
     filters: { mutationKey, status: 'pending' },
     select: (mutation) => mutation.state.variables as ProbeRequest,
   }).filter(sameTurn(turn))
+  // The error of the last probe asked, whichever asked it, if it failed.
+  const failed = useMutationState({ filters: { mutationKey }, select: (mutation) => mutation.state.error }).at(-1)
 
-  const disabled = llmTurnRunning ? TURN_RUNNING : picked ? undefined : LOADING
-  const ask = () => picked && asking.mutate({ ply: turn.ply, color: turn.color, prompt_template_id: picked.id })
+  // While the game runs, Try pauses it first, so a probe never runs alongside a turn.
+  const pausesFirst = pause === 'playing' || pause === 'pausing'
+  const disabled = llmTurnRunning && pause === null ? TURN_RUNNING : picked ? undefined : LOADING
+  const ask = () => {
+    if (!picked) return
+    const request = { ply: turn.ply, color: turn.color, prompt_template_id: picked.id }
+    if (pausesFirst && onProbeAfterPause) onProbeAfterPause(request)
+    else asking.mutate(request)
+  }
+  const meaning = disabled ?? (pausesFirst ? PAUSES_FIRST : ASK)
+  // The probes of the turn waiting for the pause, then those being asked.
+  const asked = [...waiting.filter(sameTurn(turn)).map(() => 'after the pause…'), ...pending.map(() => 'asking…')]
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5">
@@ -99,26 +125,26 @@ export function Probes({ game, turn, llmTurnRunning, pickedTemplateId, onPick }:
         {/* The tooltip hangs on a wrapper, as a disabled button takes no hover. */}
         <Tooltip>
           <TooltipTrigger render={<span />}>
-            <Button size="sm" aria-description={disabled ?? ASK} disabled={disabled !== undefined} onClick={ask}>
+            <Button size="sm" aria-description={meaning} disabled={disabled !== undefined} onClick={ask}>
               <Play aria-hidden="true" />
               Try
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">{disabled ?? ASK}</TooltipContent>
+          <TooltipContent side="bottom">{meaning}</TooltipContent>
         </Tooltip>
       </div>
-      {asking.isError && (
+      {failed && (
         <p role="alert" className="text-sm text-destructive">
-          {asking.error.message}
+          {failed.message}
         </p>
       )}
-      {(probes.length > 0 || pending.length > 0) && (
+      {(probes.length > 0 || asked.length > 0) && (
         <>
           <Tally probes={probes} />
           <ol aria-label="Probes" className="flex flex-col gap-1.5">
-            {pending.map((_, index) => (
+            {asked.map((label, index) => (
               <li key={`pending-${index}`} className="rounded-md border border-dashed px-2 py-1.5">
-                <Badge variant="outline">asking…</Badge>
+                <Badge variant="outline">{label}</Badge>
               </li>
             ))}
             {[...probes].reverse().map((probe) => (

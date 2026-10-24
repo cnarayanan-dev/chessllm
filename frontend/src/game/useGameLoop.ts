@@ -2,7 +2,7 @@
 // A request the reducer no longer waits for is aborted, and its answer, should one arrive, is dropped.
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { ApiError, getGame, playLlmTurn, playMove, startGame } from '@/api/client'
-import type { GameState, NewGame } from '@/api/types'
+import type { GameState, NewGame, ProbeRequest } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
 import { gameLoop, initialGameLoop, llmToMove, type Request } from '@/game/gameLoop'
 
@@ -127,6 +127,10 @@ export function useGameLoop() {
   const humanMove = useCallback((uci: string) => dispatch({ type: 'human-move', uci }), [])
   const viewPly = useCallback((ply: number) => dispatch({ type: 'view', ply }), [])
   const step = useCallback((by: -1 | 1) => dispatch({ type: 'step', by }), [])
+  const pause = useCallback(() => dispatch({ type: 'pause' }), [])
+  const resume = useCallback(() => dispatch({ type: 'resume', at: Date.now() }), [])
+  const probeAfterPause = useCallback((probe: ProbeRequest) => dispatch({ type: 'probe', probe }), [])
+  const probesAsked = useCallback((probes: readonly ProbeRequest[]) => dispatch({ type: 'probes-asked', probes }), [])
 
-  return { state, newGame, humanMove, viewPly, step }
+  return { state, newGame, humanMove, viewPly, step, pause, resume, probeAfterPause, probesAsked }
 }
