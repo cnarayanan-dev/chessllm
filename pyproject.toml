@@ -15,6 +15,7 @@ chessllm = "chessllm.__main__:main"
 anchor-match = "chessllm.cli.anchor_match:main"
 anchor-batch = "chessllm.cli.anchor_batch:main"
 faceoff-batch = "chessllm.cli.faceoff_batch:main"
+tools-experiment = "chessllm.cli.tools_experiment:main"
 analyse-games = "chessllm.cli.analyse:main"
 games-report = "chessllm.cli.report:main"
 

@@ -13,6 +13,8 @@ PROJECT_ROOT = PACKAGE_DIR.parent
 
 # One JSON Lines file per game, plus its PGN when it ends (ADR 0004), and its analysis file once analysed.
 GAMES_DIR = PROJECT_ROOT / "games"
+# The Markdown reports the benchmark's commands write, e.g. tools-experiment's tools-comparison-<date>.md.
+REPORTS_DIR = PROJECT_ROOT / "reports"
 # The sampling options every LLM side plays with; read at the start of every game.
 SAMPLING_FILE = PACKAGE_DIR / "llm" / "sampling.toml"
 # The outcome of the Move-quality validation (scripts/validate_move_quality.py).

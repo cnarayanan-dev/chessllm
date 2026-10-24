@@ -4,10 +4,13 @@ never from one another."""
 
 import argparse
 import sys
+from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, get_args
 
 from chessllm.analytics.analysis import analyse_game
+from chessllm.analytics.leaderboard import settings_configuration
 from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH_VARIABLE
 from chessllm.engines.anchors import (
     Anchor,
@@ -19,8 +22,25 @@ from chessllm.engines.anchors import (
 )
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
-from chessllm.exceptions import InvalidSettings, Maia2Unavailable, StockfishUnavailable
-from chessllm.core.types import Color, RulesKey
+from chessllm.exceptions import (
+    AnchorUnavailable,
+    InvalidSamplingConfig,
+    InvalidSettings,
+    Maia2Unavailable,
+    StockfishUnavailable,
+)
+from chessllm.core.types import Color, RulesKey, opponent, score_for
+from chessllm.game.ladder import (
+    FIRST_SKILL,
+    AnchoredGame,
+    earlier_games,
+    next_color,
+    next_rung,
+    rung_name,
+    rung_side,
+)
+from chessllm.game.records import GameState
+from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
 from chessllm.game.sides import (
     AnchorEngine,
@@ -38,6 +58,8 @@ from chessllm.game.sides import (
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
 from chessllm.llm.models import LLM_MODELS, load_sampling
+from chessllm.llm.players import LlmPlayer
+from chessllm.logs.game_log import GameLog
 
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
@@ -191,18 +213,7 @@ def anchor_match_settings(
 ) -> Settings:
     """The settings of an Anchor match of the LLM in args at llm_color against the Anchor side. Raises
     InvalidSettings with the reason when they can't be played, and InvalidSamplingConfig for a broken config."""
-    llm = BenchmarkLlmSide(
-        model=args.model,
-        thinking=args.thinking or args.thinking_level is not None,
-        thinking_level=args.thinking_level,
-        thinking_budget=args.thinking_budget,
-        llm_constraints=args.llm_constraints,
-        retry_feedback=args.retry_feedback,
-        prompt_template=prompt_template(args),
-        turn_memory=args.turn_memory,
-        tools=args.tools,
-        tool_call_cap=tool_call_cap(args.tools, args.tool_call_cap, f"--tool-call-cap {args.tool_call_cap}"),
-    )
+    llm = benchmark_llm_side(args)
     white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)
     settings = Settings(
         "anchor_match",
@@ -215,6 +226,23 @@ def anchor_match_settings(
     )
     settings.check(LLM_MODELS)
     return settings
+
+
+def benchmark_llm_side(args: argparse.Namespace) -> BenchmarkLlmSide:
+    """The LLM side of the Player configuration in args (add_configuration_arguments). Raises InvalidSettings for a
+    Tool-call cap without Tools."""
+    return BenchmarkLlmSide(
+        model=args.model,
+        thinking=args.thinking or args.thinking_level is not None,
+        thinking_level=args.thinking_level,
+        thinking_budget=args.thinking_budget,
+        llm_constraints=args.llm_constraints,
+        retry_feedback=args.retry_feedback,
+        prompt_template=prompt_template(args),
+        turn_memory=args.turn_memory,
+        tools=args.tools,
+        tool_call_cap=tool_call_cap(args.tools, args.tool_call_cap, f"--tool-call-cap {args.tool_call_cap}"),
+    )
 
 
 def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
@@ -297,6 +325,99 @@ class Analyser:
         close(self._move_model)
         close(self._evaluator)
         self._move_model = self._evaluator = None
+
+
+INTERRUPTED_EXIT_CODE = 130
+
+
+def first_rung(args: argparse.Namespace) -> AnchorSide:
+    """The engine Anchor of the ladder in args at its first Skill, or at --skill."""
+    return AnchorSide(engine=args.engine, skill=args.skill or FIRST_SKILL)
+
+
+def check_ladder(args: argparse.Namespace, anchor_for: Callable[[AnchorSide], Anchor], sampling_file: Path) -> str | None:
+    """Why the ladder in args can't be played, or None: its settings, then its engine, which is started once now,
+    so a missing engine stops a batch before it starts, not once the ladder reaches it. Done before the analysis
+    engines are built."""
+    try:
+        anchor_match_settings(args, "white", first_rung(args), sampling_file)
+    except (InvalidSettings, InvalidSamplingConfig) as error:
+        return str(error)
+    try:
+        anchor_for(first_rung(args)).close()
+    except AnchorUnavailable as error:
+        return str(error)
+    return None
+
+
+def play_ladder(
+    args: argparse.Namespace,
+    player_for: Callable[[Settings, Color], LlmPlayer],
+    anchor_for: Callable[[AnchorSide], Anchor],
+    sampling_file: Path,
+    analyser: Analyser,
+    failed: str = "Anchor match batch stopped",
+) -> int:
+    """Play args.games Anchor matches of the Player configuration in args up and down the ladder, going on from its
+    earlier games in args.games_dir, as chessllm.cli.anchor_batch describes; returns the exit code, after failed,
+    e.g. "Anchor match batch stopped", when it stops. Its settings and engine are checked first, by check_ladder;
+    each finished game is analysed by analyser, which the caller closes."""
+    settings = anchor_match_settings(args, "white", first_rung(args), sampling_file)
+    history = earlier_games(args.games_dir, settings_configuration(settings, "white"), args.engine)
+    if history:
+        print(f"Going on from {len(history)} earlier Anchor matches of this Player configuration.")
+    played: list[AnchoredGame] = []
+    log: GameLog | None = None
+    try:
+        for number in range(1, args.games + 1):
+            rung = args.skill if number == 1 and args.skill is not None else next_rung(history)
+            llm_color = next_color(history)
+            anchor_side = rung_side(rung, args.engine)
+            settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
+            try:
+                anchor = anchor_for(anchor_side)
+            except AnchorUnavailable as error:
+                ladder_summary(played, history)
+                return fail(failed, str(error))
+            anchor_color = opponent(llm_color)
+            try:
+                players = {llm_color: player_for(settings, llm_color)}
+                log = GameLog(args.games_dir, *settings.side_names())
+                state = play_anchor_match(settings, players, {anchor_color: anchor}, log)
+            except AnchorUnavailable as error:
+                ladder_summary(played, history)
+                return fail(failed, f"{error}. Game {number} was left unfinished in {log and log.path}")
+            finally:
+                anchor.close()
+            assert state.result is not None  # played to its end
+            game = AnchoredGame(rung, llm_color, score_for(state.result, llm_color))
+            history.append(game)
+            played.append(game)
+            print(f"Game {number}/{args.games}: {rung_name(rung)}, LLM as {llm_color}: {outcome(game, state)}", flush=True)
+            finished, log = log.path, None
+            analyser.analyse(finished)
+    except KeyboardInterrupt:
+        unfinished = f"; game {len(played) + 1} was left unfinished in {log.path}" if log is not None else ""
+        print(f"Interrupted after {len(played)} of {args.games} games{unfinished}.", file=sys.stderr)
+        ladder_summary(played, history)
+        return INTERRUPTED_EXIT_CODE
+    ladder_summary(played, history)
+    return 0
+
+
+def outcome(game: AnchoredGame, state: GameState) -> str:
+    word = {1.0: "win", 0.5: "draw", 0.0: "loss"}[game.score]
+    return f"{word} ({state.result}, {state.end_reason})"
+
+
+def ladder_summary(played: list[AnchoredGame], history: list[AnchoredGame]) -> None:
+    """Print the batch's results, per rung, and where the ladder stands."""
+    counts = Counter(game.score for game in played)
+    print(f"Batch: {len(played)} games, {counts[1.0]} wins, {counts[0.5]} draws, {counts[0.0]} losses.")
+    for rung in sorted({game.rung for game in played}):
+        at_rung = Counter(game.score for game in played if game.rung == rung)
+        print(f"  {rung_name(rung)}: {at_rung[1.0]} W · {at_rung[0.5]} D · {at_rung[0.0]} L")
+    print(f"Next game: {rung_name(next_rung(history))}, LLM as {next_color(history)}.")
 
 
 def close(engine: object) -> None:

@@ -335,6 +335,28 @@ def test_a_missing_dragon_stops_the_batch_before_the_first_game(tmp_path, capsys
     assert player.built_for == [] and not (tmp_path / "games").exists()
 
 
+def not_built():
+    raise AssertionError("the analysis engines were built before the batch's checks")
+
+
+@pytest.mark.parametrize("args", [["--model", "llama3:8b", "--thinking"], []])
+def test_bad_settings_or_a_missing_dragon_stop_the_batch_before_the_analysis_engines_are_built(
+    tmp_path, capsys, monkeypatch, args
+):
+    monkeypatch.delenv("CHESSLLM_DRAGON", raising=False)
+
+    code = main(
+        ["--games-dir", str(tmp_path / "games"), *args],
+        player_for=ScriptedPlayer([]).for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+        move_model_for=not_built,
+        evaluator_for=not_built,
+    )
+
+    assert code == 1
+    assert "Anchor match batch stopped" in capsys.readouterr().err
+
+
 def test_a_dragon_that_fails_mid_batch_stops_it_with_the_finished_games_logged(tmp_path, capsys):
     planted = PlantedResults(["win", "win", "win"])
     built = []

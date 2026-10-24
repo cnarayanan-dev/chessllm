@@ -251,18 +251,34 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
         tally = tallies.setdefault(configuration.id(), ConfigurationTally(configuration))
         tally.results.add(outcome)
         tally.opponents[opponent_name(sides[other], configurations.get(other))].add(outcome)
-        tally.forfeits += outcome == "loss" and end["reason"] == "forfeit"
-        # A version 1 attempt has no colour: it is the one LLM's, at llm_color.
-        attempts = [
-            event
-            for event in events
-            if event["type"] == "llm_attempt" and event.get("color", start.get("llm_color")) == color
-        ]
+        tally.forfeits += forfeited(end, color)
+        attempts = side_attempts(events, color)
         tally.attempts += len(attempts)
         tally.legal_moves += sum(event["result"] == "legal" for event in attempts)
-        streak = (stats.get(color) or {}).get("legal_move_streak")
+        streak = logged_streak(stats, color)
         if streak is not None:
             tally.streaks.append(streak)
+
+
+def side_attempts(events: list[dict[str, Any]], color: Color) -> list[dict[str, Any]]:
+    """The llm_attempt events of the LLM side at color. A version 1 attempt has no colour: it is the one LLM's, at
+    llm_color."""
+    start = events[0]
+    return [
+        event
+        for event in events
+        if event["type"] == "llm_attempt" and event.get("color", start.get("llm_color")) == color
+    ]
+
+
+def forfeited(end: dict[str, Any], color: Color) -> bool:
+    """Whether the side at color lost the game by Forfeit."""
+    return side_outcome(end["result"], color) == "loss" and end["reason"] == "forfeit"
+
+
+def logged_streak(stats: dict[str, Any], color: Color) -> int | None:
+    """The side's Legal-move streak as game_end logs it (read_sides' stats); None under Enforced decoding."""
+    return (stats.get(color) or {}).get("legal_move_streak")
 
 
 def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:

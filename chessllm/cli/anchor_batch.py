@@ -26,46 +26,31 @@ batch, with a warning, and with neither the games aren't analysed. `analyse-game
 
 import argparse
 import sys
-from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
-from chessllm.analytics.leaderboard import settings_configuration
 from chessllm.cli.common import (
     Analyser,
     add_analysis_argument,
     add_configuration_arguments,
-    anchor_match_settings,
+    check_ladder,
     default_anchor,
     default_evaluator,
     default_move_model,
     fail,
+    play_ladder,
 )
 from chessllm.cli.common import player_for as default_player_for
 from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
 from chessllm.core.config import SAMPLING_FILE
-from chessllm.core.types import Color, opponent, score_for
+from chessllm.core.types import Color
 from chessllm.engines.move_model import MoveModel
-from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
-from chessllm.game.ladder import (
-    FIRST_SKILL,
-    AnchoredGame,
-    earlier_games,
-    next_color,
-    next_rung,
-    rung_name,
-    rung_side,
-)
-from chessllm.game.records import GameState
-from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
 from chessllm.game.sides import AnchorSide
 from chessllm.llm.players import LlmPlayer
-from chessllm.logs.game_log import GameLog
 
 DEFAULT_BUDGET = 30
-INTERRUPTED_EXIT_CODE = 130
 FAILED = "Anchor match batch stopped"
 
 
@@ -105,75 +90,16 @@ def main(
         return fail(FAILED, f"the budget must be at least one game, not {args.games}")
     if args.engine == "random":
         return fail(FAILED, "the random mover is the ladder's bottom rung, not its engine: choose dragon or stockfish")
-    engine_side = AnchorSide(engine=args.engine, skill=args.skill or FIRST_SKILL)
-    try:
-        settings = anchor_match_settings(args, "white", engine_side, sampling_file)
-    except (InvalidSettings, InvalidSamplingConfig) as error:
-        return fail(FAILED, str(error))
     if anchor_for is None:
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
-    try:
-        anchor_for(engine_side).close()  # a missing engine stops the batch now, not once the ladder reaches it
-    except AnchorUnavailable as error:
-        return fail(FAILED, str(error))
-    history = earlier_games(args.games_dir, settings_configuration(settings, "white"), args.engine)
-    if history:
-        print(f"Going on from {len(history)} earlier Anchor matches of this Player configuration.")
+    error = check_ladder(args, anchor_for, sampling_file)
+    if error is not None:
+        return fail(FAILED, error)
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
-    played: list[AnchoredGame] = []
-    log: GameLog | None = None
     try:
-        for number in range(1, args.games + 1):
-            rung = args.skill if number == 1 and args.skill is not None else next_rung(history)
-            llm_color = next_color(history)
-            anchor_side = rung_side(rung, args.engine)
-            settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
-            try:
-                anchor = anchor_for(anchor_side)
-            except AnchorUnavailable as error:
-                summary(played, history)
-                return fail(FAILED, str(error))
-            anchor_color = opponent(llm_color)
-            try:
-                players = {llm_color: player_for(settings, llm_color)}
-                log = GameLog(args.games_dir, *settings.side_names())
-                state = play_anchor_match(settings, players, {anchor_color: anchor}, log)
-            except AnchorUnavailable as error:
-                summary(played, history)
-                return fail(FAILED, f"{error}. Game {number} was left unfinished in {log and log.path}")
-            finally:
-                anchor.close()
-            assert state.result is not None  # played to its end
-            game = AnchoredGame(rung, llm_color, score_for(state.result, llm_color))
-            history.append(game)
-            played.append(game)
-            print(f"Game {number}/{args.games}: {rung_name(rung)}, LLM as {llm_color}: {outcome(game, state)}", flush=True)
-            finished, log = log.path, None
-            analyser.analyse(finished)
-    except KeyboardInterrupt:
-        unfinished = f"; game {len(played) + 1} was left unfinished in {log.path}" if log is not None else ""
-        print(f"Interrupted after {len(played)} of {args.games} games{unfinished}.", file=sys.stderr)
-        summary(played, history)
-        return INTERRUPTED_EXIT_CODE
+        return play_ladder(args, player_for, anchor_for, sampling_file, analyser, FAILED)
     finally:
         analyser.close()
-    summary(played, history)
-    return 0
-
-
-def outcome(game: AnchoredGame, state: GameState) -> str:
-    word = {1.0: "win", 0.5: "draw", 0.0: "loss"}[game.score]
-    return f"{word} ({state.result}, {state.end_reason})"
-
-
-def summary(played: list[AnchoredGame], history: list[AnchoredGame]) -> None:
-    """Print the batch's results, per rung, and where the ladder stands."""
-    counts = Counter(game.score for game in played)
-    print(f"Batch: {len(played)} games, {counts[1.0]} wins, {counts[0.5]} draws, {counts[0.0]} losses.")
-    for rung in sorted({game.rung for game in played}):
-        at_rung = Counter(game.score for game in played if game.rung == rung)
-        print(f"  {rung_name(rung)}: {at_rung[1.0]} W · {at_rung[0.5]} D · {at_rung[0.0]} L")
-    print(f"Next game: {rung_name(next_rung(history))}, LLM as {next_color(history)}.")
 
 
 if __name__ == "__main__":
