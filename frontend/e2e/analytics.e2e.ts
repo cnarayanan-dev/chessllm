@@ -162,6 +162,8 @@ test('every text on the page, the secondary text too, passes WCAG AA (4.5:1)', a
   await page.goto('/analytics')
   // One Mode off, so a Mode filter button that is off is among them.
   await page.getByRole('group', { name: 'Modes' }).getByRole('button', { name: 'Play LLM' }).click()
+  // Waits for the narrowed table: until it lands, the Ranking of every Mode is still shown, with a second mark.
+  await expect(page.getByText('unvalidated')).toHaveCount(1)
   await expect(page.getByText('unvalidated')).toBeVisible()
 
   const texts = await contrasts(page)
