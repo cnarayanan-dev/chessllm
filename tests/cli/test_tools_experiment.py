@@ -9,7 +9,7 @@ from datetime import date
 import pytest
 
 from tests.cli.test_anchor_batch import SHUFFLE, PlantedResults, logs, not_built
-from tests.conftest import ScriptedPlayer
+from tests.conftest import NotInstalled, ScriptedPlayer
 from tests.analytics.test_analysis import PeakedMoveModel
 
 from chessllm.cli.tools_experiment import main
@@ -57,7 +57,7 @@ def experiment(tmp_path):
     """Runs the command into tmp_path / "games" and tmp_path / "reports" with the planted results. Returns the exit
     code and the Planted."""
 
-    def run(ladder: list[str], faceoffs: list[str], *args: str, move_model_for=lambda: None):
+    def run(ladder: list[str], faceoffs: list[str], *args: str, move_model_for=lambda: None, **options):
         planted = Planted(ladder, faceoffs)
         code = main(
             ["--games-dir", str(tmp_path / "games"), "--reports-dir", str(tmp_path / "reports"), *args],
@@ -67,6 +67,7 @@ def experiment(tmp_path):
             move_model_for=move_model_for,
             evaluator_for=lambda: None,
             today=lambda: DAY,
+            **options,
         )
         return code, planted
 
@@ -210,3 +211,36 @@ def test_the_tools_sides_rules_are_checked_before_the_first_game(experiment, tmp
     assert code == 1
     assert error in capsys.readouterr().err
     assert planted.ladder.anchors == [] and not (tmp_path / "games").exists()
+
+
+def test_a_model_ollama_doesnt_have_is_refused_before_the_first_game(experiment, tmp_path, capsys):
+    code, planted = experiment([], [], *QWEN, move_model_for=not_built, missing_models=NotInstalled("qwen3.5:9b"))
+
+    assert code == 1
+    assert (
+        "Tools experiment stopped: Ollama doesn't have qwen3.5:9b (white): install it with "
+        "`ollama pull qwen3.5:9b`"
+    ) in capsys.readouterr().err
+    assert planted.ladder.anchors == [] and not (tmp_path / "games").exists()
+
+
+def test_with_only_the_head_to_head_to_play_its_model_is_checked_before_it(experiment, tmp_path, capsys):
+    missing_models = NotInstalled("qwen3.5:9b")
+
+    code, _ = experiment([], [], *QWEN, "--anchor-games", "0", "--faceoff-games", "1", missing_models=missing_models)
+
+    assert code == 1
+    assert (
+        "Tools experiment stopped: Ollama doesn't have qwen3.5:9b (white and black): install it with "
+        "`ollama pull qwen3.5:9b`"
+    ) in capsys.readouterr().err
+    assert not (tmp_path / "games").exists()
+
+
+def test_with_no_game_to_play_ollama_isnt_asked(experiment):
+    missing_models = NotInstalled("qwen3.5:9b")
+
+    code, _ = experiment([], [], *QWEN, "--anchor-games", "0", "--faceoff-games", "0", missing_models=missing_models)
+
+    assert code == 0
+    assert missing_models.asked == []

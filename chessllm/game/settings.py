@@ -1,10 +1,11 @@
 """The setup of one game and its checks: its Mode checks its sides, its Rules what they need of each side."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from chessllm.core.types import COLORS, Color, ModeKey, RulesKey, Sampling
 from chessllm.engines.anchors import DRAGON_SKILLS
-from chessllm.exceptions import InvalidSettings
+from chessllm.exceptions import InvalidSettings, OllamaUnavailable
 from chessllm.game.llm_turn.prompt import (
     check_prompt_template,
     check_tools_template,
@@ -120,6 +121,28 @@ class Settings:
                 check_tools_template(side_template(side), side)
             except InvalidSettings as refused:
                 raise InvalidSettings(f"{side.model} ({color}): {refused}", code=refused.code) from None
+
+    def check_installed(self, missing_models: Callable[[list[str]], list[str]]) -> None:
+        """Raises InvalidSettings, naming each LLM side's model that missing_models finds Ollama doesn't have, and
+        with the code ollama_unavailable if Ollama can't be asked. A missing model would fail its first call and
+        forfeit, a rated result from an infrastructure fault. Apart from check, so checking settings needs no
+        Ollama; Anchors and the human aren't asked about."""
+        sides_by_model: dict[str, list[Color]] = {}
+        for color, side in self.llm_sides().items():
+            sides_by_model.setdefault(side.model, []).append(color)
+        if not sides_by_model:
+            return
+        named = {model: f"{model} ({' and '.join(colors)})" for model, colors in sides_by_model.items()}
+        try:
+            missing = [model for model in missing_models(list(sides_by_model)) if model in named]
+        except OllamaUnavailable as error:
+            raise InvalidSettings(f"{' and '.join(named.values())} can't play: {error}", code=error.code) from None
+        if len(missing) == 1:
+            [model] = missing
+            raise InvalidSettings(f"Ollama doesn't have {named[model]}: install it with `ollama pull {model}`")
+        if missing:
+            missing_sides = " or ".join(named[model] for model in missing)
+            raise InvalidSettings(f"Ollama doesn't have {missing_sides}: install them with `ollama pull`")
 
     def _check_tools(self, color: Color, side: BenchmarkLlmSide, model: LlmModel) -> None:
         """Raises InvalidSettings if the side can't have its Tools: v1 allows them only for a model that calls tools

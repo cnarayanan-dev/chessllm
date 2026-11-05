@@ -9,13 +9,13 @@ from datetime import datetime
 
 import pytest
 
-from tests.conftest import ScriptedAnchor, ScriptedPlayer
+from tests.conftest import NotInstalled, ScriptedAnchor, ScriptedPlayer
 from tests.analytics.test_analysis import PeakedMoveModel
 from tests.analytics.test_centipawn_loss_and_accuracy import UnavailableMoveModel
 from tests.fakes import FixedEvaluator, UnavailableEvaluator
 
 from chessllm.cli.anchor_batch import main
-from chessllm.exceptions import AnchorUnavailable
+from chessllm.exceptions import AnchorUnavailable, OllamaUnavailable
 
 # The moves of each side for each planted result, by the LLM's colour. A win is a quick mate by the LLM, a loss a
 # Forfeit at the LLM's first turn (its call fails), and a draw a threefold repetition of the start position.
@@ -355,6 +355,30 @@ def test_bad_settings_or_a_missing_dragon_stop_the_batch_before_the_analysis_eng
 
     assert code == 1
     assert "Anchor match batch stopped" in capsys.readouterr().err
+
+
+def test_a_model_ollama_doesnt_have_or_ollama_down_stops_the_batch_before_it_starts(tmp_path, capsys):
+    def unreachable(models: list[str]) -> list[str]:
+        raise OllamaUnavailable("Ollama isn't running: start it with `ollama serve` or the Ollama app")
+
+    for missing_models, error in [
+        (NotInstalled("llama3:8b"), "Ollama doesn't have llama3:8b (white): install it with `ollama pull llama3:8b`"),
+        (unreachable, "llama3:8b (white) can't play: Ollama isn't running"),
+    ]:
+        planted = PlantedResults(["win"])
+        code = main(
+            ["--games-dir", str(tmp_path / "games"), "--model", "llama3:8b"],
+            player_for=planted.player_for,
+            anchor_for=planted.anchor_for,
+            sampling_file=tmp_path / "no-sampling.toml",
+            move_model_for=not_built,
+            evaluator_for=not_built,
+            missing_models=missing_models,
+        )
+
+        assert code == 1
+        assert f"Anchor match batch stopped: {error}" in capsys.readouterr().err
+        assert planted.anchors == [] and not (tmp_path / "games").exists()
 
 
 def test_a_dragon_that_fails_mid_batch_stops_it_with_the_finished_games_logged(tmp_path, capsys):

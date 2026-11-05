@@ -1,12 +1,14 @@
-"""The sampling defaults of an Ollama model."""
+"""What Ollama shows of its models: their sampling defaults, and which of them it doesn't have."""
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 import ollama
 
 from chessllm.core.config import OLLAMA_SHOW_TIMEOUT_S
 from chessllm.core.types import Sampling
+from chessllm.exceptions import OllamaUnavailable
 from chessllm.llm.models import SAMPLING_OPTIONS
 
 
@@ -27,6 +29,35 @@ def sampling_defaults(model: str, client: OllamaClient | None = None, timeout_s:
             number = float(value)
             sampling[name] = int(number) if number.is_integer() and "." not in value else number
     return sampling
+
+
+def missing_models(
+    models: list[str], client: OllamaClient | None = None, timeout_s: float = OLLAMA_SHOW_TIMEOUT_S
+) -> list[str]:
+    """The models Ollama doesn't have, in the order given: those it answers a 404 for. They are asked at once, so a
+    stalled Ollama holds them up for one timeout, not one per model.
+
+    Raises OllamaUnavailable if Ollama can't say: it isn't running, doesn't answer within timeout_s, or fails."""
+    if not models:
+        return []
+    ask = client or ollama.Client(timeout=timeout_s)
+
+    def has(model: str) -> bool:
+        try:
+            _show(ask, model, timeout_s)
+        except ollama.ResponseError as error:
+            if error.status_code == 404:
+                return False
+            raise OllamaUnavailable(f"Ollama couldn't show {model}: {error}") from error
+        except ConnectionError as error:
+            raise OllamaUnavailable("Ollama isn't running: start it with `ollama serve` or the Ollama app") from error
+        except TimeoutError as error:
+            raise OllamaUnavailable(str(error)) from error
+        return True
+
+    with ThreadPoolExecutor(len(models)) as pool:
+        found = list(pool.map(has, models))
+    return [model for model, there in zip(models, found, strict=True) if not there]
 
 
 def _show(client: OllamaClient, model: str, timeout_s: float) -> ollama.ShowResponse:

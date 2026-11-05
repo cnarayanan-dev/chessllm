@@ -21,6 +21,8 @@ class Engines:
     """player_for builds the LLM player of each LLM side of a game, from that game's settings and the side's colour.
 
     models are the models the game can be played against, and sampling_defaults gives a model's own sampling.
+    missing_models gives those of the models it is given that Ollama doesn't have, or raises OllamaUnavailable;
+    a game whose LLM side's model is missing is refused (Settings.check_installed).
     With a move_model or an evaluator, each game is analysed into its analysis file when it ends: its Move-quality
     estimate with the move_model, and its centipawn loss and accuracy with the evaluator. clock times each game's
     moves, its sides' Time used."""
@@ -28,6 +30,7 @@ class Engines:
     player_for: Callable[[Settings, Color], LlmPlayer]
     models: list[LlmModel]
     sampling_defaults: Callable[[str], Sampling]
+    missing_models: Callable[[list[str]], list[str]] = lambda models: []
     move_model: MoveModel | None = None
     evaluator: Evaluator | None = None
     clock: Callable[[], float] = time.monotonic

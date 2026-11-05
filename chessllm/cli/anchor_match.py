@@ -19,7 +19,7 @@ from chessllm.cli.common import (
     default_anchor,
     fail,
 )
-from chessllm.cli.common import player_for as default_player_for
+from chessllm.cli.common import missing_models as default_missing_models, player_for as default_player_for
 from chessllm.engines.anchors import Anchor, new_seed
 from chessllm.core.config import SAMPLING_FILE
 from chessllm.core.types import COLORS, Color, opponent
@@ -50,8 +50,10 @@ def main(
     player_for: Callable[[Settings, Color], LlmPlayer] = default_player_for,
     anchor_for: Callable[[AnchorSide], Anchor] | None = None,
     sampling_file: Path = SAMPLING_FILE,
+    missing_models: Callable[[list[str]], list[str]] = default_missing_models,
 ) -> int:
-    """Run the command; returns its exit code. anchor_for builds the Anchor, by default Dragon from --dragon."""
+    """Run the command; returns its exit code. anchor_for builds the Anchor, by default Dragon from --dragon;
+    missing_models says which models Ollama doesn't have, by default Ollama itself."""
     args = parser().parse_args(argv)
     llm_color: Color = args.color
     if args.engine == "random":
@@ -60,6 +62,7 @@ def main(
         anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     try:
         settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
+        settings.check_installed(missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     if anchor_for is None:

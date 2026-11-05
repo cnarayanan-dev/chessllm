@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
-from tests.conftest import llm_faceoff, play_llm, play_move
+
+from chessllm.exceptions import OllamaUnavailable
+from tests.conftest import NotInstalled, llm_faceoff, play_llm, play_move
 
 
 def refusal(response) -> tuple[int, dict]:
@@ -68,6 +70,67 @@ def test_settings_that_cant_be_played_are_refused_with_their_code(scripted):
         400,
         {"detail": "nonesuch:1b (white) is not in the model list", "code": "invalid_settings"},
     )
+
+
+def test_a_game_whose_model_ollama_doesnt_have_is_refused_naming_it_before_it_starts(scripted, tmp_path):
+    missing_models = NotInstalled("llama3:8b")
+    client, _ = scripted([], missing_models=missing_models)
+
+    response = client.post("/api/games", json=play_llm(model="llama3:8b"))
+
+    assert refusal(response) == (
+        400,
+        {
+            "detail": "Ollama doesn't have llama3:8b (black): install it with `ollama pull llama3:8b`",
+            "code": "invalid_settings",
+        },
+    )
+    assert missing_models.asked == [["llama3:8b"]]  # the human isn't asked about
+    assert client.get("/api/games/current").status_code == 404
+    assert not (tmp_path / "games").exists()  # no game logged
+
+
+def test_each_side_of_a_faceoff_whose_model_ollama_doesnt_have_is_named(scripted):
+    client, _ = scripted([], missing_models=NotInstalled("gemma3:12b", "llama3:8b"))
+
+    both = client.post("/api/games", json=llm_faceoff({"model": "gemma3:12b"}, {"model": "llama3:8b"}))
+    same = client.post("/api/games", json=llm_faceoff({"model": "llama3:8b"}, {"model": "llama3:8b"}))
+    one = client.post("/api/games", json=llm_faceoff({"model": "qwen3.5:9b"}, {"model": "llama3:8b"}))
+
+    assert both.json()["detail"] == (
+        "Ollama doesn't have gemma3:12b (white) or llama3:8b (black): install them with `ollama pull`"
+    )
+    assert same.json()["detail"] == (
+        "Ollama doesn't have llama3:8b (white and black): install it with `ollama pull llama3:8b`"
+    )
+    assert one.json()["detail"] == "Ollama doesn't have llama3:8b (black): install it with `ollama pull llama3:8b`"
+
+
+def test_a_game_whose_models_ollama_has_starts_and_an_anchor_isnt_asked_about(scripted):
+    missing_models = NotInstalled("gemma3:12b")
+    client, _ = scripted([], missing_models=missing_models)
+
+    assert client.post("/api/games", json=play_llm(model="llama3:8b")).status_code == 200
+    assert missing_models.asked == [["llama3:8b"]]
+
+
+def test_a_game_is_refused_when_ollama_cant_be_reached(scripted):
+    def unreachable(models: list[str]) -> list[str]:
+        raise OllamaUnavailable("Ollama isn't running: start it with `ollama serve` or the Ollama app")
+
+    client, _ = scripted([], missing_models=unreachable)
+
+    response = client.post("/api/games", json=play_llm(model="llama3:8b"))
+
+    assert refusal(response) == (
+        400,
+        {
+            "detail": "llama3:8b (black) can't play: Ollama isn't running: start it with `ollama serve` or the "
+            "Ollama app",
+            "code": "ollama_unavailable",
+        },
+    )
+    assert client.get("/api/games/current").status_code == 404
 
 
 def test_a_broken_sampling_config_is_a_server_error_with_its_code(scripted, tmp_path):

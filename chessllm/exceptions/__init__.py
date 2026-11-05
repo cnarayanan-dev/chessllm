@@ -26,7 +26,7 @@ from chessllm.exceptions.game import (  # noqa: E402
     RefusedProbe,
     RejectedHumanMove,
 )
-from chessllm.exceptions.llm import LlmTimeout  # noqa: E402
+from chessllm.exceptions.llm import LlmTimeout, OllamaUnavailable  # noqa: E402
 
 __all__ = [
     "AnchorUnavailable",
@@ -37,6 +37,7 @@ __all__ = [
     "Maia2Unavailable",
     "NoGameStarted",
     "NoLlmAttempt",
+    "OllamaUnavailable",
     "RefusedAnchorTurn",
     "RefusedLlmTurn",
     "RefusedProbe",

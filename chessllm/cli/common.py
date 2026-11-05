@@ -262,6 +262,16 @@ def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
     )
 
 
+def missing_models(models: list[str]) -> list[str]:
+    """The models Ollama doesn't have, from Ollama itself; raises OllamaUnavailable if it can't say. Every command
+    checks its games' settings with it before the first game (Settings.check_installed), so a missing model stops
+    the command rather than forfeiting every game."""
+    # Imported late, so the tests never load the Ollama client.
+    from chessllm.llm import ollama_models
+
+    return ollama_models.missing_models(models)
+
+
 def default_anchor(args: argparse.Namespace, side: AnchorSide) -> Anchor:
     """The Anchor of the side, from --dragon or --stockfish; the random mover from its seed."""
     if side.engine == "random":
@@ -335,12 +345,17 @@ def first_rung(args: argparse.Namespace) -> AnchorSide:
     return AnchorSide(engine=args.engine, skill=args.skill or FIRST_SKILL)
 
 
-def check_ladder(args: argparse.Namespace, anchor_for: Callable[[AnchorSide], Anchor], sampling_file: Path) -> str | None:
-    """Why the ladder in args can't be played, or None: its settings, then its engine, which is started once now,
-    so a missing engine stops a batch before it starts, not once the ladder reaches it. Done before the analysis
-    engines are built."""
+def check_ladder(
+    args: argparse.Namespace,
+    anchor_for: Callable[[AnchorSide], Anchor],
+    sampling_file: Path,
+    missing_models: Callable[[list[str]], list[str]],
+) -> str | None:
+    """Why the ladder in args can't be played, or None: its settings, whether Ollama has its model (missing_models),
+    then its engine, which is started once now, so a missing engine stops a batch before it starts, not once the
+    ladder reaches it. Done before the analysis engines are built."""
     try:
-        anchor_match_settings(args, "white", first_rung(args), sampling_file)
+        anchor_match_settings(args, "white", first_rung(args), sampling_file).check_installed(missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return str(error)
     try:

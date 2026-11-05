@@ -24,6 +24,7 @@ def create_app(
     games_dir: Path = GAMES_DIR,
     models: list[LlmModel] = LLM_MODELS,
     sampling_defaults: Callable[[str], Sampling] = lambda model: {},
+    missing_models: Callable[[list[str]], list[str]] = lambda models: [],
     sampling_file: Path = SAMPLING_FILE,
     dist_dir: Path = DIST_DIR,
     move_model: MoveModel | None = None,
@@ -44,7 +45,7 @@ def create_app(
     )
     app = FastAPI(title="ChessLLM")
     app.state.config = config
-    app.state.engines = Engines(player_for, models, sampling_defaults, move_model, evaluator, clock)
+    app.state.engines = Engines(player_for, models, sampling_defaults, missing_models, move_model, evaluator, clock)
     app.state.games = GameStore()
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
     register_error_handlers(app)

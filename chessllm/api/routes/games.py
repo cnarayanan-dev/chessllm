@@ -57,6 +57,7 @@ def start_game(
         legal_counterpart=new_game.legal_counterpart,
     )
     settings.check(engines.models)
+    settings.check_installed(engines.missing_models)
     players = {color: engines.player_for(settings, color) for color in settings.llm_sides()}
     log = GameLog(config.games_dir, *settings.side_names())
     session = GameSession(players, settings, log, clock=engines.clock, evaluator=engines.evaluator)

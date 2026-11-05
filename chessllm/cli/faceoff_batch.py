@@ -29,7 +29,7 @@ from chessllm.cli.common import (
     tool_call_cap,
     tool_set,
 )
-from chessllm.cli.common import player_for as default_player_for
+from chessllm.cli.common import missing_models as default_missing_models, player_for as default_player_for
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.core.config import SAMPLING_FILE
@@ -194,14 +194,16 @@ def main(
     sampling_file: Path = SAMPLING_FILE,
     move_model_for: Callable[[], MoveModel | None] = default_move_model,
     evaluator_for: Callable[[], Evaluator | None] = default_evaluator,
+    missing_models: Callable[[list[str]], list[str]] = default_missing_models,
 ) -> int:
-    """Run the command; returns its exit code."""
+    """Run the command; returns its exit code. missing_models says which models Ollama doesn't have, by default
+    Ollama itself."""
     args = parser().parse_args(argv)
     if args.games < 1:
         return fail(FAILED, f"the budget must be at least one game, not {args.games}")
     first, second = args.models
     try:
-        faceoff_settings(args, first, second, sampling_file)
+        faceoff_settings(args, first, second, sampling_file).check_installed(missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())

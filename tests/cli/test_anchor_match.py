@@ -6,7 +6,7 @@ import json
 import chess.pgn
 import pytest
 
-from tests.conftest import ScriptedAnchor, ScriptedPlayer
+from tests.conftest import NotInstalled, ScriptedAnchor, ScriptedPlayer
 from tests.analytics.test_analysis import PeakedMoveModel
 from tests.game.test_move_cap import MOVE_CAP_PLIES, long_game, sans
 
@@ -39,7 +39,7 @@ def anchor_match(tmp_path):
     """Runs the command with a ScriptedPlayer for the LLM and a ScriptedAnchor, logging to tmp_path / "games".
     Returns the exit code, the player, the anchor and the Anchor sides the anchor was built for."""
 
-    def run(llm: list, anchor_moves: list[str], *args: str):
+    def run(llm: list, anchor_moves: list[str], *args: str, **options):
         player, anchor, built_for = ScriptedPlayer(llm), ScriptedAnchor(anchor_moves), []
 
         def anchor_for(side):
@@ -51,6 +51,7 @@ def anchor_match(tmp_path):
             player_for=player.for_settings,
             anchor_for=anchor_for,
             sampling_file=tmp_path / "no-sampling.toml",
+            **options,
         )
         return code, player, anchor, built_for
 
@@ -214,6 +215,21 @@ def test_settings_that_cant_be_played_are_refused_before_the_game_starts(anchor_
 
     assert code == 1
     assert error in capsys.readouterr().err
+    assert built_for == [] and player.built_for == []
+    assert not (tmp_path / "games").exists()
+
+
+def test_a_model_ollama_doesnt_have_is_refused_before_the_game_starts(anchor_match, tmp_path, capsys):
+    missing_models = NotInstalled("qwen3.5:9b")
+
+    code, player, _, built_for = anchor_match([], [], "--model", "qwen3.5:9b", missing_models=missing_models)
+
+    assert code == 1
+    assert (
+        "Anchor match not played: Ollama doesn't have qwen3.5:9b (white): install it with `ollama pull qwen3.5:9b`"
+        in capsys.readouterr().err
+    )
+    assert missing_models.asked == [["qwen3.5:9b"]]
     assert built_for == [] and player.built_for == []
     assert not (tmp_path / "games").exists()
 

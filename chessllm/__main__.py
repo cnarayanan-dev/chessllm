@@ -8,7 +8,7 @@ import uvicorn
 from chessllm.api.app import create_app
 from chessllm.cli.common import player_for
 from chessllm.engines.maia2_model import Maia2MoveModel
-from chessllm.llm.ollama_models import sampling_defaults
+from chessllm.llm.ollama_models import missing_models, sampling_defaults
 from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 
 
@@ -18,7 +18,13 @@ def main() -> None:
     evaluator = StockfishEvaluator() if shutil.which("stockfish") else None
     if evaluator is None:
         print("Stockfish isn't installed (`brew install stockfish`), so games get no centipawn loss or accuracy")
-    app = create_app(player_for, sampling_defaults=sampling_defaults, move_model=Maia2MoveModel(), evaluator=evaluator)
+    app = create_app(
+        player_for,
+        sampling_defaults=sampling_defaults,
+        missing_models=missing_models,
+        move_model=Maia2MoveModel(),
+        evaluator=evaluator,
+    )
     uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("CHESSLLM_PORT", "8000")))
 
 

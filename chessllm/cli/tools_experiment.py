@@ -48,7 +48,7 @@ from chessllm.cli.common import (
     first_rung,
     play_ladder,
 )
-from chessllm.cli.common import player_for as default_player_for
+from chessllm.cli.common import missing_models as default_missing_models, player_for as default_player_for
 from chessllm.core.config import REPORTS_DIR, SAMPLING_FILE
 from chessllm.core.types import COLORS, Color, opponent
 from chessllm.engines.anchors import Anchor
@@ -106,9 +106,10 @@ def main(
     move_model_for: Callable[[], MoveModel | None] = default_move_model,
     evaluator_for: Callable[[], Evaluator | None] = default_evaluator,
     today: Callable[[], date] = date.today,
+    missing_models: Callable[[list[str]], list[str]] = default_missing_models,
 ) -> int:
-    """Run the command; returns its exit code. anchor_for, move_model_for and evaluator_for as anchor-batch's;
-    today dates the report."""
+    """Run the command; returns its exit code. anchor_for, move_model_for, evaluator_for and missing_models as
+    anchor-batch's; today dates the report."""
     args = parser().parse_args(argv)
     if not args.tools:
         args.tools = ALL_TOOLS
@@ -134,9 +135,15 @@ def main(
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
     have = [len(earlier_games(args.games_dir, configuration, args.engine)) for configuration in configurations]
     if any(games < args.anchor_games for games in have):
-        refused = check_ladder(tooled, anchor_for, sampling_file)  # its engine, once: the two ladders share it
+        # Its engine, once: the two ladders share it, and their model.
+        refused = check_ladder(tooled, anchor_for, sampling_file, missing_models)
         if refused is not None:
             return fail(FAILED, refused)
+    elif earlier_faceoffs(args.games_dir, configurations) < args.faceoff_games:
+        try:
+            faceoff_settings(plain, tooled, "white", sampling_file).check_installed(missing_models)
+        except (InvalidSettings, InvalidSamplingConfig) as error:
+            return fail(FAILED, str(error))
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
     try:
         for name, ladder, played in zip(("without Tools", "with Tools"), (plain, tooled), have):

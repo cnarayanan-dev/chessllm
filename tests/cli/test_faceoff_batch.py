@@ -2,7 +2,7 @@
 
 import json
 
-from tests.conftest import ScriptedPlayer
+from tests.conftest import NotInstalled, ScriptedPlayer
 
 from chessllm.cli.faceoff_batch import main
 
@@ -56,6 +56,22 @@ def test_a_model_not_in_the_list_is_refused_before_any_game(tmp_path, capsys):
 
     assert code == 1
     assert "nonesuch:1b" in capsys.readouterr().err
+    assert not list(tmp_path.glob("*.jsonl"))
+
+
+def test_models_ollama_doesnt_have_are_named_before_any_game(tmp_path, capsys):
+    code = main(
+        ["--models", "gemma3:12b", "llama3:8b", "--games-dir", str(tmp_path), "--no-analysis"],
+        player_for=ScriptedPlayer([]).for_settings,
+        sampling_file=tmp_path / "no-sampling.toml",
+        missing_models=NotInstalled("gemma3:12b", "llama3:8b"),
+    )
+
+    assert code == 1
+    assert (
+        "Faceoff batch not played: Ollama doesn't have gemma3:12b (white) or llama3:8b (black): install them with "
+        "`ollama pull`"
+    ) in capsys.readouterr().err
     assert not list(tmp_path.glob("*.jsonl"))
 
 

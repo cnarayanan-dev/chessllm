@@ -3,10 +3,11 @@ import time
 from functools import partial
 
 import pytest
-from ollama import ShowResponse
+from ollama import ResponseError, ShowResponse
 
+from chessllm.exceptions import OllamaUnavailable
 from chessllm.llm.models import LlmModel
-from chessllm.llm.ollama_models import sampling_defaults
+from chessllm.llm.ollama_models import missing_models, sampling_defaults
 
 PARAMETERS = {
     "qwen3.5:9b": "presence_penalty               1.5\ntemperature                    1\ntop_k                          20\ntop_p                          0.95",
@@ -82,3 +83,49 @@ def test_with_ollama_stalled_the_models_are_offered_within_one_timeout(scripted,
 
     assert time.monotonic() - start < 0.5 * 2  # the models are asked at once, not one after another
     assert [model["sampling"] for model in response.json()] == [None] * 6
+
+
+class PartialOllama:
+    """Has only the models in PARAMETERS, answering for any other as Ollama does: a 404."""
+
+    def show(self, model: str) -> ShowResponse:
+        if model not in PARAMETERS:
+            raise ResponseError(f"model '{model}' not found", 404)
+        return FakeOllama().show(model)
+
+
+class FailingOllama:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def show(self, model: str) -> ShowResponse:
+        raise self.error
+
+
+def test_the_models_ollama_doesnt_have_are_missing_in_the_order_given():
+    asked = ["gemma3:12b", "qwen3.5:9b", "nonesuch:1b", "llama3:8b"]
+
+    assert missing_models(asked, PartialOllama()) == ["gemma3:12b", "nonesuch:1b"]
+    assert missing_models([], PartialOllama()) == []
+
+
+def test_ollama_not_running_is_unavailable_not_a_missing_model():
+    not_running = FailingOllama(ConnectionError("Failed to connect to Ollama. Please check that Ollama is running"))
+
+    with pytest.raises(OllamaUnavailable, match=r"^Ollama isn't running: start it with `ollama serve`"):
+        missing_models(["llama3:8b"], not_running)
+
+
+def test_ollama_failing_otherwise_is_unavailable_with_its_error():
+    with pytest.raises(OllamaUnavailable, match=r"^Ollama couldn't show llama3:8b: out of memory \(status code: 500\)"):
+        missing_models(["llama3:8b"], FailingOllama(ResponseError("out of memory", 500)))
+
+
+def test_with_ollama_stalled_the_models_are_unavailable_within_one_timeout(stalled_ollama):
+    ollama = stalled_ollama({"qwen3.5:9b", "llama3:8b"})
+
+    start = time.monotonic()
+    with pytest.raises(OllamaUnavailable, match=r"^Ollama didn't show qwen3.5:9b within 0.3 s"):
+        missing_models(["qwen3.5:9b", "llama3:8b"], ollama, timeout_s=0.3)
+
+    assert time.monotonic() - start < 0.3 * 2  # the models are asked at once, not one after another

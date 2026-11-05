@@ -140,3 +140,16 @@ class MaterialEvaluator:
             for piece, value in PIECE_VALUES.items()
         )
         return Cp(balance)
+
+
+class NotInstalled:
+    """Test fake for the check of which models Ollama doesn't have (missing_models): an Ollama without the given
+    models. Records the models it is asked about."""
+
+    def __init__(self, *missing: str) -> None:
+        self.missing = missing
+        self.asked: list[list[str]] = []
+
+    def __call__(self, models: list[str]) -> list[str]:
+        self.asked.append(models)
+        return [model for model in models if model in self.missing]

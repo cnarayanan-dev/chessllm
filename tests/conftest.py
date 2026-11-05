@@ -8,7 +8,7 @@ from chessllm.api.app import create_app
 from chessllm.core.types import Color
 from chessllm.game.settings import Settings
 from chessllm.llm.players import LlmReply, Message
-from tests.fakes import FakeClock, Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
+from tests.fakes import FakeClock, NotInstalled, Raw, ScriptedAnchor, ScriptedPlayer  # the tests import them from here
 
 
 def play_llm(human_color: Color = "white", **llm) -> dict:

@@ -40,7 +40,7 @@ from chessllm.cli.common import (
     fail,
     play_ladder,
 )
-from chessllm.cli.common import player_for as default_player_for
+from chessllm.cli.common import missing_models as default_missing_models, player_for as default_player_for
 from chessllm.engines.anchors import Anchor
 from chessllm.engines.evaluator import Evaluator
 from chessllm.core.config import SAMPLING_FILE
@@ -80,11 +80,12 @@ def main(
     sampling_file: Path = SAMPLING_FILE,
     move_model_for: Callable[[], MoveModel | None] = default_move_model,
     evaluator_for: Callable[[], Evaluator | None] = default_evaluator,
+    missing_models: Callable[[list[str]], list[str]] = default_missing_models,
 ) -> int:
     """Run the command; returns its exit code. anchor_for builds each game's Anchor, by default the random mover or
     Dragon from --dragon, and Dragon once more before the first game, to check that it starts;
     move_model_for and evaluator_for the engines the games are analysed with, by default Maia-2 and Stockfish
-    (None leaves one out)."""
+    (None leaves one out); missing_models which models Ollama doesn't have, by default Ollama itself."""
     args = parser().parse_args(argv)
     if args.games < 1:
         return fail(FAILED, f"the budget must be at least one game, not {args.games}")
@@ -92,7 +93,7 @@ def main(
         return fail(FAILED, "the random mover is the ladder's bottom rung, not its engine: choose dragon or stockfish")
     if anchor_for is None:
         anchor_for = lambda side: default_anchor(args, side)  # noqa: E731
-    error = check_ladder(args, anchor_for, sampling_file)
+    error = check_ladder(args, anchor_for, sampling_file, missing_models)
     if error is not None:
         return fail(FAILED, error)
     analyser = Analyser(None, None) if args.no_analysis else Analyser(move_model_for(), evaluator_for())
