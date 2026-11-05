@@ -1,0 +1,1557 @@
+{
+ "white": {
+  "model": "d3-nano",
+  "temperature": 1
+ },
+ "black": {
+  "model": "d1-2B",
+  "temperature": 1
+ },
+ "turns": [
+  {
+   "ply": 1,
+   "color": "white",
+   "fen_before": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+   "state": "FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bf1, Nb1, Ng1; pawns a2 b2 c2 d2 e2 f2 g2 h2\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nb8, Ng8; pawns a7 b7 c7 d7 e7 f7 g7 h7\nMoves so far: (none)",
+   "question": "Which move should White play?",
+   "options": [
+    {
+     "san": "a4",
+     "uci": "a2a4",
+     "probability": 0.0135
+    },
+    {
+     "san": "f4",
+     "uci": "f2f4",
+     "probability": 0.0004
+    },
+    {
+     "san": "Na3",
+     "uci": "b1a3",
+     "probability": 0.0001
+    },
+    {
+     "san": "a3",
+     "uci": "a2a3",
+     "probability": 0.0002
+    },
+    {
+     "san": "g3",
+     "uci": "g2g3",
+     "probability": 0.0106
+    },
+    {
+     "san": "b3",
+     "uci": "b2b3",
+     "probability": 0.0001
+    },
+    {
+     "san": "Nh3",
+     "uci": "g1h3",
+     "probability": 0.0073
+    },
+    {
+     "san": "g4",
+     "uci": "g2g4",
+     "probability": 0.1223
+    },
+    {
+     "san": "h4",
+     "uci": "h2h4",
+     "probability": 0.0166
+    },
+    {
+     "san": "d4",
+     "uci": "d2d4",
+     "probability": 0.0535
+    },
+    {
+     "san": "e4",
+     "uci": "e2e4",
+     "probability": 0.41
+    },
+    {
+     "san": "b4",
+     "uci": "b2b4",
+     "probability": 0.0416
+    },
+    {
+     "san": "d3",
+     "uci": "d2d3",
+     "probability": 0.0
+    },
+    {
+     "san": "Nc3",
+     "uci": "b1c3",
+     "probability": 0.0597
+    },
+    {
+     "san": "f3",
+     "uci": "f2f3",
+     "probability": 0.0
+    },
+    {
+     "san": "c3",
+     "uci": "c2c3",
+     "probability": 0.0176
+    },
+    {
+     "san": "h3",
+     "uci": "h2h3",
+     "probability": 0.0333
+    },
+    {
+     "san": "c4",
+     "uci": "c2c4",
+     "probability": 0.1842
+    },
+    {
+     "san": "Nf3",
+     "uci": "g1f3",
+     "probability": 0.0007
+    },
+    {
+     "san": "e3",
+     "uci": "e2e3",
+     "probability": 0.0283
+    }
+   ],
+   "played": "e4",
+   "played_uci": "e2e4",
+   "time_s": 0.31,
+   "fen_after": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+  },
+  {
+   "ply": 2,
+   "color": "black",
+   "fen_before": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+   "state": "FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bf1, Nb1, Ng1; pawns a2 b2 c2 d2 f2 g2 h2 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nb8, Ng8; pawns a7 b7 c7 d7 e7 f7 g7 h7\nMoves so far: 1. e4",
+   "question": "Which move should Black play?",
+   "options": [
+    {
+     "san": "d5",
+     "uci": "d7d5",
+     "probability": 0.0041
+    },
+    {
+     "san": "Nc6",
+     "uci": "b8c6",
+     "probability": 0.0015
+    },
+    {
+     "san": "Nh6",
+     "uci": "g8h6",
+     "probability": 0.0
+    },
+    {
+     "san": "e6",
+     "uci": "e7e6",
+     "probability": 0.016
+    },
+    {
+     "san": "f6",
+     "uci": "f7f6",
+     "probability": 0.0346
+    },
+    {
+     "san": "Na6",
+     "uci": "b8a6",
+     "probability": 0.0543
+    },
+    {
+     "san": "b5",
+     "uci": "b7b5",
+     "probability": 0.0003
+    },
+    {
+     "san": "a6",
+     "uci": "a7a6",
+     "probability": 0.0025
+    },
+    {
+     "san": "f5",
+     "uci": "f7f5",
+     "probability": 0.1155
+    },
+    {
+     "san": "g6",
+     "uci": "g7g6",
+     "probability": 0.0053
+    },
+    {
+     "san": "c6",
+     "uci": "c7c6",
+     "probability": 0.0864
+    },
+    {
+     "san": "d6",
+     "uci": "d7d6",
+     "probability": 0.0046
+    },
+    {
+     "san": "h5",
+     "uci": "h7h5",
+     "probability": 0.0327
+    },
+    {
+     "san": "c5",
+     "uci": "c7c5",
+     "probability": 0.1623
+    },
+    {
+     "san": "a5",
+     "uci": "a7a5",
+     "probability": 0.0126
+    },
+    {
+     "san": "Nf6",
+     "uci": "g8f6",
+     "probability": 0.0
+    },
+    {
+     "san": "g5",
+     "uci": "g7g5",
+     "probability": 0.025
+    },
+    {
+     "san": "e5",
+     "uci": "e7e5",
+     "probability": 0.37
+    },
+    {
+     "san": "h6",
+     "uci": "h7h6",
+     "probability": 0.0135
+    },
+    {
+     "san": "b6",
+     "uci": "b7b6",
+     "probability": 0.0588
+    }
+   ],
+   "played": "e5",
+   "played_uci": "e7e5",
+   "time_s": 0.43,
+   "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+  },
+  {
+   "ply": 3,
+   "color": "white",
+   "fen_before": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+   "state": "FEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bf1, Nb1, Ng1; pawns a2 b2 c2 d2 f2 g2 h2 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nb8, Ng8; pawns e5 a7 b7 c7 d7 f7 g7 h7\nMoves so far: 1. e4 e5",
+   "question": "Which move should White play?",
+   "options": [
+    {
+     "san": "Ba6",
+     "uci": "f1a6",
+     "probability": 0.0267
+    },
+    {
+     "san": "b3",
+     "uci": "b2b3",
+     "probability": 0.0
+    },
+    {
+     "san": "Nf3",
+     "uci": "g1f3",
+     "probability": 0.52
+    },
+    {
+     "san": "Na3",
+     "uci": "b1a3",
+     "probability": 0.0
+    },
+    {
+     "san": "b4",
+     "uci": "b2b4",
+     "probability": 0.0055
+    },
+    {
+     "san": "h4",
+     "uci": "h2h4",
+     "probability": 0.0128
+    },
+    {
+     "san": "Qf3",
+     "uci": "d1f3",
+     "probability": 0.0076
+    },
+    {
+     "san": "Nc3",
+     "uci": "b1c3",
+     "probability": 0.0001
+    },
+    {
+     "san": "Qg4",
+     "uci": "d1g4",
+     "probability": 0.0
+    },
+    {
+     "san": "d3",
+     "uci": "d2d3",
+     "probability": 0.0046
+    },
+    {
+     "san": "f3",
+     "uci": "f2f3",
+     "probability": 0.0012
+    },
+    {
+     "san": "g3",
+     "uci": "g2g3",
+     "probability": 0.0002
+    },
+    {
+     "san": "Bd3",
+     "uci": "f1d3",
+     "probability": 0.0429
+    },
+    {
+     "san": "f4",
+     "uci": "f2f4",
+     "probability": 0.0425
+    },
+    {
+     "san": "c3",
+     "uci": "c2c3",
+     "probability": 0.0511
+    },
+    {
+     "san": "Qh5",
+     "uci": "d1h5",
+     "probability": 0.0231
+    },
+    {
+     "san": "Ke2",
+     "uci": "e1e2",
+     "probability": 0.0044
+    },
+    {
+     "san": "g4",
+     "uci": "g2g4",
+     "probability": 0.0532
+    },
+    {
+     "san": "h3",
+     "uci": "h2h3",
+     "probability": 0.035
+    },
+    {
+     "san": "Nh3",
+     "uci": "g1h3",
+     "probability": 0.0082
+    },
+    {
+     "san": "a3",
+     "uci": "a2a3",
+     "probability": 0.007
+    },
+    {
+     "san": "c4",
+     "uci": "c2c4",
+     "probability": 0.0017
+    },
+    {
+     "san": "d4",
+     "uci": "d2d4",
+     "probability": 0.0498
+    },
+    {
+     "san": "Bc4",
+     "uci": "f1c4",
+     "probability": 0.0756
+    },
+    {
+     "san": "Ne2",
+     "uci": "g1e2",
+     "probability": 0.0
+    },
+    {
+     "san": "Bb5",
+     "uci": "f1b5",
+     "probability": 0.0209
+    },
+    {
+     "san": "Be2",
+     "uci": "f1e2",
+     "probability": 0.0018
+    },
+    {
+     "san": "Qe2",
+     "uci": "d1e2",
+     "probability": 0.0004
+    },
+    {
+     "san": "a4",
+     "uci": "a2a4",
+     "probability": 0.0036
+    }
+   ],
+   "played": "Nf3",
+   "played_uci": "g1f3",
+   "time_s": 0.27,
+   "fen_after": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
+  },
+  {
+   "ply": 4,
+   "color": "black",
+   "fen_before": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+   "state": "FEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bf1, Nb1, Nf3; pawns a2 b2 c2 d2 f2 g2 h2 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nb8, Ng8; pawns e5 a7 b7 c7 d7 f7 g7 h7\nMoves so far: 1. e4 e5 2. Nf3",
+   "question": "Which move should Black play?",
+   "options": [
+    {
+     "san": "Qh4",
+     "uci": "d8h4",
+     "probability": 0.0183
+    },
+    {
+     "san": "Qf6",
+     "uci": "d8f6",
+     "probability": 0.0122
+    },
+    {
+     "san": "c6",
+     "uci": "c7c6",
+     "probability": 0.0084
+    },
+    {
+     "san": "f5",
+     "uci": "f7f5",
+     "probability": 0.0024
+    },
+    {
+     "san": "a6",
+     "uci": "a7a6",
+     "probability": 0.0092
+    },
+    {
+     "san": "Nh6",
+     "uci": "g8h6",
+     "probability": 0.0088
+    },
+    {
+     "san": "Ba3",
+     "uci": "f8a3",
+     "probability": 0.0171
+    },
+    {
+     "san": "a5",
+     "uci": "a7a5",
+     "probability": 0.0087
+    },
+    {
+     "san": "b6",
+     "uci": "b7b6",
+     "probability": 0.0001
+    },
+    {
+     "san": "Na6",
+     "uci": "b8a6",
+     "probability": 0.0007
+    },
+    {
+     "san": "Be7",
+     "uci": "f8e7",
+     "probability": 0.0005
+    },
+    {
+     "san": "Nc6",
+     "uci": "b8c6",
+     "probability": 0.48
+    },
+    {
+     "san": "d6",
+     "uci": "d7d6",
+     "probability": 0.0173
+    },
+    {
+     "san": "b5",
+     "uci": "b7b5",
+     "probability": 0.0321
+    },
+    {
+     "san": "h6",
+     "uci": "h7h6",
+     "probability": 0.0042
+    },
+    {
+     "san": "Ke7",
+     "uci": "e8e7",
+     "probability": 0.0001
+    },
+    {
+     "san": "Nf6",
+     "uci": "g8f6",
+     "probability": 0.0051
+    },
+    {
+     "san": "Qe7",
+     "uci": "d8e7",
+     "probability": 0.0144
+    },
+    {
+     "san": "g5",
+     "uci": "g7g5",
+     "probability": 0.0088
+    },
+    {
+     "san": "d5",
+     "uci": "d7d5",
+     "probability": 0.0002
+    },
+    {
+     "san": "f6",
+     "uci": "f7f6",
+     "probability": 0.069
+    },
+    {
+     "san": "Bd6",
+     "uci": "f8d6",
+     "probability": 0.0755
+    },
+    {
+     "san": "Qg5",
+     "uci": "d8g5",
+     "probability": 0.0676
+    },
+    {
+     "san": "c5",
+     "uci": "c7c5",
+     "probability": 0.0333
+    },
+    {
+     "san": "Bb4",
+     "uci": "f8b4",
+     "probability": 0.0001
+    },
+    {
+     "san": "Ne7",
+     "uci": "g8e7",
+     "probability": 0.0048
+    },
+    {
+     "san": "g6",
+     "uci": "g7g6",
+     "probability": 0.0202
+    },
+    {
+     "san": "Bc5",
+     "uci": "f8c5",
+     "probability": 0.0068
+    },
+    {
+     "san": "h5",
+     "uci": "h7h5",
+     "probability": 0.0739
+    }
+   ],
+   "played": "Nc6",
+   "played_uci": "b8c6",
+   "time_s": 0.37,
+   "fen_after": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"
+  },
+  {
+   "ply": 5,
+   "color": "white",
+   "fen_before": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+   "state": "FEN: r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bf1, Nb1, Nf3; pawns a2 b2 c2 d2 f2 g2 h2 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nc6, Ng8; pawns e5 a7 b7 c7 d7 f7 g7 h7\nMoves so far: 1. e4 e5 2. Nf3 Nc6",
+   "question": "Which move should White play?",
+   "options": [
+    {
+     "san": "Bc4",
+     "uci": "f1c4",
+     "probability": 0.33
+    },
+    {
+     "san": "d4",
+     "uci": "d2d4",
+     "probability": 0.0496
+    },
+    {
+     "san": "Bb5",
+     "uci": "f1b5",
+     "probability": 0.0322
+    },
+    {
+     "san": "h4",
+     "uci": "h2h4",
+     "probability": 0.0107
+    },
+    {
+     "san": "a3",
+     "uci": "a2a3",
+     "probability": 0.0576
+    },
+    {
+     "san": "Nd4",
+     "uci": "f3d4",
+     "probability": 0.0
+    },
+    {
+     "san": "Ng1",
+     "uci": "f3g1",
+     "probability": 0.0
+    },
+    {
+     "san": "Bd3",
+     "uci": "f1d3",
+     "probability": 0.0087
+    },
+    {
+     "san": "Ng5",
+     "uci": "f3g5",
+     "probability": 0.0011
+    },
+    {
+     "san": "b3",
+     "uci": "b2b3",
+     "probability": 0.0708
+    },
+    {
+     "san": "a4",
+     "uci": "a2a4",
+     "probability": 0.073
+    },
+    {
+     "san": "c3",
+     "uci": "c2c3",
+     "probability": 0.0236
+    },
+    {
+     "san": "g3",
+     "uci": "g2g3",
+     "probability": 0.0007
+    },
+    {
+     "san": "Nxe5",
+     "uci": "f3e5",
+     "probability": 0.0134
+    },
+    {
+     "san": "Ke2",
+     "uci": "e1e2",
+     "probability": 0.0935
+    },
+    {
+     "san": "d3",
+     "uci": "d2d3",
+     "probability": 0.0008
+    },
+    {
+     "san": "Na3",
+     "uci": "b1a3",
+     "probability": 0.001
+    },
+    {
+     "san": "Qe2",
+     "uci": "d1e2",
+     "probability": 0.0845
+    },
+    {
+     "san": "Nh4",
+     "uci": "f3h4",
+     "probability": 0.0044
+    },
+    {
+     "san": "Be2",
+     "uci": "f1e2",
+     "probability": 0.0798
+    },
+    {
+     "san": "Nc3",
+     "uci": "b1c3",
+     "probability": 0.0047
+    },
+    {
+     "san": "Rg1",
+     "uci": "h1g1",
+     "probability": 0.0021
+    },
+    {
+     "san": "h3",
+     "uci": "h2h3",
+     "probability": 0.0011
+    },
+    {
+     "san": "Ba6",
+     "uci": "f1a6",
+     "probability": 0.0017
+    },
+    {
+     "san": "c4",
+     "uci": "c2c4",
+     "probability": 0.0001
+    },
+    {
+     "san": "g4",
+     "uci": "g2g4",
+     "probability": 0.027
+    },
+    {
+     "san": "b4",
+     "uci": "b2b4",
+     "probability": 0.028
+    }
+   ],
+   "played": "Bc4",
+   "played_uci": "f1c4",
+   "time_s": 0.2,
+   "fen_after": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
+  },
+  {
+   "ply": 6,
+   "color": "black",
+   "fen_before": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+   "state": "FEN: r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bc4, Nb1, Nf3; pawns a2 b2 c2 d2 f2 g2 h2 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nc6, Ng8; pawns e5 a7 b7 c7 d7 f7 g7 h7\nMoves so far: 1. e4 e5 2. Nf3 Nc6 3. Bc4",
+   "question": "Which move should Black play?",
+   "options": [
+    {
+     "san": "Nf6",
+     "uci": "g8f6",
+     "probability": 0.4332
+    },
+    {
+     "san": "Ba3",
+     "uci": "f8a3",
+     "probability": 0.0624
+    },
+    {
+     "san": "f5",
+     "uci": "f7f5",
+     "probability": 0.0086
+    },
+    {
+     "san": "Rb8",
+     "uci": "a8b8",
+     "probability": 0.0289
+    },
+    {
+     "san": "Bb4",
+     "uci": "f8b4",
+     "probability": 0.0002
+    },
+    {
+     "san": "a5",
+     "uci": "a7a5",
+     "probability": 0.0146
+    },
+    {
+     "san": "Qe7",
+     "uci": "d8e7",
+     "probability": 0.0433
+    },
+    {
+     "san": "g6",
+     "uci": "g7g6",
+     "probability": 0.0189
+    },
+    {
+     "san": "Qh4",
+     "uci": "d8h4",
+     "probability": 0.0082
+    },
+    {
+     "san": "g5",
+     "uci": "g7g5",
+     "probability": 0.0002
+    },
+    {
+     "san": "Qg5",
+     "uci": "d8g5",
+     "probability": 0.0006
+    },
+    {
+     "san": "f6",
+     "uci": "f7f6",
+     "probability": 0.0352
+    },
+    {
+     "san": "Nge7",
+     "uci": "g8e7",
+     "probability": 0.0107
+    },
+    {
+     "san": "Ke7",
+     "uci": "e8e7",
+     "probability": 0.0005
+    },
+    {
+     "san": "Nb8",
+     "uci": "c6b8",
+     "probability": 0.0022
+    },
+    {
+     "san": "d6",
+     "uci": "d7d6",
+     "probability": 0.009
+    },
+    {
+     "san": "b5",
+     "uci": "b7b5",
+     "probability": 0.0304
+    },
+    {
+     "san": "Nb4",
+     "uci": "c6b4",
+     "probability": 0.0263
+    },
+    {
+     "san": "Na5",
+     "uci": "c6a5",
+     "probability": 0.0377
+    },
+    {
+     "san": "Qf6",
+     "uci": "d8f6",
+     "probability": 0.0
+    },
+    {
+     "san": "Nh6",
+     "uci": "g8h6",
+     "probability": 0.0
+    },
+    {
+     "san": "Nd4",
+     "uci": "c6d4",
+     "probability": 0.0
+    },
+    {
+     "san": "Be7",
+     "uci": "f8e7",
+     "probability": 0.0249
+    },
+    {
+     "san": "b6",
+     "uci": "b7b6",
+     "probability": 0.0368
+    },
+    {
+     "san": "h6",
+     "uci": "h7h6",
+     "probability": 0.042
+    },
+    {
+     "san": "Nce7",
+     "uci": "c6e7",
+     "probability": 0.0105
+    },
+    {
+     "san": "d5",
+     "uci": "d7d5",
+     "probability": 0.0432
+    },
+    {
+     "san": "Bc5",
+     "uci": "f8c5",
+     "probability": 0.0273
+    },
+    {
+     "san": "Bd6",
+     "uci": "f8d6",
+     "probability": 0.0001
+    },
+    {
+     "san": "h5",
+     "uci": "h7h5",
+     "probability": 0.0001
+    },
+    {
+     "san": "a6",
+     "uci": "a7a6",
+     "probability": 0.044
+    }
+   ],
+   "played": "h6",
+   "played_uci": "h7h6",
+   "time_s": 0.25,
+   "fen_after": "r1bqkbnr/pppp1pp1/2n4p/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4"
+  },
+  {
+   "ply": 7,
+   "color": "white",
+   "fen_before": "r1bqkbnr/pppp1pp1/2n4p/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4",
+   "state": "FEN: r1bqkbnr/pppp1pp1/2n4p/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bc4, Nb1, Nf3; pawns a2 b2 c2 d2 f2 g2 h2 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nc6, Ng8; pawns e5 h6 a7 b7 c7 d7 f7 g7\nMoves so far: 1. e4 e5 2. Nf3 Nc6 3. Bc4 h6",
+   "question": "Which move should White play?",
+   "options": [
+    {
+     "san": "Bd5",
+     "uci": "c4d5",
+     "probability": 0.002
+    },
+    {
+     "san": "Na3",
+     "uci": "b1a3",
+     "probability": 0.0009
+    },
+    {
+     "san": "Rf1",
+     "uci": "h1f1",
+     "probability": 0.0068
+    },
+    {
+     "san": "Kf1",
+     "uci": "e1f1",
+     "probability": 0.0029
+    },
+    {
+     "san": "b3",
+     "uci": "b2b3",
+     "probability": 0.0046
+    },
+    {
+     "san": "Be2",
+     "uci": "c4e2",
+     "probability": 0.0014
+    },
+    {
+     "san": "d3",
+     "uci": "d2d3",
+     "probability": 0.0775
+    },
+    {
+     "san": "Be6",
+     "uci": "c4e6",
+     "probability": 0.0208
+    },
+    {
+     "san": "Bb5",
+     "uci": "c4b5",
+     "probability": 0.0123
+    },
+    {
+     "san": "Ng5",
+     "uci": "f3g5",
+     "probability": 0.0628
+    },
+    {
+     "san": "Bf1",
+     "uci": "c4f1",
+     "probability": 0.0134
+    },
+    {
+     "san": "d4",
+     "uci": "d2d4",
+     "probability": 0.0389
+    },
+    {
+     "san": "g3",
+     "uci": "g2g3",
+     "probability": 0.0438
+    },
+    {
+     "san": "Qe2",
+     "uci": "d1e2",
+     "probability": 0.0282
+    },
+    {
+     "san": "Nc3",
+     "uci": "b1c3",
+     "probability": 0.0073
+    },
+    {
+     "san": "a3",
+     "uci": "a2a3",
+     "probability": 0.0015
+    },
+    {
+     "san": "b4",
+     "uci": "b2b4",
+     "probability": 0.0001
+    },
+    {
+     "san": "O-O",
+     "uci": "e1g1",
+     "probability": 0.0026
+    },
+    {
+     "san": "Bxf7+",
+     "uci": "c4f7",
+     "probability": 0.0861
+    },
+    {
+     "san": "g4",
+     "uci": "g2g4",
+     "probability": 0.0096
+    },
+    {
+     "san": "Ba6",
+     "uci": "c4a6",
+     "probability": 0.0007
+    },
+    {
+     "san": "c3",
+     "uci": "c2c3",
+     "probability": 0.22
+    },
+    {
+     "san": "Nh4",
+     "uci": "f3h4",
+     "probability": 0.0734
+    },
+    {
+     "san": "Bb3",
+     "uci": "c4b3",
+     "probability": 0.0122
+    },
+    {
+     "san": "h4",
+     "uci": "h2h4",
+     "probability": 0.0002
+    },
+    {
+     "san": "a4",
+     "uci": "a2a4",
+     "probability": 0.0647
+    },
+    {
+     "san": "Nd4",
+     "uci": "f3d4",
+     "probability": 0.0665
+    },
+    {
+     "san": "Ke2",
+     "uci": "e1e2",
+     "probability": 0.0056
+    },
+    {
+     "san": "Ng1",
+     "uci": "f3g1",
+     "probability": 0.0008
+    },
+    {
+     "san": "h3",
+     "uci": "h2h3",
+     "probability": 0.0002
+    },
+    {
+     "san": "Bd3",
+     "uci": "c4d3",
+     "probability": 0.0492
+    },
+    {
+     "san": "Rg1",
+     "uci": "h1g1",
+     "probability": 0.0084
+    },
+    {
+     "san": "Nxe5",
+     "uci": "f3e5",
+     "probability": 0.0746
+    }
+   ],
+   "played": "c3",
+   "played_uci": "c2c3",
+   "time_s": 0.16,
+   "fen_after": "r1bqkbnr/pppp1pp1/2n4p/4p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R b KQkq - 0 4"
+  },
+  {
+   "ply": 8,
+   "color": "black",
+   "fen_before": "r1bqkbnr/pppp1pp1/2n4p/4p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R b KQkq - 0 4",
+   "state": "FEN: r1bqkbnr/pppp1pp1/2n4p/4p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R b KQkq - 0 4\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bc4, Nb1, Nf3; pawns a2 b2 d2 f2 g2 h2 c3 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nc6, Ng8; pawns e5 h6 a7 b7 c7 d7 f7 g7\nMoves so far: 1. e4 e5 2. Nf3 Nc6 3. Bc4 h6 4. c3",
+   "question": "Which move should Black play?",
+   "options": [
+    {
+     "san": "a5",
+     "uci": "a7a5",
+     "probability": 0.0106
+    },
+    {
+     "san": "b5",
+     "uci": "b7b5",
+     "probability": 0.0002
+    },
+    {
+     "san": "Nf6",
+     "uci": "g8f6",
+     "probability": 0.44
+    },
+    {
+     "san": "g5",
+     "uci": "g7g5",
+     "probability": 0.0122
+    },
+    {
+     "san": "Nb4",
+     "uci": "c6b4",
+     "probability": 0.0373
+    },
+    {
+     "san": "Qf6",
+     "uci": "d8f6",
+     "probability": 0.0249
+    },
+    {
+     "san": "Rb8",
+     "uci": "a8b8",
+     "probability": 0.0236
+    },
+    {
+     "san": "f5",
+     "uci": "f7f5",
+     "probability": 0.0576
+    },
+    {
+     "san": "Nd4",
+     "uci": "c6d4",
+     "probability": 0.0185
+    },
+    {
+     "san": "Qg5",
+     "uci": "d8g5",
+     "probability": 0.0001
+    },
+    {
+     "san": "g6",
+     "uci": "g7g6",
+     "probability": 0.0
+    },
+    {
+     "san": "Rh7",
+     "uci": "h8h7",
+     "probability": 0.0342
+    },
+    {
+     "san": "Qh4",
+     "uci": "d8h4",
+     "probability": 0.0
+    },
+    {
+     "san": "Nce7",
+     "uci": "c6e7",
+     "probability": 0.0
+    },
+    {
+     "san": "Bd6",
+     "uci": "f8d6",
+     "probability": 0.0548
+    },
+    {
+     "san": "h5",
+     "uci": "h6h5",
+     "probability": 0.0028
+    },
+    {
+     "san": "Nb8",
+     "uci": "c6b8",
+     "probability": 0.0056
+    },
+    {
+     "san": "d6",
+     "uci": "d7d6",
+     "probability": 0.0
+    },
+    {
+     "san": "a6",
+     "uci": "a7a6",
+     "probability": 0.0068
+    },
+    {
+     "san": "Na5",
+     "uci": "c6a5",
+     "probability": 0.0598
+    },
+    {
+     "san": "b6",
+     "uci": "b7b6",
+     "probability": 0.0465
+    },
+    {
+     "san": "f6",
+     "uci": "f7f6",
+     "probability": 0.0454
+    },
+    {
+     "san": "Qe7",
+     "uci": "d8e7",
+     "probability": 0.0134
+    },
+    {
+     "san": "Bb4",
+     "uci": "f8b4",
+     "probability": 0.0013
+    },
+    {
+     "san": "d5",
+     "uci": "d7d5",
+     "probability": 0.0014
+    },
+    {
+     "san": "Nge7",
+     "uci": "g8e7",
+     "probability": 0.0014
+    },
+    {
+     "san": "Ke7",
+     "uci": "e8e7",
+     "probability": 0.0562
+    },
+    {
+     "san": "Bc5",
+     "uci": "f8c5",
+     "probability": 0.0398
+    },
+    {
+     "san": "Be7",
+     "uci": "f8e7",
+     "probability": 0.0054
+    },
+    {
+     "san": "Ba3",
+     "uci": "f8a3",
+     "probability": 0.0002
+    }
+   ],
+   "played": "Nf6",
+   "played_uci": "g8f6",
+   "time_s": 0.22,
+   "fen_after": "r1bqkb1r/pppp1pp1/2n2n1p/4p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R w KQkq - 1 5"
+  },
+  {
+   "ply": 9,
+   "color": "white",
+   "fen_before": "r1bqkb1r/pppp1pp1/2n2n1p/4p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R w KQkq - 1 5",
+   "state": "FEN: r1bqkb1r/pppp1pp1/2n2n1p/4p3/2B1P3/2P2N2/PP1P1PPP/RNBQK2R w KQkq - 1 5\nPieces:\nWhite: Ke1, Qd1, Ra1, Rh1, Bc1, Bc4, Nb1, Nf3; pawns a2 b2 d2 f2 g2 h2 c3 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nc6, Nf6; pawns e5 h6 a7 b7 c7 d7 f7 g7\nMoves so far: 1. e4 e5 2. Nf3 Nc6 3. Bc4 h6 4. c3 Nf6",
+   "question": "Which move should White play?",
+   "options": [
+    {
+     "san": "Bd5",
+     "uci": "c4d5",
+     "probability": 0.0285
+    },
+    {
+     "san": "Ng1",
+     "uci": "f3g1",
+     "probability": 0.0003
+    },
+    {
+     "san": "Qa4",
+     "uci": "d1a4",
+     "probability": 0.0247
+    },
+    {
+     "san": "Na3",
+     "uci": "b1a3",
+     "probability": 0.0297
+    },
+    {
+     "san": "g3",
+     "uci": "g2g3",
+     "probability": 0.0923
+    },
+    {
+     "san": "d3",
+     "uci": "d2d3",
+     "probability": 0.0217
+    },
+    {
+     "san": "Qb3",
+     "uci": "d1b3",
+     "probability": 0.12
+    },
+    {
+     "san": "O-O",
+     "uci": "e1g1",
+     "probability": 0.0056
+    },
+    {
+     "san": "a4",
+     "uci": "a2a4",
+     "probability": 0.0036
+    },
+    {
+     "san": "h4",
+     "uci": "h2h4",
+     "probability": 0.0006
+    },
+    {
+     "san": "Kf1",
+     "uci": "e1f1",
+     "probability": 0.0
+    },
+    {
+     "san": "Qc2",
+     "uci": "d1c2",
+     "probability": 0.0
+    },
+    {
+     "san": "Rg1",
+     "uci": "h1g1",
+     "probability": 0.0977
+    },
+    {
+     "san": "Bb5",
+     "uci": "c4b5",
+     "probability": 0.0164
+    },
+    {
+     "san": "Be6",
+     "uci": "c4e6",
+     "probability": 0.0288
+    },
+    {
+     "san": "h3",
+     "uci": "h2h3",
+     "probability": 0.0131
+    },
+    {
+     "san": "Be2",
+     "uci": "c4e2",
+     "probability": 0.0029
+    },
+    {
+     "san": "b3",
+     "uci": "b2b3",
+     "probability": 0.0335
+    },
+    {
+     "san": "Ke2",
+     "uci": "e1e2",
+     "probability": 0.0592
+    },
+    {
+     "san": "Bf1",
+     "uci": "c4f1",
+     "probability": 0.001
+    },
+    {
+     "san": "b4",
+     "uci": "b2b4",
+     "probability": 0.0049
+    },
+    {
+     "san": "d4",
+     "uci": "d2d4",
+     "probability": 0.0
+    },
+    {
+     "san": "Nd4",
+     "uci": "f3d4",
+     "probability": 0.0391
+    },
+    {
+     "san": "Nxe5",
+     "uci": "f3e5",
+     "probability": 0.0008
+    },
+    {
+     "san": "Bxf7+",
+     "uci": "c4f7",
+     "probability": 0.009
+    },
+    {
+     "san": "Bd3",
+     "uci": "c4d3",
+     "probability": 0.0708
+    },
+    {
+     "san": "Nh4",
+     "uci": "f3h4",
+     "probability": 0.0692
+    },
+    {
+     "san": "Bb3",
+     "uci": "c4b3",
+     "probability": 0.0922
+    },
+    {
+     "san": "Ng5",
+     "uci": "f3g5",
+     "probability": 0.0012
+    },
+    {
+     "san": "a3",
+     "uci": "a2a3",
+     "probability": 0.0
+    },
+    {
+     "san": "g4",
+     "uci": "g2g4",
+     "probability": 0.002
+    },
+    {
+     "san": "Ba6",
+     "uci": "c4a6",
+     "probability": 0.0277
+    },
+    {
+     "san": "Rf1",
+     "uci": "h1f1",
+     "probability": 0.0955
+    },
+    {
+     "san": "Qe2",
+     "uci": "d1e2",
+     "probability": 0.0081
+    }
+   ],
+   "played": "Qb3",
+   "played_uci": "d1b3",
+   "time_s": 0.35,
+   "fen_after": "r1bqkb1r/pppp1pp1/2n2n1p/4p3/2B1P3/1QP2N2/PP1P1PPP/RNB1K2R b KQkq - 2 5"
+  },
+  {
+   "ply": 10,
+   "color": "black",
+   "fen_before": "r1bqkb1r/pppp1pp1/2n2n1p/4p3/2B1P3/1QP2N2/PP1P1PPP/RNB1K2R b KQkq - 2 5",
+   "state": "FEN: r1bqkb1r/pppp1pp1/2n2n1p/4p3/2B1P3/1QP2N2/PP1P1PPP/RNB1K2R b KQkq - 2 5\nPieces:\nWhite: Ke1, Qb3, Ra1, Rh1, Bc1, Bc4, Nb1, Nf3; pawns a2 b2 d2 f2 g2 h2 c3 e4\nBlack: Ke8, Qd8, Ra8, Rh8, Bc8, Bf8, Nc6, Nf6; pawns e5 h6 a7 b7 c7 d7 f7 g7\nMoves so far: 1. e4 e5 2. Nf3 Nc6 3. Bc4 h6 4. c3 Nf6 5. Qb3",
+   "question": "Which move should Black play?",
+   "options": [
+    {
+     "san": "Nd4",
+     "uci": "c6d4",
+     "probability": 0.043
+    },
+    {
+     "san": "Bd6",
+     "uci": "f8d6",
+     "probability": 0.0026
+    },
+    {
+     "san": "b6",
+     "uci": "b7b6",
+     "probability": 0.0254
+    },
+    {
+     "san": "Na5",
+     "uci": "c6a5",
+     "probability": 0.0397
+    },
+    {
+     "san": "Ba3",
+     "uci": "f8a3",
+     "probability": 0.0289
+    },
+    {
+     "san": "Bb4",
+     "uci": "f8b4",
+     "probability": 0.0003
+    },
+    {
+     "san": "Nd5",
+     "uci": "f6d5",
+     "probability": 0.0408
+    },
+    {
+     "san": "Rb8",
+     "uci": "a8b8",
+     "probability": 0.0444
+    },
+    {
+     "san": "Nh5",
+     "uci": "f6h5",
+     "probability": 0.0301
+    },
+    {
+     "san": "Bc5",
+     "uci": "f8c5",
+     "probability": 0.0727
+    },
+    {
+     "san": "d6",
+     "uci": "d7d6",
+     "probability": 0.0243
+    },
+    {
+     "san": "Nh7",
+     "uci": "f6h7",
+     "probability": 0.0188
+    },
+    {
+     "san": "b5",
+     "uci": "b7b5",
+     "probability": 0.0001
+    },
+    {
+     "san": "h5",
+     "uci": "h6h5",
+     "probability": 0.0
+    },
+    {
+     "san": "Ng8",
+     "uci": "f6g8",
+     "probability": 0.0541
+    },
+    {
+     "san": "a6",
+     "uci": "a7a6",
+     "probability": 0.0009
+    },
+    {
+     "san": "Nb8",
+     "uci": "c6b8",
+     "probability": 0.0098
+    },
+    {
+     "san": "Be7",
+     "uci": "f8e7",
+     "probability": 0.0045
+    },
+    {
+     "san": "Ng4",
+     "uci": "f6g4",
+     "probability": 0.0002
+    },
+    {
+     "san": "g5",
+     "uci": "g7g5",
+     "probability": 0.0002
+    },
+    {
+     "san": "Qe7",
+     "uci": "d8e7",
+     "probability": 0.0
+    },
+    {
+     "san": "Nxe4",
+     "uci": "f6e4",
+     "probability": 0.0109
+    },
+    {
+     "san": "Ke7",
+     "uci": "e8e7",
+     "probability": 0.0203
+    },
+    {
+     "san": "g6",
+     "uci": "g7g6",
+     "probability": 0.0542
+    },
+    {
+     "san": "a5",
+     "uci": "a7a5",
+     "probability": 0.0445
+    },
+    {
+     "san": "d5",
+     "uci": "d7d5",
+     "probability": 0.29
+    },
+    {
+     "san": "Rg8",
+     "uci": "h8g8",
+     "probability": 0.028
+    },
+    {
+     "san": "Nb4",
+     "uci": "c6b4",
+     "probability": 0.0152
+    },
+    {
+     "san": "Rh7",
+     "uci": "h8h7",
+     "probability": 0.0518
+    },
+    {
+     "san": "Ne7",
+     "uci": "c6e7",
+     "probability": 0.0443
+    }
+   ],
+   "played": "d5",
+   "played_uci": "d7d5",
+   "time_s": 0.3,
+   "fen_after": "r1bqkb1r/ppp2pp1/2n2n1p/3pp3/2B1P3/1QP2N2/PP1P1PPP/RNB1K2R w KQkq - 0 6"
+  }
+ ]
+}
