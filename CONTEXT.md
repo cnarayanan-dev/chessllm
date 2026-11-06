@@ -229,7 +229,7 @@ The total time a side has spent on its moves in a game, added up move by move an
 _Avoid_: Clock, move timer, latency (one call's time)
 
 **Legal-move streak**:
-The number of legal moves an LLM plays in a game before its first illegal move, whether or not a retry later recovers the game. Not applicable under **Enforced decoding**, where it would be true by construction.
+The number of legal moves an LLM plays in a game before its first illegal move, whether or not a retry later recovers the game. Not applicable under **Enforced decoding**, where it would be true by construction, nor for a **System 1 model**, which only ever has legal moves to choose from.
 _Avoid_: Legal move count, survival length
 
 ### Rating

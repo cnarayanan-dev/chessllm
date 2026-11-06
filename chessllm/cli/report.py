@@ -12,6 +12,14 @@ sampling, prompt and retries). Each LLM side of a game is counted, so an LLM fac
 log versions are read (ADR 0004) through chessllm.analytics.leaderboard.read_sides; a file that isn't a readable game
 log is skipped and counted.
 
+A System 1 side (ADR 0012) is reported apart, as the report's last section, only when the logs have one: per System 1
+Player configuration (model, Choice temperature and Prompt template), its record, its Move-quality estimate and the
+share of its moves that were its top option. That share counts the turns that were asked and played a move: a turn with
+only one legal move isn't asked and has no choice, and a Forfeit plays no move. A move tied for the top probability
+counts as the top option, as it does at Choice temperature 0, which then plays it every time. Illegal moves, retries,
+the Legal-move streak, notation slips and Chaos gain cannot happen to a System 1 side: they are null in the JSON and
+"not applicable" in the text, never zero (ADR 0003).
+
 Phases: an illegal move at ply 20 or earlier is in the opening; later, it is in the endgame when the queens, rooks,
 bishops and knights left on the board are worth at most ENDGAME_MATERIAL together (Q 9, R 5, B/N 3; 62 at the start),
 and in the middlegame otherwise."""
@@ -44,6 +52,13 @@ PIECE_VALUES = {chess.QUEEN: 9, chess.ROOK: 5, chess.BISHOP: 3, chess.KNIGHT: 3}
 NO_ANSWER = ("timeout", "error")  # an attempt with no move: the LLM forfeits at once
 OPENING_LENGTH = 4  # plies
 TOP = 5
+# The statistics a System 1 side cannot have: it can't propose an illegal move, so there are no retries, no streak, no
+# notation slips and no Chaos moves to gain from.
+NOT_APPLICABLE_TO_SYSTEM1 = (
+    "illegal_turn_rate", "illegal_attempts_per_turn", "illegal_kinds", "illegal_phases", "top_illegal_moves",
+    "repeated_rejected_moves", "no_answers", "legal_move_streak_mean", "legal_move_streak_median", "recovered_turns",
+    "notation_slips", "chaos_gain",
+)
 
 
 @dataclass
@@ -80,6 +95,8 @@ class Game:
                 continue
             if kind in ("human_move", "anchor_move"):
                 moves[ply] = str(event["move"])
+            elif kind == "system1_turn" and event.get("san"):
+                moves[ply] = str(event["san"])
             elif kind == "llm_attempt" and (
                 event.get("result") == "legal" or (event.get("resolution") or {}).get("kind") in ("chaos", "spawn")
             ):
@@ -142,6 +159,46 @@ class LlmSide:
         return [sorted(by_ply[ply], key=lambda attempt: int(attempt.get("attempt", 1))) for ply in sorted(by_ply)]
 
 
+@dataclass(frozen=True)
+class System1Configuration:
+    """A System 1 side's Player configuration as this report groups it: its model, Choice temperature and Prompt
+    template. #126 defines the one the leaderboard and Ranking use; system1_configuration is where to switch to it."""
+
+    model: str
+    choice_temperature: float
+    prompt_template_id: str | None
+    prompt_text: str  # the template's system prompt and turn template, only when it has no id to tell it by
+
+    def label(self) -> str:
+        prompt = self.prompt_template_id or "custom prompt"
+        return f"{self.model} / Choice temperature {self.choice_temperature:g} / {prompt}"
+
+
+def system1_configuration(side: dict[str, Any]) -> System1Configuration:
+    """The Player configuration of the System 1 side game_start logs."""
+    template = side.get("prompt_template") or {}
+    template_id = template.get("id")
+    text = "" if template_id else f"{template.get('system_prompt')}\n{template.get('turn_template')}"
+    return System1Configuration(str(side["model"]), float(side["choice_temperature"]), template_id, text)
+
+
+@dataclass
+class System1Side:
+    """One System 1 side of one game."""
+
+    game: Game
+    color: Color
+    configuration: System1Configuration
+    opponent: str
+    outcome: str | None  # win/draw/loss from this side's view; None while unfinished
+
+    def turns(self) -> list[dict[str, Any]]:
+        """Its system1_turn events in order."""
+        return [
+            event for event in self.game.events if event.get("type") == "system1_turn" and event.get("color") == self.color
+        ]
+
+
 def load_games(games_dir: Path) -> tuple[list[Game], list[tuple[str, str]]]:
     """Every game log in the directory, and the files skipped with why."""
     games, skipped = [], []
@@ -191,6 +248,19 @@ def llm_sides(game: Game) -> list[LlmSide]:
     return result
 
 
+def system1_sides(game: Game) -> list[System1Side]:
+    result: list[System1Side] = []
+    for color in COLORS:
+        side = game.sides[color]
+        if side.get("player") != "system1":
+            continue
+        outcome = None if game.end is None else side_outcome(str(game.end.get("result")), color)
+        result.append(
+            System1Side(game, color, system1_configuration(side), opponent_label(game.sides[opponent(color)]), outcome)
+        )
+    return result
+
+
 def opponent_label(side: dict[str, Any]) -> str:
     if side.get("player") == "anchor" and side.get("engine") == "random":
         return "Random mover"
@@ -198,6 +268,8 @@ def opponent_label(side: dict[str, Any]) -> str:
         return f"{str(side.get('engine', 'anchor')).capitalize()} skill {side.get('skill', '?')}"
     if side.get("player") == "llm":
         return str(side.get("model"))
+    if side.get("player") == "system1":
+        return f"{side.get('model')} (Choice temperature {float(side.get('choice_temperature', 1)):g})"
     return str(side.get("player", "?"))
 
 
@@ -216,6 +288,10 @@ class Filters:
             self.constraints is None or configuration.llm_constraints == self.constraints
         )
 
+    def system1_side_matches(self, side: System1Side) -> bool:
+        """A System 1 side has no LLM constraints, so a filter on them leaves it out."""
+        return self.constraints is None and (self.model is None or self.model.lower() in side.configuration.model.lower())
+
     def game_matches(self, game: Game) -> bool:
         if self.finished_only and game.end is None:
             return False
@@ -227,7 +303,9 @@ class Filters:
             started = game.started
             if started is None or started.replace(tzinfo=None) < self.since:
                 return False
-        return any(self.side_matches(side) for side in llm_sides(game))
+        return any(self.side_matches(side) for side in llm_sides(game)) or any(
+            self.system1_side_matches(side) for side in system1_sides(game)
+        )
 
 
 # --- the analysis -------------------------------------------------------------------------------------------------
@@ -252,7 +330,7 @@ def ratio(part: float, whole: float) -> float | None:
     return part / whole if whole else None
 
 
-def record(sides: Iterable[LlmSide]) -> dict[str, Any]:
+def record(sides: Iterable[LlmSide | System1Side]) -> dict[str, Any]:
     outcomes = Counter(side.outcome for side in sides)
     finished = outcomes["win"] + outcomes["draw"] + outcomes["loss"]
     return {
@@ -393,18 +471,7 @@ class Themes:
         self.allowed_mate_in_one += bool(mates_in_one(board))
 
     def add_analysis(self, side: LlmSide) -> None:
-        path = analysis_path(side.game.path)
-        moves = read_analysed_moves(path).get(side.color)
-        if moves is not None:
-            self.analysed_moves.add(*moves)
-        try:
-            analysis = json.loads(path.read_text(encoding="utf-8"))
-            analysed = analysis["centipawn_loss_and_accuracy"]["sides"][side.color]
-            for move in analysed["moves"]:
-                self.centipawn_losses.append(float(move["centipawn_loss"]))
-                self.accuracies.append(float(move["accuracy"]))
-        except (OSError, ValueError, KeyError, TypeError):
-            return
+        add_analysis(self, side.game, side.color)
 
     def as_dict(self, validated_for: Any) -> dict[str, Any]:
         quality = move_quality(self.analysed_moves, validated_for)
@@ -446,6 +513,84 @@ class Themes:
         }
 
 
+def add_analysis(themes: "Themes | System1Themes", game: Game, color: Color) -> None:
+    """Add a side's Move-quality estimate moves and its Stockfish centipawn losses and accuracies, from the game's
+    analysis file, if it has one."""
+    path = analysis_path(game.path)
+    moves = read_analysed_moves(path).get(color)
+    if moves is not None:
+        themes.analysed_moves.add(*moves)
+    try:
+        analysis = json.loads(path.read_text(encoding="utf-8"))
+        analysed = analysis["centipawn_loss_and_accuracy"]["sides"][color]
+        for move in analysed["moves"]:
+            themes.centipawn_losses.append(float(move["centipawn_loss"]))
+            themes.accuracies.append(float(move["accuracy"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+
+
+@dataclass
+class System1Themes:
+    """The patterns of a set of System 1 sides. Only what can happen to one: its choices, forfeits and move quality."""
+
+    turns: int = 0
+    top_option_moves: int = 0  # asked turns that played the top option
+    top_option_turns: int = 0  # asked turns that played a move
+    finished: int = 0
+    forfeits: int = 0
+    losses_by: Counter[str] = field(default_factory=Counter)
+    plies: list[int] = field(default_factory=list)
+    times: list[float] = field(default_factory=list)  # each turn's Time used
+    centipawn_losses: list[float] = field(default_factory=list)
+    accuracies: list[float] = field(default_factory=list)
+    analysed_moves: ConfigurationMoves = field(default_factory=ConfigurationMoves)
+
+    def add(self, side: System1Side) -> None:
+        for turn in side.turns():
+            self.turns += 1
+            if isinstance(turn.get("time_s"), (int, float)):
+                self.times.append(float(turn["time_s"]))
+            if turn.get("asked") and turn.get("move") is not None:
+                self.top_option_turns += 1
+                self.top_option_moves += played_a_top_option(turn)
+        end = side.game.end
+        if end is not None:
+            self.finished += 1
+            self.plies.append(int(end.get("plies", 0)))
+            if side.outcome == "loss":
+                self.losses_by[str(end.get("reason"))] += 1
+                self.forfeits += end.get("reason") == "forfeit"
+        add_analysis(self, side.game, side.color)
+
+    def as_dict(self, validated_for: Any) -> dict[str, Any]:
+        quality = move_quality(self.analysed_moves, validated_for)
+        return {
+            "turns": self.turns,
+            "top_option_moves": self.top_option_moves,
+            "top_option_turns": self.top_option_turns,
+            "top_option_share": ratio(self.top_option_moves, self.top_option_turns),
+            # Not applicable to a System 1 side, which offers only legal moves in one attempt (ADR 0003): null, not 0.
+            **dict.fromkeys(NOT_APPLICABLE_TO_SYSTEM1),
+            "forfeit_rate": ratio(self.forfeits, self.finished),
+            "losses_by": dict(self.losses_by),
+            "plies_mean": mean(self.plies),
+            "time_mean_s": mean(self.times),
+            "average_centipawn_loss": mean(self.centipawn_losses),
+            "average_accuracy": mean(self.accuracies),
+            "analysed_moves": len(self.centipawn_losses),
+            "move_quality": quality.model_dump() if quality is not None else None,
+        }
+
+
+def played_a_top_option(turn: dict[str, Any]) -> bool:
+    """Whether the move a System 1 turn played had the highest probability of its options, or the highest with others:
+    a tie for the top counts, as at Choice temperature 0, which plays the first of them."""
+    probabilities = {option["san"]: option.get("probability") for option in turn["options"]}
+    played = probabilities.get(turn.get("san"))
+    return played is not None and played >= max(value for value in probabilities.values() if value is not None)
+
+
 def opening(game: Game) -> str | None:
     moves = game.played_moves()[:OPENING_LENGTH]
     if len(moves) < OPENING_LENGTH:
@@ -481,7 +626,7 @@ def analyse(games: list[Game], filters: Filters, validation_file: Path = VALIDAT
     for side in sides:
         overall.add(side)
     openings = Counter(name for game in selected if (name := opening(game)) is not None)
-    return {
+    report = {
         "games": len(selected),
         "llm_sides": len(sides),
         "configurations": configurations,
@@ -490,6 +635,42 @@ def analyse(games: list[Game], filters: Filters, validation_file: Path = VALIDAT
         "openings": openings.most_common(TOP),
         "game_list": [game_summary(game, filters) for game in selected],
     }
+    system1 = [side for game in selected for side in system1_sides(game) if filters.system1_side_matches(side)]
+    if system1:  # reports over logs without System 1 sides have neither key
+        report |= {
+            "system1_sides": len(system1),
+            "system1_configurations": system1_configurations(system1, validated_for),
+        }
+    return report
+
+
+def system1_configurations(sides: list[System1Side], validated_for: Any) -> list[dict[str, Any]]:
+    by_configuration: dict[System1Configuration, list[System1Side]] = defaultdict(list)
+    for side in sides:
+        by_configuration[side.configuration].append(side)
+    configurations = []
+    for configuration in sorted(by_configuration, key=System1Configuration.label):
+        its_sides = by_configuration[configuration]
+        anchors = sorted({side.opponent for side in its_sides if (mode := mode_named(side.game.mode)) is not None and mode.against_an_anchor})
+        themes = System1Themes()
+        for side in its_sides:
+            themes.add(side)
+        configurations.append(
+            {
+                "configuration": {
+                    "model": configuration.model,
+                    "choice_temperature": configuration.choice_temperature,
+                    "prompt_template": configuration.prompt_template_id or configuration.prompt_text,
+                    "label": configuration.label(),
+                },
+                "record": record(its_sides),
+                "by_anchor": {
+                    anchor: record(side for side in its_sides if side.opponent == anchor) for anchor in anchors
+                },
+                "themes": themes.as_dict(validated_for),
+            }
+        )
+    return configurations
 
 
 def game_summary(game: Game, filters: Filters) -> dict[str, Any]:
@@ -596,7 +777,35 @@ def render(report: dict[str, Any], skipped: list[tuple[str, str]], total: int) -
         [[game["file"], game["date"], game["mode"], game["rules"], game["white"], game["black"], game["result"],
           game["reason"], game["plies"]] for game in report["game_list"]],
     ))
+    if "system1_configurations" in report:
+        out += system1_section(report)
     return "\n".join(out)
+
+
+def system1_section(report: dict[str, Any]) -> list[str]:
+    out = ["", f"5. System 1 sides ({report['system1_sides']}; a faceoff counts once per side)", ""]
+    rows: list[list[Any]] = []
+    for entry in report["system1_configurations"]:
+        result, themes = entry["record"], entry["themes"]
+        rows.append([entry["configuration"]["label"], result["games"], result["wins"], result["draws"],
+                     result["losses"], percent(result["score"]), result["unfinished"],
+                     percent(themes["top_option_share"]), percent(themes["forfeit_rate"]), themes["plies_mean"],
+                     themes["time_mean_s"]])
+        for anchor, by_anchor in entry["by_anchor"].items():
+            rows.append([f"    vs {anchor}", by_anchor["games"], by_anchor["wins"], by_anchor["draws"],
+                         by_anchor["losses"], percent(by_anchor["score"]), by_anchor["unfinished"], "", "", "", ""])
+    out.append(table(["configuration", "games", "W", "D", "L", "score", "unfinished", "top option", "forfeit rate",
+                      "plies mean", "time s"], rows))
+    for entry in report["system1_configurations"]:
+        themes = entry["themes"]
+        out += ["", entry["configuration"]["label"]]
+        out.append(
+            f"  top option {themes['top_option_moves']} of {themes['top_option_turns']} moves "
+            f"({percent(themes['top_option_share'])}); turns with only one legal move are not counted"
+        )
+        out += [f"  {line}" for line in analysis_lines(themes)]
+        out.append("  not applicable: illegal moves, retries, Legal-move streak, notation slips, Chaos gain")
+    return out
 
 
 def theme_lines(themes: dict[str, Any]) -> list[str]:
@@ -623,6 +832,12 @@ def theme_lines(themes: dict[str, Any]) -> list[str]:
         )
     if themes["chaos_moves"]:
         lines.append(f"chaos moves: {themes['chaos_moves']}")
+    return lines + analysis_lines(themes)
+
+
+def analysis_lines(themes: dict[str, Any]) -> list[str]:
+    """The Stockfish and Move-quality lines of a side's themes, from its analysis files."""
+    lines = []
     if themes["analysed_moves"]:
         lines.append(
             f"Stockfish over {themes['analysed_moves']} moves: average centipawn loss "

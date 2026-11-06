@@ -1,6 +1,6 @@
-"""Game analysis: one analysis file per finished game, next to its log, holding each LLM side's Move-quality
-estimate from a MoveModel, and its centipawn loss and accuracy from an Evaluator. The game log is only read, never
-changed (ADR 0004, ADR 0005).
+"""Game analysis: one analysis file per finished game, next to its log, holding each LLM or System 1 side's
+Move-quality estimate from a MoveModel, and its centipawn loss and accuracy from an Evaluator. The game log is only
+read, never changed (ADR 0004, ADR 0005).
 
 The analysis file of games/<stem>.jsonl is games/<stem>.analysis.json:
 
@@ -14,7 +14,7 @@ The analysis file of games/<stem>.jsonl is games/<stem>.analysis.json:
         "scale": "lichess_rapid",
         "ratings": [1000, 1100, ...],      # the grid the estimate is taken over
         "sides": {
-          "white": null,                   # not an LLM: a human or an Anchor, whose moves are not scored
+          "white": null,                   # not an LLM or a System 1 model: a human or an Anchor, whose moves are not scored
           "black": {
             "estimate": 1300,              # the most likely rating, or null when no move was scored
             "interval": [1150, 1480],      # 95% likelihood-ratio interval, or null; clipped to the grid
@@ -109,25 +109,38 @@ def read_events(log: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def llm_colours(start: dict[str, Any]) -> list[Color]:
-    """The colours played by an LLM. Version 1 logs have one LLM side, llm_color (ADR 0004)."""
+def model_colours(start: dict[str, Any]) -> list[Color]:
+    """The colours played by an LLM or a System 1 model. Version 1 logs have one LLM side, llm_color (ADR 0004)."""
     if "log_version" not in start:
         return [start["llm_color"]]
-    return [colour for colour in COLORS if start[colour].get("player") == "llm"]
+    return [colour for colour in COLORS if start[colour].get("player") in ("llm", "system1")]
 
 
 def scored_moves(events: list[dict[str, Any]]) -> list[tuple[Color, int, str, str]]:
-    """The legal moves the LLMs played, as (colour, ply, fen before, UCI). Illegal attempts are skipped, and so are
-    chaos moves, which are logged as illegal attempts with a resolution (ADR 0006)."""
+    """The legal moves the LLMs and System 1 models played, as (colour, ply, fen before, UCI). Illegal attempts are
+    skipped, and so are chaos moves, which are logged as illegal attempts with a resolution (ADR 0006).
+
+    A System 1 turn doesn't log its position when it wasn't asked, so the position before it is the one the last
+    move left: the fen_after of a human's or an Anchor's move, or the board replayed. System 1 sides play Standard
+    rules from the starting position only, so no chaos move can have edited the board."""
     moves = []
+    system1_fen = chess.STARTING_FEN
     for event in events:
-        if event["type"] != "llm_attempt" or event.get("result") != "legal":
-            continue
-        board = chess.Board(event["fen"])
-        # Early version 1 logs have no san; the move as written is legal then, a notation slip at worst.
-        move = board.parse_san(event.get("san") or event["move"])
-        colour = color_of(board.turn)
-        moves.append((colour, event["ply"], event["fen"], move.uci()))
+        if event["type"] in ("human_move", "anchor_move"):
+            system1_fen = event["fen_after"]
+        elif event["type"] == "system1_turn" and event.get("move") is not None:
+            board = chess.Board(system1_fen)
+            moves.append((event["color"], event["ply"], system1_fen, event["move"]))
+            board.push_uci(event["move"])
+            system1_fen = board.fen()
+        elif event["type"] == "llm_attempt" and event.get("result") == "legal":
+            board = chess.Board(event["fen"])
+            # Early version 1 logs have no san; the move as written is legal then, a notation slip at worst.
+            move = board.parse_san(event.get("san") or event["move"])
+            colour = color_of(board.turn)
+            moves.append((colour, event["ply"], event["fen"], move.uci()))
+            board.push(move)
+            system1_fen = board.fen()
     return moves
 
 
@@ -135,7 +148,7 @@ def move_quality(log_events: list[dict[str, Any]], move_model: MoveModel) -> dic
     """The move_quality section: each LLM side's Move-quality estimate from the move model."""
     ratings = list(move_model.ratings)
     sides: dict[Color, dict[str, Any] | None] = dict.fromkeys(COLORS)
-    for colour in llm_colours(log_events[0]):
+    for colour in model_colours(log_events[0]):
         played = [(ply, fen, uci) for moved, ply, fen, uci in scored_moves(log_events) if moved == colour]
         log_probabilities = [[math.log(p) for p in move_model.probabilities(fen, uci)] for _, fen, uci in played]
         moves = [
@@ -191,7 +204,7 @@ def mover_evaluations(fen: str, uci: str, evaluator: Evaluator) -> tuple[int, in
 def centipawn_loss_and_accuracy(log_events: list[dict[str, Any]], evaluator: Evaluator) -> dict[str, Any]:
     """The centipawn_loss_and_accuracy section: each LLM side's legal moves judged by the engine."""
     sides: dict[Color, dict[str, Any] | None] = dict.fromkeys(COLORS)
-    for colour in llm_colours(log_events[0]):
+    for colour in model_colours(log_events[0]):
         moves: list[dict[str, Any]] = []
         losses: list[float] = []
         accuracies: list[float] = []
