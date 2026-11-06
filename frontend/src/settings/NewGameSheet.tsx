@@ -34,6 +34,8 @@ import {
   chooseConstraints,
   chooseHumanColor,
   chooseKind,
+  system1ModelIsListed,
+  type System1Models,
   chooseMaxAttempts,
   chooseMode,
   chooseModel,
@@ -85,6 +87,9 @@ const KIND_WORDS: Record<Kind, { name: string; description: string }> = {
   },
 }
 const SYSTEM1_MODEL = `The name of the model the server is to run, e.g. ${DEFAULT_SYSTEM1_MODEL}.`
+const SYSTEM1_MODEL_LISTED =
+  'A System 1 model installed in Ollama. To name one that another server runs, change the Server URL in Advanced settings.'
+const SYSTEM1_MODEL_NONE = `Ollama has no System 1 models, or didn't answer. Name the model the server is to run, e.g. ${DEFAULT_SYSTEM1_MODEL}.`
 const SYSTEM1_URL = 'The server that serves the model at /v1/systemone: Ollama, llama-server or the publisher\'s own.'
 const CHOICE_TEMPERATURE =
   'How the move is drawn from the model\'s probabilities. 1: as they are. Lower favours its top moves; 0 always plays the top one.'
@@ -178,6 +183,7 @@ function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStar
     set,
     library: promptLab ? (libraryQuery.data ?? null) : undefined,
     system1Templates: system1Query.data?.templates ?? null,
+    system1Models: system1Query.data ?? null,
   }
 
   return (
@@ -271,10 +277,12 @@ type SideProps = {
   library: PromptTemplateInfo[] | null | undefined
   /** The System 1 Prompt templates, or null until they have loaded; only the Advanced settings need them. */
   system1Templates?: System1TemplateInfo[] | null
+  /** The System 1 models Ollama has and the server they are at, or null until they have loaded. */
+  system1Models?: System1Models | null
 }
 
 /** The Model player in Play LLM, or each side in a faceoff, with the swap button between them. */
-function Opponent({ next, models, set, error }: SideProps & { error: string | null }) {
+function Opponent({ next, models, set, system1Models, error }: SideProps & { error: string | null }) {
   const alert = error && (
     <p role="alert" className="text-xs text-destructive">
       Could not list the models: {error}
@@ -284,11 +292,11 @@ function Opponent({ next, models, set, error }: SideProps & { error: string | nu
     const color = other(next.human_color)
     return (
       <Field label="Opponent">
-        <KindChoice next={next} models={models} set={set} color={color} label="Opponent kind" />
+        <KindChoice next={next} models={models} set={set} system1Models={system1Models} color={color} label="Opponent kind" />
         {next.kinds[color] === 'llm' ? (
-          <ModelSelect label="Opponent" chosen={next.models[color]} models={models} onChange={(name) => set(chooseModel(next, color, name))} />
+          <ModelSelect label="Opponent" chosen={next.models[color]} names={modelNames(models)} onChange={(name) => set(chooseModel(next, color, name))} />
         ) : (
-          <System1Model next={next} set={set} color={color} label="Opponent" />
+          <System1Model next={next} set={set} system1Models={system1Models} color={color} label="Opponent" />
         )}
         {alert}
       </Field>
@@ -300,16 +308,23 @@ function Opponent({ next, models, set, error }: SideProps & { error: string | nu
         <SideDot color={color} />
         {COLOR_NAMES[color]}
       </div>
-      <KindChoice next={next} models={models} set={set} color={color} label={`${COLOR_NAMES[color]} kind`} />
+      <KindChoice
+        next={next}
+        models={models}
+        set={set}
+        system1Models={system1Models}
+        color={color}
+        label={`${COLOR_NAMES[color]} kind`}
+      />
       {next.kinds[color] === 'llm' ? (
         <ModelSelect
           label={`${COLOR_NAMES[color]} model`}
           chosen={next.models[color]}
-          models={models}
+          names={modelNames(models)}
           onChange={(name) => set(chooseModel(next, color, name))}
         />
       ) : (
-        <System1Model next={next} set={set} color={color} label={`${COLOR_NAMES[color]} model`} />
+        <System1Model next={next} set={set} system1Models={system1Models} color={color} label={`${COLOR_NAMES[color]} model`} />
       )}
     </div>
   )
@@ -334,16 +349,17 @@ function KindChoice({
   next,
   models,
   set,
+  system1Models,
   color,
   label,
-}: Pick<SideProps, 'next' | 'models' | 'set'> & { color: Color; label: string }) {
+}: Pick<SideProps, 'next' | 'models' | 'set' | 'system1Models'> & { color: Color; label: string }) {
   return (
     <Choice<Kind>
       label={label}
       hideLabel
       columns={2}
       value={next.kinds[color]}
-      onChange={(kind) => set(chooseKind(next, models, color, kind))}
+      onChange={(kind) => set(chooseKind(next, models, color, kind, system1Models ?? undefined))}
       options={(['llm', 'system1'] as const).map((kind) => {
         const Icon = kind === 'llm' ? Bot : Cpu
         return {
@@ -361,14 +377,36 @@ function KindChoice({
 const INPUT =
   'h-9 min-w-0 rounded-3xl border border-transparent bg-input/50 px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 aria-invalid:border-destructive'
 
-/** A System 1 side's model, named: the server has it, whatever it is called there. */
-function System1Model({ next, set, color, label }: Pick<SideProps, 'next' | 'set'> & { color: Color; label: string }) {
+/**
+ * A System 1 side's model: picked from the ones Ollama has when some are listed and the side is at that server,
+ * else named in a field, for a server that isn't Ollama or when Ollama has none or doesn't answer.
+ */
+function System1Model({
+  next,
+  set,
+  system1Models,
+  color,
+  label,
+}: Pick<SideProps, 'next' | 'set' | 'system1Models'> & { color: Color; label: string }) {
+  const values = next.system1[color]
+  if (system1Models && system1ModelIsListed(values, system1Models)) {
+    return (
+      <ModelSelect
+        label={label}
+        chosen={values.model}
+        names={system1Models.models}
+        description={SYSTEM1_MODEL_LISTED}
+        onChange={(name) => set(setSystem1(next, color, 'model', name))}
+      />
+    )
+  }
+  const none = system1Models && system1Models.models.length === 0 && values.base_url === system1Models.default_url
   return (
-    <Tip description={SYSTEM1_MODEL}>
+    <Tip description={none ? SYSTEM1_MODEL_NONE : SYSTEM1_MODEL}>
       <input
         type="text"
         aria-label={label}
-        aria-description={SYSTEM1_MODEL}
+        aria-description={none ? SYSTEM1_MODEL_NONE : SYSTEM1_MODEL}
         aria-invalid={next.system1[color].model.trim() === ''}
         className={cn(INPUT, 'w-full')}
         spellCheck={false}
@@ -379,25 +417,31 @@ function System1Model({ next, set, color, label }: Pick<SideProps, 'next' | 'set
   )
 }
 
-/** A model select. The chosen model stays listed until the list has loaded. */
+const modelNames = (models: Models) => (models ?? []).map((model) => model.name)
+
+/** A model select, with a tooltip if it has a description. The chosen model stays listed, whether or not it is in the list. */
 function ModelSelect({
   label,
   chosen,
-  models,
+  names: listed,
+  description,
   onChange,
 }: {
   label: string
   chosen: string
-  models: Models
+  names: string[]
+  description?: string
   onChange: (name: string) => void
 }) {
-  const names = (models ?? []).map((model) => model.name)
-  if (!names.includes(chosen)) names.unshift(chosen)
+  const names = listed.includes(chosen) ? listed : [chosen, ...listed]
+  const trigger = (
+    <SelectTrigger aria-label={label} aria-description={description} className="w-full">
+      <SelectValue />
+    </SelectTrigger>
+  )
   return (
     <Select value={chosen} onValueChange={(name) => name && onChange(name)}>
-      <SelectTrigger aria-label={label} className="w-full">
-        <SelectValue />
-      </SelectTrigger>
+      {description ? <Tip description={description}>{trigger}</Tip> : trigger}
       <SelectContent>
         {names.map((name) => (
           <SelectItem key={name} value={name}>

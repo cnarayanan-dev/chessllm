@@ -248,7 +248,7 @@ describe('with no current game', () => {
       .on('GET /api/games/current', noGame())
       .on('GET /api/games/defaults', Response.json(defaults))
       .on('GET /api/models', Response.json(models))
-      .on('GET /api/system1/options', Response.json({ default_url: 'http://localhost:11434', templates: [] }))
+      .on('GET /api/system1/options', Response.json({ default_url: 'http://localhost:11434', models: [], templates: [] }))
       .on('POST /api/games', Response.json({ detail }, { status: 400 }))
     renderApp()
 

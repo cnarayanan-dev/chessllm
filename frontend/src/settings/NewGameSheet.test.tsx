@@ -99,7 +99,7 @@ function stubModels(response: () => Response) {
   const fetch = vi.fn().mockImplementation((path: string) => {
     if (path === '/api/prompt-templates') return Promise.resolve(Response.json(library))
     if (path === '/api/system1/options')
-      return Promise.resolve(Response.json({ default_url: 'http://localhost:11434', templates: system1Templates }))
+      return Promise.resolve(Response.json({ default_url: 'http://localhost:11434', models: [], templates: system1Templates }))
     return Promise.resolve(response())
   })
   vi.stubGlobal('fetch', fetch)
@@ -763,7 +763,7 @@ describe('System 1 models', () => {
       vi.fn().mockImplementation((path: string) =>
         Promise.resolve(
           path === '/api/system1/options'
-            ? Response.json({ default_url: 'http://api-says:1234', templates: system1Templates })
+            ? Response.json({ default_url: 'http://api-says:1234', models: [], templates: system1Templates })
             : path === '/api/prompt-templates'
               ? Response.json(library)
               : Response.json(models),
@@ -776,6 +776,103 @@ describe('System 1 models', () => {
     await openSystem1Settings(user)
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Server URL' })).toHaveValue('http://api-says:1234'))
+  })
+
+  describe('with System 1 models listed', () => {
+    /** Answers GET /api/system1/options with these models, as Ollama has them. */
+    const listed = (...names: string[]) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((path: string) =>
+          Promise.resolve(
+            path === '/api/system1/options'
+              ? Response.json({ default_url: 'http://localhost:11434', models: names, templates: system1Templates })
+              : path === '/api/prompt-templates'
+                ? Response.json(library)
+                : Response.json(models),
+          ),
+        ),
+      )
+    const options = () => screen.findAllByRole('option').then((all) => all.map((option) => option.textContent))
+
+    test('a System 1 opponent is picked from the listed models', async () => {
+      listed('d3:9b', 'd3:2b', 'd1:2b')
+      const { user, started } = await openSheet()
+
+      await user.click(kind('Opponent kind').getByRole('radio', { name: 'System 1' }))
+      const picker = await screen.findByRole('combobox', { name: 'Opponent' })
+      expect(screen.queryByRole('textbox', { name: 'Opponent' })).not.toBeInTheDocument()
+      expect(picker).toHaveTextContent('d3:2b') // the side's model, since it is listed
+      await user.click(picker)
+      expect(await options()).toEqual(['d3:9b', 'd3:2b', 'd1:2b'])
+      await user.click(screen.getByRole('option', { name: 'd1:2b' }))
+      await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+      expect(started()).toMatchObject({ black: system1({ model: 'd1:2b' }) })
+    })
+
+    test('a side that becomes a System 1 model takes the first listed when its model is not listed', async () => {
+      listed('d3:9b', 'd1:2b')
+      const { user, started } = await openSheet()
+
+      await user.click(kind('Opponent kind').getByRole('radio', { name: 'System 1' }))
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Opponent' })).toHaveTextContent('d3:9b'))
+      await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+      expect(started()).toMatchObject({ black: system1({ model: 'd3:9b' }) })
+    })
+
+    test("the sheet opens with the last game's model, listed or not, and starts it again", async () => {
+      listed('d3:9b', 'd1:2b')
+      const last = { ...faceoff, white: llm('gemma3:4b'), black: system1({ model: 'old:1b' }) }
+      const { user, started } = await openSheet(last)
+
+      const picker = await screen.findByRole('combobox', { name: 'Black model' })
+      expect(picker).toHaveTextContent('old:1b')
+      await user.click(picker)
+      expect(await options()).toEqual(['old:1b', 'd3:9b', 'd1:2b'])
+      await user.keyboard('{Escape}')
+      await user.click(screen.getByRole('button', { name: 'Start faceoff' }))
+
+      expect(started()).toMatchObject({ black: system1({ model: 'old:1b' }) })
+    })
+
+    test('a server other than the default is not Ollama, so its model is typed', async () => {
+      listed('d3:9b', 'd1:2b')
+      const { user, started } = await openSheet({ ...playLlm, black: system1({ model: 'd3:9b' }) })
+      await screen.findByRole('combobox', { name: 'Opponent' })
+      await openSystem1Settings(user)
+
+      const url = screen.getByRole('textbox', { name: 'Server URL' })
+      await user.clear(url)
+      await user.type(url, 'http://localhost:8080')
+      const model = screen.getByRole('textbox', { name: 'Opponent' })
+      expect(screen.queryByRole('combobox', { name: 'Opponent' })).not.toBeInTheDocument()
+      await user.clear(model)
+      await user.type(model, 'served-here')
+      await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+      expect(started()).toMatchObject({ black: system1({ model: 'served-here', base_url: 'http://localhost:8080' }) })
+    })
+
+    test('its tooltip says where the models come from and how to name another', async () => {
+      listed('d3:9b')
+      const { user } = await openSheet({ ...playLlm, black: system1({ model: 'd3:9b' }) })
+
+      await user.hover(await screen.findByRole('combobox', { name: 'Opponent' }))
+
+      expect(await tooltip()).toHaveTextContent(/installed in Ollama.*Server URL/)
+    })
+  })
+
+  test('with no System 1 model listed, e.g. Ollama not answering, the model is typed in a field', async () => {
+    const { user } = await openSheet({ ...playLlm, black: system1() })
+
+    const field = await screen.findByRole('textbox', { name: 'Opponent' })
+    expect(field).toHaveValue('d3:2b')
+    await user.hover(field)
+    expect(await tooltip()).toHaveTextContent(/Ollama has no System 1 models, or didn't answer/)
+    expect(screen.queryByRole('combobox', { name: 'Opponent' })).not.toBeInTheDocument()
   })
 
   test('its Prompt template is picked from the System 1 templates the API lists, the first being the default', async () => {

@@ -4,6 +4,7 @@ import type {
   ModelInfo,
   NewGame,
   PromptTemplateInfo,
+  System1Options,
   System1Side,
   System1TemplateInfo,
   TurnMemory,
@@ -245,15 +246,36 @@ export const chooseModel = (next: NextGame, color: Color, name: string): NextGam
   models: { ...next.models, [color]: name },
 })
 
+/** What a System 1 side is offered, of GET /api/system1/options: the server it starts at and the models Ollama has there. */
+export type System1Models = Pick<System1Options, 'default_url' | 'models'>
+
+/**
+ * Whether a System 1 side's model is picked from the listed models rather than typed: some are listed, and the side
+ * is at the server they are listed at. Any other server (llama-server, a publisher's) is not Ollama, so it may serve
+ * models that the list lacks.
+ */
+export const system1ModelIsListed = (values: System1Values, options: System1Models | undefined): boolean =>
+  !!options?.models.length && values.base_url === options.default_url
+
 /**
  * Whether a side is an LLM or a System 1 model. Customizing per LLM ends when fewer than two LLMs are left: the
  * LLM left keeps its settings for both sides. A side that becomes an LLM and has a model not in the list takes the
- * first listed.
+ * first listed, and so does one that becomes a System 1 model at the server the System 1 models are listed for.
  */
-export function chooseKind(next: NextGame, models: Models, color: Color, kind: Kind): NextGame {
+export function chooseKind(
+  next: NextGame,
+  models: Models,
+  color: Color,
+  kind: Kind,
+  system1?: System1Models,
+): NextGame {
   let chosen: NextGame = { ...next, kinds: { ...next.kinds, [color]: kind } }
   if (kind === 'llm' && models?.length && !models.some((model) => model.name === next.models[color])) {
     chosen = chooseModel(chosen, color, models[0].name)
+  }
+  const values = next.system1[color]
+  if (kind === 'system1' && system1 && system1ModelIsListed(values, system1) && !system1.models.includes(values.model)) {
+    chosen = setSystem1(chosen, color, 'model', system1.models[0])
   }
   if (chosen.custom && llmColors(chosen).length < 2) {
     const kept = chosen.sides[llmColors(chosen)[0] ?? 'white']

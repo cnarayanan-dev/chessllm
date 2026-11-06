@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from chessllm.api.app import create_app
 from chessllm.core.config import SYSTEM1_DEFAULT_URL
 from chessllm.exceptions import DecisionModelFailed, System1Unavailable
+from chessllm.llm.models import LLM_MODELS
 from chessllm.system1.prompt import DEFAULT_TEMPLATE, SYSTEM1_TEMPLATES
 from tests.conftest import llm_faceoff
 from tests.fakes import FakeClock, FakeDecisionModel, ScriptedPlayer
@@ -228,3 +229,19 @@ def test_a_system_1_side_may_play_any_system_1_template_the_list_offers(app):
         state = client.post("/api/games", json=play_system1("black", prompt_template_id=listed["id"])).json()
 
         assert state["prompt_templates"]["white"]["id"] == listed["id"]
+
+
+def test_the_installed_decision_models_are_offered_to_a_system_1_side_and_left_out_of_the_llms(app):
+    client, _ = app(system1_models=lambda: ["d3:2b", "d3:9b", "d1:2b"])
+
+    assert client.get("/api/system1/options").json()["models"] == ["d3:2b", "d3:9b", "d1:2b"]
+    assert [model["name"] for model in client.get("/api/models").json()] == [m.name for m in LLM_MODELS]
+
+
+def test_without_ollama_the_system_1_options_list_no_models(app):
+    client, _ = app()
+
+    response = client.get("/api/system1/options")
+
+    assert response.status_code == 200
+    assert response.json()["models"] == []

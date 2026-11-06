@@ -33,6 +33,8 @@ class Engines:
     decision_model_for builds the decision model of each System 1 side of a game, and system1_missing_models(base_url,
     models) gives those of the models that the System 1 server at base_url doesn't have, or raises System1Unavailable;
     a game whose System 1 side's model is missing is refused (Settings.check_served).
+    system1_models lists the System 1 models Ollama has, which the New game sheet offers a System 1 side; empty when
+    Ollama can't say.
     With a move_model or an evaluator, each game is analysed into its analysis file when it ends: its Move-quality
     estimate with the move_model, and its centipawn loss and accuracy with the evaluator. clock times each game's
     moves, its sides' Time used."""
@@ -46,6 +48,7 @@ class Engines:
     clock: Callable[[], float] = time.monotonic
     decision_model_for: Callable[[System1Side], DecisionModel] = no_decision_model
     system1_missing_models: Callable[[str, list[str]], list[str]] = lambda base_url, models: []
+    system1_models: Callable[[], list[str]] = lambda: []
 
     def analyses_games(self) -> bool:
         return self.move_model is not None or self.evaluator is not None

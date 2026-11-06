@@ -8,7 +8,7 @@ import uvicorn
 from chessllm.api.app import create_app
 from chessllm.cli.common import decision_model_for, player_for, system1_missing_models
 from chessllm.engines.maia2_model import Maia2MoveModel
-from chessllm.llm.ollama_models import missing_models, sampling_defaults
+from chessllm.llm.ollama_models import decision_models, missing_models, sampling_defaults
 from chessllm.engines.stockfish_evaluator import StockfishEvaluator
 
 
@@ -24,6 +24,7 @@ def main() -> None:
         missing_models=missing_models,
         decision_model_for=decision_model_for,
         system1_missing_models=system1_missing_models,
+        system1_models=decision_models,
         move_model=Maia2MoveModel(),
         evaluator=evaluator,
     )

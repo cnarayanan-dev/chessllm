@@ -3,7 +3,7 @@ saving one makes a new one, and an old one is only hidden."""
 
 from fastapi import APIRouter
 
-from chessllm.api.deps import PromptLibraryDep
+from chessllm.api.deps import EnginesDep, PromptLibraryDep
 from chessllm.api.errors import error_responses
 from chessllm.api.schemas.prompts import NewPromptTemplate, PromptTemplateInfo, System1Options, System1TemplateInfo
 from chessllm.core.config import SYSTEM1_DEFAULT_URL
@@ -21,11 +21,13 @@ def list_prompt_templates(library: PromptLibraryDep) -> list[PromptTemplateInfo]
 
 
 @router.get("/api/system1/options")
-def system1_options() -> System1Options:
-    """What a System 1 side is offered: the default server URL, and the Prompt templates it can play with, the default
-    first. The New game sheet starts a System 1 side at the URL, and its Prompt picker offers the templates."""
+def system1_options(engines: EnginesDep) -> System1Options:
+    """What a System 1 side is offered: the default server URL, the System 1 models Ollama has (none if it can't say),
+    and the Prompt templates it can play with, the default first. The New game sheet starts a System 1 side at the URL
+    with the first model, its model picker offers the models, and its Prompt picker offers the templates."""
     return System1Options(
         default_url=SYSTEM1_DEFAULT_URL,
+        models=engines.system1_models(),
         templates=[
             System1TemplateInfo(
                 id=template.id,

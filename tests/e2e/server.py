@@ -77,6 +77,7 @@ def main() -> None:
             prompt_library_dir=temp / "prompt_library",  # the default Prompt templates only
             decision_model_for=decision_model_for,
             system1_missing_models=system1_missing_models,
+            system1_models=lambda: ["d3:2b", "d3:9b", "d1:2b"],  # what Ollama has of them
         )
 
         @app.post("/e2e/script", include_in_schema=False)

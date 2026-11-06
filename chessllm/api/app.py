@@ -36,6 +36,7 @@ def create_app(
     prompt_library_dir: Path = PROMPT_LIBRARY_DIR,
     decision_model_for: Callable[[System1Side], DecisionModel] = no_decision_model,
     system1_missing_models: Callable[[str, list[str]], list[str]] = lambda base_url, models: [],
+    system1_models: Callable[[], list[str]] = lambda: [],
 ) -> FastAPI:
     """The app with its AppConfig and Engines built from the arguments, and no game yet (see Engines for what
     each engine is for). With a move_model or an evaluator, each game is analysed when it ends, after the response
@@ -51,7 +52,7 @@ def create_app(
     app.state.config = config
     app.state.engines = Engines(
         player_for, models, sampling_defaults, missing_models, move_model, evaluator, clock, decision_model_for,
-        system1_missing_models,
+        system1_missing_models, system1_models,
     )
     app.state.games = GameStore()
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
