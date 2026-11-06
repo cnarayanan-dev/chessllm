@@ -7,8 +7,9 @@ import json
 import chess.pgn
 import pytest
 
+import chessllm.game.ending
+
 from tests.conftest import FakeDecisionModel, NotInstalled, ScriptedPlayer
-from tests.game.test_move_cap import MOVE_CAP_PLIES, long_game, sans
 
 from chessllm.cli.faceoff_batch import main
 from chessllm.exceptions import System1Unavailable
@@ -356,12 +357,16 @@ def test_a_template_for_a_side_that_is_an_llm_is_refused(faceoff, capsys):
     assert servers.asked == []
 
 
-def test_a_game_of_system_1_models_not_ended_after_150_moves_per_side_is_a_draw_at_the_move_cap(faceoff, tmp_path):
-    replies = sans(long_game(MOVE_CAP_PLIES + 2))
+def test_a_game_of_system_1_models_not_ended_by_the_rules_at_the_move_cap_is_a_draw_there(
+    faceoff, tmp_path, monkeypatch
+):
+    # The cap is lowered to four moves per side, so a quiet opening reaches it with no check, no forced reply (which the
+    # model isn't asked about) and no mate, whatever the game's seed.
+    monkeypatch.setattr(chessllm.game.ending, "MOVE_CAP", 4)
     servers = Servers()
     servers.models = {
-        "d3:2b": FakeDecisionModel.favouring(*replies["white"]),
-        "d3:9b": FakeDecisionModel.favouring(*replies["black"]),
+        "d3:2b": FakeDecisionModel.favouring("e4", "Nf3", "Bc4", "Nc3"),
+        "d3:9b": FakeDecisionModel.favouring("e5", "Nc6", "Bc5", "Nf6"),
     }
 
     code, _, _ = faceoff(*SYSTEM1_PAIR, "--games", "1", servers=servers)
@@ -369,8 +374,10 @@ def test_a_game_of_system_1_models_not_ended_after_150_moves_per_side_is_a_draw_
     [game] = logs(tmp_path / "games")
     assert code == 0
     end = game[-1]
-    assert (end["type"], end["result"], end["reason"], end["plies"]) == ("game_end", "1/2-1/2", "move_cap", 300)
-    assert len([event for event in game if event["type"] == "system1_turn"]) == MOVE_CAP_PLIES
+    assert (end["type"], end["result"], end["reason"], end["plies"]) == ("game_end", "1/2-1/2", "move_cap", 8)
+    assert [event["san"] for event in game if event["type"] == "system1_turn"] == [
+        "e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "Nc3", "Nf6",
+    ]
 
 
 def test_the_pgn_and_the_log_file_name_give_each_system_1_sides_model_and_choice_temperature(faceoff, tmp_path):
