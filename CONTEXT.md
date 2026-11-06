@@ -11,20 +11,32 @@ Who plays each side of a game, fixed for the whole game. One of **Play LLM**, **
 _Avoid_: Matchup, game type, opponent type
 
 **Play LLM**:
-The **Mode** in which a human plays one side and an LLM the other.
+The **Mode** in which a human plays one side and a **Model player** the other.
 _Avoid_: Human vs LLM, single-player
 
 **LLM faceoff**:
-The **Mode** in which an LLM plays each side, two different models or one model against itself, so models can be compared with each other.
+The **Mode** in which a **Model player** plays each side, two different models or one model against itself, so models can be compared with each other: two LLMs, two **System 1 models**, or one of each.
 _Avoid_: LLM vs LLM, self-play, tournament
 
 **Anchor match**:
-The **Mode** in which an LLM plays an **Anchor**, run unattended in batches, so the LLM's games have an opponent of known strength.
+The **Mode** in which a **Model player** plays an **Anchor**, run unattended in batches, so its games have an opponent of known strength.
 _Avoid_: Engine game, bot match, calibration game
 
 **Anchor**:
 A non-LLM opponent whose strength on the chess.com scale is fixed in advance, such as a random legal mover or a chess engine held to a set skill level.
 _Avoid_: Bot, engine (alone), reference player
+
+**Model player**:
+An LLM or a **System 1 model**: the side of a game that a model plays. The **Modes** keep their names, "LLM" in them standing for any model player.
+_Avoid_: AI, bot, engine, model side
+
+**Choice temperature**:
+How a **System 1 model**'s probabilities are turned into the chance of each move being played: at 1 each move is played as often as the model's probability for it, below 1 its favourites are played more often, and at 0 always its top move. Fixed for a whole game, 1 by default, and part of the **Player configuration**. It is what makes two games between the same System 1 models differ.
+_Avoid_: Sampling (for a System 1 model), randomness, creativity
+
+**System 1 model**:
+A decision model, such as Darwin-27B-ZTC-v9: given a state and a question with a list of options, it gives a probability for every option in one forward pass, without generating any text. In a game the state is the position and the options are always exactly the legal moves, so it can never propose an **Illegal move**; its move is drawn at random from those probabilities, sharpened or flattened by its **Choice temperature**. **LLM constraints**, **Retries** and the **Legal-move streak** don't apply to it. Not an LLM, though it is often built on one, and not an **Anchor**.
+_Avoid_: Decision engine, classifier, engine, fast model, non-thinking LLM
 
 **Rematch**:
 A new game with the same **Mode** and settings as the game just played, the colours swapped: in **Play LLM** the human takes the other side, in an **LLM faceoff** the two LLMs change sides.
@@ -117,7 +129,7 @@ One move by one side: a human's move, an **Anchor**'s, or the move an LLM's **Tu
 _Avoid_: Half-move, move (when one side's single move is meant)
 
 **Turn**:
-One decision by an LLM in a game: it is shown the current position and replies with a move, including any retries. Whether it starts fresh or continues the conversation of earlier turns is its side's **Turn memory**.
+One decision by an LLM or a **System 1 model** in a game: it is shown the current position and replies with a move, including any retries. For an LLM, whether it starts fresh or continues the conversation of earlier turns is its side's **Turn memory**.
 _Avoid_: Round, step
 
 **Turn memory**:
@@ -165,7 +177,7 @@ The text, written by the human for each LLM side, that becomes the message of ev
 _Avoid_: User message, position message
 
 **Prompt template**:
-A **System prompt** and a **Turn template** written for each other and kept together in the **Prompt library**, which an LLM side plays with. It fits the **LLM constraints** that show the **Legal-move list** only if its Turn template places it.
+A **System prompt** and a **Turn template** written for each other and kept together in the **Prompt library**, which an LLM side plays with. A **System 1 model** plays with one too: its System prompt is the question it is asked, its Turn template the state it is given, and the legal moves are always its options; it has default ones of its own. It fits the **LLM constraints** that show the **Legal-move list** only if its Turn template places it.
 _Avoid_: Preset, saved prompt, prompt pair
 
 **Prompt library**:
@@ -197,7 +209,7 @@ A legal move the LLM writes in anything other than its exact standard SAN, such 
 _Avoid_: Format error, non-SAN move
 
 **Attempt**:
-One try within an LLM's **Turn**: the **Prompt** sent, the model's answer, and how it was judged. A turn's first attempt is its first try; every further attempt is a **Retry**. The turn ends with the attempt whose move is played, or in a **Forfeit**.
+One try within an LLM's **Turn**: the **Prompt** sent, the model's answer, and how it was judged. A **System 1 model**'s turn is always a single attempt. A turn's first attempt is its first try; every further attempt is a **Retry**. The turn ends with the attempt whose move is played, or in a **Forfeit**.
 _Avoid_: Try (in code and records), request, call
 
 **Retry**:
@@ -223,15 +235,15 @@ _Avoid_: Legal move count, survival length
 ### Rating
 
 **Player configuration**:
-An LLM together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, **Tools**, sampling and **Prompt template**, chosen per LLM side when a game starts. Games count towards the same rating only if their player configurations are identical.
+A **Model player** together with every setting it plays a game with: model, thinking and its **Thinking level** and **Thinking budget**, **LLM constraints**, **Standard rules** or **Chaos rules**, **Retry feedback**, **Turn memory**, **Tools**, sampling or **Choice temperature**, and **Prompt template**, those that apply to it, chosen per side when a game starts. Games count towards the same rating only if their player configurations are identical.
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Reference configuration**:
-The one set of settings, everything in a **Player configuration** but the model, under which every model is compared with every other: thinking off, **Free**, **Standard rules**, 5 attempts per turn with *explained* **Retry feedback**, *fresh* **Turn memory**, no **Tools**, the default **Prompt template** and the model's own sampling. Chosen to be what a model can do unaided and what most games were played under, not where it plays best. A model's **Rating** under it is the model's overall number; every other Player configuration of that model is shown as how far it moves the Rating from there. A model without games under it has no overall number.
+The one set of settings, everything in a **Player configuration** but the model, under which every model is compared with every other: thinking off, **Free**, **Standard rules**, 5 attempts per turn with *explained* **Retry feedback**, *fresh* **Turn memory**, no **Tools**, the default **Prompt template** and the model's own sampling. For a **System 1 model**, only the settings that apply to it: **Standard rules**, its default Prompt template and a **Choice temperature** of 1. Chosen to be what a model can do unaided and what most games were played under, not where it plays best. A model's **Rating** under it is the model's overall number; every other Player configuration of that model is shown as how far it moves the Rating from there. A model without games under it has no overall number.
 _Avoid_: Default settings, baseline, standard configuration, overall rating (pooled over settings)
 
 **Ranking**:
-The models in order of their **Rating** under the **Reference configuration**, each with its **Move-quality estimate** and its record, counting only games under the Reference configuration. It can be narrowed to some **Modes**, and then every number in it comes from those games alone, so a Mode with no path to an **Anchor** gives no Rating. It ranks models, never Player configurations.
+The models in order of their **Rating** under the **Reference configuration**, each with its **Move-quality estimate** and its record, counting only games under the Reference configuration. It can be narrowed to some **Modes**, and then every number in it comes from those games alone, so a Mode with no path to an **Anchor** gives no Rating. It ranks models, never Player configurations, LLMs and **System 1 models** in one list.
 _Avoid_: Leaderboard (for a list of Player configurations), standings, model rating
 
 **Setting effect**:
