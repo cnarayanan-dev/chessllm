@@ -27,7 +27,7 @@ from chessllm.exceptions.game import (  # noqa: E402
     RejectedHumanMove,
 )
 from chessllm.exceptions.llm import LlmTimeout, OllamaUnavailable  # noqa: E402
-from chessllm.exceptions.system1 import DecisionModelFailed, System1Unavailable  # noqa: E402
+from chessllm.exceptions.system1 import DecisionModelFailed, RefusedSystem1Turn, System1Unavailable  # noqa: E402
 
 __all__ = [
     "AnchorUnavailable",
@@ -43,6 +43,7 @@ __all__ = [
     "RefusedAnchorTurn",
     "RefusedLlmTurn",
     "RefusedProbe",
+    "RefusedSystem1Turn",
     "RejectedHumanMove",
     "StockfishUnavailable",
     "System1Unavailable",

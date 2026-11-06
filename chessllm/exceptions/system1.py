@@ -13,3 +13,10 @@ class System1Unavailable(ChessLlmError):
     failed."""
 
     code = "system1_unavailable"
+
+
+class RefusedSystem1Turn(ChessLlmError):
+    """A System 1 turn can't start: it isn't a System 1 model's turn (not_system1_turn), the game is over (game_over)
+    or a turn is already running (system1_turn_running)."""
+
+    code = "not_system1_turn"

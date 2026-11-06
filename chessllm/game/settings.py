@@ -14,8 +14,9 @@ from chessllm.game.llm_turn.prompt import (
 )
 from chessllm.game.modes import MODES, Mode
 from chessllm.game.rules import RULES, Rules
-from chessllm.game.sides import LISTED, AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side
+from chessllm.game.sides import LISTED, AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side, System1Side
 from chessllm.llm.models import CONTEXT_TOKENS, THINKING_BUDGET_RANGE, LlmModel
+from chessllm.system1.prompt import check_system1_template, side_template as system1_template
 
 # How many illegal moves an LLM may make in one turn before it forfeits: one attempt, the rest retries.
 MAX_ATTEMPTS_RANGE = range(1, 26)
@@ -52,23 +53,28 @@ class Settings:
     def llm_sides(self) -> dict[Color, LlmSide]:
         return {color: side for color in COLORS if isinstance(side := self.side(color), LlmSide)}
 
+    def system1_sides(self) -> dict[Color, System1Side]:
+        return {color: side for color in COLORS if isinstance(side := self.side(color), System1Side)}
+
     def anchor_sides(self) -> dict[Color, AnchorSide]:
         return {color: side for color in COLORS if isinstance(side := self.side(color), AnchorSide)}
 
     def side_names(self) -> tuple[str, str]:
-        """Who plays White and who plays Black, as the game log's file name has them: "human", the model, or the
-        Anchor, e.g. "dragon-skill1"."""
+        """Who plays White and who plays Black, as the game log's file name has them: "human", the LLM's model, the
+        System 1 model and its Choice temperature, or the Anchor, e.g. "d3:9b-t1" or "dragon-skill1"."""
 
         def name(side: Side) -> str:
             if isinstance(side, LlmSide):
                 return side.model
-            return side.file_name() if isinstance(side, AnchorSide) else "human"
+            return side.file_name() if isinstance(side, AnchorSide | System1Side) else "human"
 
         return name(self.white), name(self.black)
 
     def check(self, models: list[LlmModel]) -> None:
         """Raises InvalidSettings, saying why, if a game can't be played with these settings."""
         rules = self.the_rules()
+        for color, system1 in self.system1_sides().items():
+            self._check_system1(color, system1)
         self.the_mode().check_sides(self.white, self.black)
         for color, anchor in self.anchor_sides().items():
             if anchor.engine == "random":
@@ -143,6 +149,17 @@ class Settings:
         if missing:
             missing_sides = " or ".join(named[model] for model in missing)
             raise InvalidSettings(f"Ollama doesn't have {missing_sides}: install them with `ollama pull`")
+
+    def _check_system1(self, color: Color, side: System1Side) -> None:
+        """Raises InvalidSettings if a System 1 side can't be played: a negative Choice temperature, or a Prompt
+        template that isn't a System 1 template."""
+        player = f"{side.model} ({color})"
+        if not side.choice_temperature >= 0:  # also refuses NaN
+            raise InvalidSettings(f"{player} has a Choice temperature of {side.choice_temperature:g}, not at least 0")
+        try:
+            check_system1_template(system1_template(side))
+        except InvalidSettings as refused:
+            raise InvalidSettings(f"{player}: {refused}", code=refused.code) from None
 
     def _check_tools(self, color: Color, side: BenchmarkLlmSide, model: LlmModel) -> None:
         """Raises InvalidSettings if the side can't have its Tools: v1 allows them only for a model that calls tools

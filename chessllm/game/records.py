@@ -7,9 +7,10 @@ from collections.abc import Sequence
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
+from pydantic.json_schema import SkipJsonSchema
 
 from chessllm.core.types import Color, GameResult, ModeKey, RulesKey, Sampling
-from chessllm.game.sides import AnchorSide, HumanSide, LlmSide
+from chessllm.game.sides import AnchorSide, HumanSide, LlmSide, System1Side
 from chessllm.llm.players import MessageRole, ToolCall
 
 # How the resolver read a move under Chaos rules: legal as it stands, a chaos move, a spawn, or not a move it can play
@@ -40,7 +41,9 @@ EndReason = Literal[
     "move_cap",
 ]
 
-SideOut = Annotated[HumanSide | LlmSide | AnchorSide, Field(discriminator="player")]
+
+# A System 1 side is the benchmark's commands' alone, so the API's schema doesn't list it (System1Side).
+SideOut = Annotated[HumanSide | LlmSide | AnchorSide | SkipJsonSchema[System1Side], Field(discriminator="player")]
 
 
 def is_none(value: object) -> bool:

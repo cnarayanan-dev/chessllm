@@ -1,10 +1,12 @@
-"""Who plays a side of a game: a human, an LLM with the settings it plays under, or an Anchor."""
+"""Who plays a side of a game: a human, an LLM or a System 1 model with the settings it plays under, or an Anchor."""
 
 from dataclasses import asdict, dataclass
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import Field
-from pydantic.json_schema import SkipJsonSchema
+from pydantic import Field, GetJsonSchemaHandler
+from pydantic.errors import PydanticInvalidForJsonSchema
+from pydantic.json_schema import JsonSchemaValue, SkipJsonSchema
+from pydantic_core import CoreSchema
 
 # What the LLM is told after an illegal move: explained (the default), bare or hinted; or repeat, nothing: the turn's
 # first Prompt is sent again unchanged, as the control for the other levels.
@@ -172,14 +174,50 @@ class AnchorSide:
         return {key: value for key, value in asdict(self).items() if value is not None}
 
 
-Side = HumanSide | LlmSide | AnchorSide
+@dataclass(frozen=True, kw_only=True)
+class System1Side:
+    """A System 1 model side (ADR 0012): the model, the server that serves it, its Choice temperature and its Prompt
+    template. Only the benchmark's commands give one, never the API, so it is left out of the API's schema. Its log
+    shape has none of an LLM side's settings: it has no thinking, LLM constraints, Retry feedback or Turn memory."""
+
+    player: Literal["system1"] = "system1"
+    model: str
+    base_url: str  # of the server that serves /v1/systemone
+    choice_temperature: float = 1.0  # at least 0; 0 is always the model's top option
+    # The Prompt template it plays with, whose System prompt is the question and Turn template the state; None for the
+    # default System 1 template, read when the game starts (system1.prompt.side_template).
+    prompt_template: Annotated[SkipJsonSchema[PromptTemplate | None], Field(exclude=True)] = None
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
+        """None: skipping it in a union isn't enough to keep it out of the API's schema, which still lists the class's
+        definition unless it is invalid for a JSON schema."""
+        raise PydanticInvalidForJsonSchema("a System 1 side is not part of the API")
+
+    def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
+        """The side as game_start logs it, with the Prompt template it plays the game with in full, last."""
+        shape = asdict(self)
+        del shape["prompt_template"]
+        return shape | {"prompt_template": template.log_shape()}
+
+    def name(self) -> str:
+        """The side's name in the PGN, e.g. "d3:9b (Choice temperature 1)"."""
+        return f"{self.model} (Choice temperature {self.choice_temperature:g})"
+
+    def file_name(self) -> str:
+        """The side's part of the game log's file name, e.g. "d3:9b-t1"."""
+        return f"{self.model}-t{self.choice_temperature:g}"
+
+
+Side = HumanSide | LlmSide | AnchorSide | System1Side
 # Who plays a side: each Side's player.
-SideKind = Literal["human", "llm", "anchor"]
+SideKind = Literal["human", "llm", "anchor", "system1"]
 
 
 def side_log_shape(side: Side, template: PromptTemplate | None) -> dict[str, Any]:
-    """A side as game_start logs it (ADR 0004): an LLM side with the Prompt template it plays the game with."""
-    if isinstance(side, LlmSide):
-        assert template is not None, "an LLM side plays with a Prompt template"
+    """A side as game_start logs it (ADR 0004): an LLM or System 1 side with the Prompt template it plays the game
+    with."""
+    if isinstance(side, LlmSide | System1Side):
+        assert template is not None, "a model's side plays with a Prompt template"
         return side.log_shape(template)
     return side.log_shape() if isinstance(side, AnchorSide) else asdict(side)

@@ -2,6 +2,7 @@
 order of turns, and the human's and the Anchor's moves. An LLM's turn is played by llm_turn, under the game's Rules."""
 
 import logging
+import random
 import threading
 import time
 from collections.abc import Callable
@@ -12,10 +13,11 @@ from typing import Any
 import chess
 
 from chessllm.core.types import COLORS, Color, color_of
-from chessllm.engines.anchors import Anchor
+from chessllm.engines.anchors import Anchor, new_seed
 from chessllm.engines.evaluator import Evaluator
 from chessllm.exceptions import (
-    AnchorUnavailable, InvalidSettings, RefusedAnchorTurn, RefusedLlmTurn, RefusedProbe, RejectedHumanMove,
+    AnchorUnavailable, InvalidSettings, RefusedAnchorTurn, RefusedLlmTurn, RefusedProbe, RefusedSystem1Turn,
+    RejectedHumanMove,
 )
 from chessllm.game.chaos_gain import GainBaselines, for_mover, result_for_mover
 from chessllm.game.ending import GameEnd, check_end, position_key
@@ -34,6 +36,9 @@ from chessllm.game.sides import HumanSide, PromptTemplate, side_log_shape
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog, now
 from chessllm.logs.probe_log import ProbeLog
+from chessllm.system1.port import DecisionModel
+from chessllm.system1.prompt import side_template as system1_side_template
+from chessllm.system1.turn import System1Turns
 
 
 def started(evaluator: Evaluator | None) -> tuple[Evaluator | None, EvaluationEngine | None]:
@@ -57,10 +62,14 @@ class GameSession:
         anchors: dict[Color, Anchor] | None = None,
         clock: Callable[[], float] = time.monotonic,
         evaluator: Evaluator | None = None,
+        decision_models: dict[Color, DecisionModel] | None = None,
+        seed: int | None = None,
     ) -> None:
-        """players holds the LLM player of each LLM side, and anchors the Anchor of each Anchor side. clock times
-        each side's moves, its Time used. With an evaluator, every ply is judged as it is played, by the request
-        that plays it."""
+        """players holds the LLM player of each LLM side, anchors the Anchor of each Anchor side and decision_models
+        the decision model of each System 1 side. clock times each side's moves, its Time used. With an evaluator,
+        every ply is judged as it is played, by the request that plays it. seed seeds the game's random source,
+        which a System 1 side's options are shuffled and its move drawn from; a fresh one if none is given, and logged
+        in game_start either way."""
         self._anchors = anchors or {}
         self._clock = clock
         self._evaluator, self._evaluation_engine = started(evaluator)
@@ -68,6 +77,7 @@ class GameSession:
         self._mode = settings.the_mode()
         self._rules = settings.the_rules()
         self._llm_sides = settings.llm_sides()
+        self._system1_sides = settings.system1_sides()
         self._log = log
         self._board = chess.Board()
         # The game's own record of every ply (ADR 0006): a chaos move edits the board by hand, which clears
@@ -119,8 +129,10 @@ class GameSession:
         # The Prompt template of each LLM side, read once, so the game plays it unchanged whatever happens to its
         # files (ADR 0010).
         templates = {color: side_template(side) for color, side in self._llm_sides.items()}
+        system1_templates = {color: system1_side_template(side) for color, side in self._system1_sides.items()}
         self._played_templates = {
-            color: PlayedTemplate(id=template.id, name=template.name) for color, template in templates.items()
+            color: PlayedTemplate(id=template.id, name=template.name)
+            for color, template in (templates | system1_templates).items()
         }
         # The turns of each LLM side, which keep its totals.
         self._turns_of = {
@@ -129,6 +141,14 @@ class GameSession:
                 self._abandoned, clock,
             )
             for color, side in self._llm_sides.items()
+        }
+        # The turns of each System 1 side, drawing from the game's one random source, seeded only if a side needs it.
+        self._seed = (new_seed() if seed is None else seed) if self._system1_sides else None
+        rng = random.Random(self._seed)
+        decision_models = decision_models or {}
+        self._system1_turns_of = {
+            color: System1Turns(color, side, system1_templates[color], decision_models[color], rng, clock)
+            for color, side in self._system1_sides.items()
         }
         # The System prompt file of each side playing a default template, which the leaderboard still groups by.
         prompt_files = {
@@ -141,8 +161,9 @@ class GameSession:
             game_id=log.game_id,
             log_version=2,
             mode=settings.mode,
-            white=side_log_shape(settings.white, templates.get("white")),
-            black=side_log_shape(settings.black, templates.get("black")),
+            white=side_log_shape(settings.white, (templates | system1_templates).get("white")),
+            black=side_log_shape(settings.black, (templates | system1_templates).get("black")),
+            **({"seed": self._seed} if self._seed is not None else {}),
             sampling=settings.sampling or "model_default",
             max_retries=settings.max_attempts - 1,
             **self._mode.logged_prompt_files(prompt_files),
@@ -180,7 +201,7 @@ class GameSession:
         except ValueError:
             raise RejectedHumanMove(f"not a UCI move: {uci!r}", code="invalid_move") from None
         color = color_of(board.turn)
-        if color in self._llm_sides or not board.is_legal(move):
+        if color in self._llm_sides or color in self._system1_sides or not board.is_legal(move):
             raise RejectedHumanMove(f"illegal move: {uci}", code="illegal_move")
         with self._landing:
             time_s = self._move_time(arrived)
@@ -289,6 +310,45 @@ class GameSession:
             evaluation = self._judge(unjudged)
             if baselines is not None and evaluation is not None:
                 self._add_chaos_gain(baselines.gain(for_mover(evaluation, color)))
+        finally:
+            self._llm_turn_running.release()
+
+    def play_system1_turn(self) -> None:
+        """Play the turn of the System 1 model to move: it moves or forfeits, like an LLM's turn but in a single
+        attempt (system1.turn). In an abandoned game it does neither.
+
+        Raises RefusedSystem1Turn and leaves the game unchanged if it isn't a System 1 model's turn, the game is over,
+        or another turn is still running."""
+        if not self._llm_turn_running.acquire(blocking=False):
+            raise RefusedSystem1Turn("a turn is already running", code="system1_turn_running")
+        try:
+            if self._abandoned.is_set():
+                return
+            if self._end is not None:
+                raise RefusedSystem1Turn("the game is over", code="game_over")
+            color = color_of(self._board.turn)
+            turns = self._system1_turns_of.get(color)
+            if turns is None:
+                raise RefusedSystem1Turn("it is not a System 1 model's turn", code="not_system1_turn")
+            self._move_started = started = self._clock()
+            outcome = turns.play(self._board, [written for _, written in self._moves], started)
+            with self._ending:
+                with self._landing:
+                    if self._abandoned.is_set():
+                        return  # the running turn is never published, nor its time added
+                    if outcome.move is not None:
+                        self._play_legal(outcome.move, outcome.turn.time_s)
+                    self._charge(color, outcome.turn.time_s)
+                    if outcome.forfeit:
+                        self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
+                    else:
+                        self._check_end()
+                    self._position_ready()
+                    unjudged = self._ply_to_judge() if outcome.move is not None else None
+                self._log.write("system1_turn", **outcome.turn.log_shape())
+                if self._end is not None:
+                    self._write_end(self._end)
+            self._judge(unjudged)
         finally:
             self._llm_turn_running.release()
 
@@ -508,7 +568,7 @@ class GameSession:
 
     def _human_legal_moves(self) -> list[str]:
         board = self._board
-        if self._end is not None or color_of(board.turn) in self._llm_sides:
+        if self._end is not None or color_of(board.turn) in (*self._llm_sides, *self._system1_sides):
             return []
         return [move.uci() for move in board.legal_moves]
 
