@@ -4,6 +4,7 @@ is an LLM with a Player configuration, or a System 1 model (ADR 0012).
     uv run anchor-match --model llama3:8b --skill 1 --color white --dragon ~/dragon/dragon-osx
     uv run anchor-match --model llama3:8b --engine random
     uv run anchor-match --system1-model d3:2b --system1-url http://localhost:11434 --choice-temperature 1
+    uv run anchor-match --system1-model d3:2b --system1-template system1-position-only@299e4459
 
 The game runs unattended through the same game session as the app's Modes, and writes its log and PGN to the
 games directory. The Dragon executable comes from --dragon, else the CHESSLLM_DRAGON environment variable. The random
@@ -37,6 +38,7 @@ from chessllm.core.types import COLORS, Color, opponent
 from chessllm.exceptions import AnchorUnavailable, InvalidSamplingConfig, InvalidSettings
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
+from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.sides import AnchorSide, System1Side
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
@@ -67,11 +69,13 @@ def main(
     missing_models: Callable[[list[str]], list[str]] = default_missing_models,
     system1_missing_models: Callable[[str, list[str]], list[str]] = default_system1_missing_models,
     decision_model_for: Callable[[System1Side], DecisionModel] = default_decision_model_for,
+    prompt_library: PromptLibrary | None = None,
 ) -> int:
     """Run the command; returns its exit code. anchor_for builds the Anchor, by default Dragon from --dragon;
     missing_models says which models Ollama doesn't have, by default Ollama itself; system1_missing_models(base_url,
     models) says which models a System 1 server doesn't have, by default the server itself, and decision_model_for
-    builds the decision model of a System 1 side, by default over HTTP."""
+    builds the decision model of a System 1 side, by default over HTTP; prompt_library holds the Prompt templates
+    --system1-template picks from, by default the project's."""
     args = parser().parse_args(argv)
     llm_color: Color = args.color
     if args.engine == "random":
@@ -79,7 +83,7 @@ def main(
     else:
         anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     try:
-        system1 = system1_side(args)
+        system1 = system1_side(args, prompt_library)
         if system1 is None:
             settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
         else:

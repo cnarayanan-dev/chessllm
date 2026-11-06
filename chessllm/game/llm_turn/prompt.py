@@ -62,8 +62,11 @@ SYSTEM_PLACEHOLDERS = (
 )
 # The placeholders of a Turn template: the Move record, its last ten plies, the FEN, the position in words (the last
 # move, where every piece stands and whether the LLM is in check), the last move, the opponent's last move as a
-# sentence, and the Legal-move list.
-TURN_PLACEHOLDERS = ("moves", "recent_moves", "fen", "description", "last_move", "opponent_move", "legal_moves")
+# sentence, and the Legal-move list. pieces is the position in words without the last move: where every piece stands
+# and whether the LLM is in check, for a template that leaves out all history.
+TURN_PLACEHOLDERS = (
+    "moves", "recent_moves", "fen", "description", "pieces", "last_move", "opponent_move", "legal_moves"
+)
 
 # The parts of the default Turn templates, which send the messages sent before Prompt templates, byte for byte.
 PGN_AND_FEN = "PGN: $moves\nFEN: $fen"
@@ -295,6 +298,7 @@ def turn_message(template: PromptTemplate, position: TurnPosition) -> str:
         "recent_moves": lambda: move_record(moves[recent_from:], recent_from + 1) or NO_MOVES_YET,
         "fen": board.fen,
         "description": lambda: describe_position(board, last_move),
+        "pieces": lambda: describe_position(board, None),
         "last_move": lambda: last_move or NO_MOVES_YET,
         "opponent_move": lambda: opponent_move(moves),
         "legal_moves": lambda: position.legal_moves,

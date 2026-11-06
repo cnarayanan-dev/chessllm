@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING, get_args
 
 from chessllm.analytics.analysis import analyse_game
 from chessllm.analytics.leaderboard import settings_configuration
-from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH_VARIABLE, SYSTEM1_DEFAULT_URL
+from chessllm.core.config import (
+    DRAGON_PATH_VARIABLE,
+    GAMES_DIR,
+    PROMPT_LIBRARY_DIR,
+    STOCKFISH_PATH_VARIABLE,
+    SYSTEM1_DEFAULT_URL,
+)
 from chessllm.engines.anchors import (
     Anchor,
     DragonAnchor,
@@ -39,6 +45,7 @@ from chessllm.game.ladder import (
     rung_name,
     rung_side,
 )
+from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.records import GameState
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
@@ -63,6 +70,7 @@ from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 from chessllm.system1.port import DecisionModel
+from chessllm.system1.prompt import DEFAULT_TEMPLATE, SYSTEM1_TEMPLATES, resolve_system1_template
 
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
@@ -231,8 +239,7 @@ LLM_ONLY_FLAGS: dict[str, str] = {
 
 
 def add_system1_arguments(parser: argparse.ArgumentParser) -> None:
-    """A System 1 side in place of the LLM side (ADR 0012): --system1-model names it, and the rest set it. The Prompt
-    template is the default System 1 one; picking another is for a later flag."""
+    """A System 1 side in place of the LLM side (ADR 0012): --system1-model names it, and the rest set it."""
     parser.add_argument(
         "--system1-model",
         metavar="MODEL",
@@ -254,6 +261,14 @@ def add_system1_arguments(parser: argparse.ArgumentParser) -> None:
         "often as its probability, below 1 its favourites more often, at 0 always its top move",
     )
     parser.add_argument(
+        "--system1-template",
+        metavar="ID",
+        help="the System 1 model's Prompt template, by its ID in the Prompt library: "
+        + ", ".join(SYSTEM1_TEMPLATES)
+        + f" or a saved one that doesn't place the Legal-move list (default {DEFAULT_TEMPLATE.id}; --prompt-template "
+        "is the LLM's)",
+    )
+    parser.add_argument(
         "--system1-seed",
         type=int,
         metavar="SEED",
@@ -262,10 +277,15 @@ def add_system1_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def system1_side(args: argparse.Namespace) -> System1Side | None:
-    """The System 1 side --system1-model asks for (add_system1_arguments), or None if it isn't given. Raises
-    InvalidSettings, naming the flag, if an LLM's setting (add_configuration_arguments) is also given."""
+def system1_side(args: argparse.Namespace, library: PromptLibrary | None = None) -> System1Side | None:
+    """The System 1 side --system1-model asks for (add_system1_arguments), or None if it isn't given. Its Prompt
+    template is --system1-template's, found in the Prompt library (by default the project's), else the default one.
+    Raises InvalidSettings, naming the flag, if an LLM's setting (add_configuration_arguments) is also given, if
+    --system1-template is given without a System 1 model, or if the library has no such template or the side can't
+    play it."""
     if args.system1_model is None:
+        if args.system1_template is not None:
+            raise InvalidSettings(f"--system1-template {args.system1_template} needs --system1-model")
         return None
     defaults = argparse.ArgumentParser()
     add_configuration_arguments(defaults)
@@ -273,7 +293,15 @@ def system1_side(args: argparse.Namespace) -> System1Side | None:
     for dest, flag in LLM_ONLY_FLAGS.items():
         if getattr(args, dest) != getattr(unchanged, dest):
             raise InvalidSettings(f"{flag} sets an LLM, but --system1-model {args.system1_model} is a System 1 model")
-    return System1Side(model=args.system1_model, base_url=args.system1_url, choice_temperature=args.choice_temperature)
+    template = None
+    if args.system1_template is not None:
+        template = resolve_system1_template(args.system1_template, library or PromptLibrary(PROMPT_LIBRARY_DIR))
+    return System1Side(
+        model=args.system1_model,
+        base_url=args.system1_url,
+        choice_temperature=args.choice_temperature,
+        prompt_template=template,
+    )
 
 
 def anchor_match_settings(

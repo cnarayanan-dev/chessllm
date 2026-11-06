@@ -11,7 +11,9 @@ from tests.conftest import FakeDecisionModel, ScriptedAnchor, ScriptedPlayer
 
 from chessllm.cli.anchor_match import main
 from chessllm.exceptions import System1Unavailable
+from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.sides import System1Side
+from chessllm.system1.prompt import DEFAULT_TEMPLATE, POSITION_ONLY_TEMPLATE
 
 BASE_URL = "http://localhost:8080"
 FOOLS_MATE_FOR_BLACK = ["e5", "Qh4#"]
@@ -200,3 +202,83 @@ def test_the_server_is_by_default_the_local_ollama(tmp_path):
 
     assert code == 0
     assert server.asked == [("http://localhost:11434", ["d3:2b"])]
+
+
+def test_the_system_1_template_is_picked_by_its_id_and_is_logged_in_full_and_given_to_the_model(
+    system1_match, tmp_path
+):
+    code, server, _, _ = system1_match("--color", "black", "--system1-template", POSITION_ONLY_TEMPLATE.id)
+
+    assert code == 0
+    logged = events(tmp_path / "games")[0]["black"]["prompt_template"]
+    assert logged == {
+        "id": POSITION_ONLY_TEMPLATE.id,
+        "name": POSITION_ONLY_TEMPLATE.name,
+        "system_prompt": POSITION_ONLY_TEMPLATE.system_prompt,
+        "turn_template": POSITION_ONLY_TEMPLATE.turn_template,
+    }
+    assert server.built_for[0].prompt_template == POSITION_ONLY_TEMPLATE
+    assert "Moves so far" not in server.model.asked[0].state
+
+
+def test_without_a_system_1_template_the_side_plays_the_default_one(system1_match, tmp_path):
+    system1_match("--color", "black")
+
+    assert events(tmp_path / "games")[0]["black"]["prompt_template"]["id"] == DEFAULT_TEMPLATE.id
+
+
+def test_a_saved_template_of_the_prompt_library_is_picked_by_its_id(tmp_path):
+    library = PromptLibrary(tmp_path / "library")
+    saved = library.save("Fen only", "Which move should $color play?", "$fen", "free")
+    server = Server()
+
+    code = main(
+        ["--games-dir", str(tmp_path / "games"), "--system1-model", "d3:2b", "--color", "black",
+         "--system1-template", saved.template.id],
+        anchor_for=lambda side: ScriptedAnchor(["f3", "g4"]),
+        sampling_file=tmp_path / "no-sampling.toml",
+        system1_missing_models=server.missing_models,
+        decision_model_for=server.decision_model_for,
+        prompt_library=library,
+    )
+
+    assert code == 0
+    assert server.built_for[0].prompt_template == saved.template
+
+
+def test_a_template_the_library_lacks_stops_the_command_before_the_game_naming_it(system1_match, capsys):
+    code, server, _, _ = system1_match("--color", "black", "--system1-template", "system1@nope")
+
+    assert code == 1
+    error = capsys.readouterr().err
+    assert "system1@nope" in error and "Anchor match not played" in error
+    assert server.asked == [] and server.built_for == []
+
+
+def test_a_template_placing_the_legal_moves_stops_the_command_before_the_game_saying_why(tmp_path, capsys):
+    library = PromptLibrary(tmp_path / "library")
+    saved = library.save("With options", "Which move should $color play?", "$fen\nOptions: $legal_moves", "listed")
+    server = Server()
+
+    code = main(
+        ["--games-dir", str(tmp_path / "games"), "--system1-model", "d3:2b", "--system1-template", saved.template.id],
+        sampling_file=tmp_path / "no-sampling.toml",
+        system1_missing_models=server.missing_models,
+        decision_model_for=server.decision_model_for,
+        prompt_library=library,
+    )
+
+    assert code == 1
+    error = capsys.readouterr().err
+    assert saved.template.id in error and "$legal_moves" in error and "options are the legal moves" in error
+    assert server.asked == [] and server.built_for == []
+
+
+def test_the_system_1_template_flag_without_a_system_1_model_is_refused(tmp_path, capsys):
+    code = main(
+        ["--games-dir", str(tmp_path), "--system1-template", DEFAULT_TEMPLATE.id],
+        sampling_file=tmp_path / "no-sampling.toml",
+    )
+
+    assert code == 1
+    assert "--system1-template" in capsys.readouterr().err

@@ -92,6 +92,21 @@ def test_a_turn_template_gets_each_placeholder_filled_in_for_the_position(tmp_pa
     assert first[1].content.splitlines()[:3] == ["moves: 1. e4", "recent: 1. e4", "last: e4"]
 
 
+def test_the_pieces_placeholder_says_where_every_piece_stands_without_the_last_move(tmp_path):
+    side = LlmSide(prompt_template=template(turn_template="$pieces"))
+
+    players = play_faceoff(faceoff_settings(side), ["e4", "Nf3"], ["e5", "Nc6"], tmp_path)
+
+    assert players["black"].prompts[0][1].content == "\n".join(
+        [
+            "Your pieces (Black): King e8; Queen d8; Rooks a8, h8; Bishops c8, f8; Knights b8, g8; "
+            "Pawns a7, b7, c7, d7, e7, f7, g7, h7",
+            "Opponent's pieces (White): King e1; Queen d1; Rooks a1, h1; Bishops c1, f1; Knights b1, g1; "
+            "Pawns a2, b2, c2, d2, e4, f2, g2, h2",
+        ]
+    )
+
+
 def test_the_recent_moves_are_the_last_ten_plies_from_a_white_ply_too(tmp_path):
     side = LlmSide(prompt_template=template(turn_template="$recent_moves"))
     white_moves = ELEVEN_PLIES[0::2] + ["Re1"]
