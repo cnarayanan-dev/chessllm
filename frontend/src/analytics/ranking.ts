@@ -27,14 +27,21 @@ export function intervalText(rating: Estimate | null): string {
   return `${rating.low} to ${rating.high}`
 }
 
+/** What the mark on a System 1 model in the Ranking says on hover; LLMs have none. */
+export const SYSTEM_1_MODEL =
+  'A System 1 model: a decision model that gives a probability for every legal move instead of writing text, and ' +
+  'plays a move drawn from those probabilities. Its Reference configuration is Standard rules, its default Prompt ' +
+  'template and a Choice temperature of 1.'
+
 export const REFERENCE_CONFIGURATION =
   'Thinking off, Free, Standard rules, 5 attempts per turn with explained Retry feedback, fresh Turn memory, no ' +
   'Tools, the default Prompt template and the model’s own sampling. Games under any other settings are left out.'
 
 /** What the page shows, in the tooltip of the info button beside its heading. */
 export const ABOUT_RANKING =
-  'Every model, ranked by its Rating on the chess.com Rapid scale, from its games under the Reference ' +
-  `configuration in the chosen Modes alone. The Reference configuration: ${REFERENCE_CONFIGURATION}`
+  'Every model, LLMs and System 1 models together, ranked by its Rating on the chess.com Rapid scale, from its ' +
+  `games under the Reference configuration in the chosen Modes alone. The Reference configuration: ${REFERENCE_CONFIGURATION} ` +
+  'A System 1 model’s is Standard rules, its default Prompt template and a Choice temperature of 1.'
 
 /** The table's columns, each with what it means for its header's tooltip; null for none. */
 export const COLUMNS: { label: string; description: string | null }[] = [

@@ -4,6 +4,7 @@ the last model's:
 
 - qwen3.5:9b: rated from Anchor matches against Dragon (10 · 1 · 9), with an unvalidated Move-quality estimate from
   its first five games' analysis files
+- d3:9b, a System 1 model: rated from Anchor matches against Dragon Skill 1 (6 · 0 · 4)
 - llama3:8b: lost every anchored game (10, 4 of them by Forfeit), so "< X", and two LLM faceoffs to gemma3:12b
 - gemma3:12b: those two faceoff wins only, so no path to an Anchor
 - mistral:7b: Play LLM games only (2 · 0 · 3), so no Rating, with an unvalidated Move-quality estimate from its
@@ -16,7 +17,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from tests.analytics.test_leaderboard import HUMAN, LLAMA, game, write_log
+from tests.analytics.test_leaderboard import D3, HUMAN, LLAMA, game, write_log
 from tests.analytics.test_ranking import QWEN_OFF, anchor_games, faceoff_games, reference
 
 GEMMA = LLAMA | {"model": "gemma3:12b"}
@@ -52,11 +53,12 @@ def write_ranking_games(games_dir: Path) -> None:
     for old in games_dir.glob("*"):
         old.unlink()
     qwen = [*anchor_games(QWEN_OFF, 1, wins=7, losses=3), *anchor_games(QWEN_OFF, 3, wins=3, draws=1, losses=6)]
+    d3 = anchor_games(D3, 1, wins=6, losses=4)
     llama = anchor_games(LLAMA, 1, losses=6, forfeits=4)
     faceoffs = faceoff_games(GEMMA, LLAMA, wins=2)
     mistral = [reference(game(HUMAN, MISTRAL, result)) for result in ["1-0", "0-1", "1-0", "0-1", "1-0"]]
     gemma4 = anchor_games(GEMMA4_ENFORCED, 7, wins=4)
-    games = [*qwen, *llama, *faceoffs, *mistral, *gemma4]
+    games = [*qwen, *d3, *llama, *faceoffs, *mistral, *gemma4]
     for number, events in enumerate(games):
         name = f"2026-10-19T10-00-{number:02d}_game"
         write_log(games_dir, name, events)

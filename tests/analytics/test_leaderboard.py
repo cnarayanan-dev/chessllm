@@ -2,12 +2,24 @@ import json
 
 import pytest
 
+from pathlib import Path
+
 from chessllm.analytics.leaderboard import leaderboard as read_leaderboard, side_outcome
+from chessllm.system1.prompt import DEFAULT_TEMPLATE
 
 PROMPT = "/somewhere/chessllm/prompts/system.txt"
 LLAMA = {"player": "llm", "model": "llama3:8b", "thinking": False, "llm_constraints": "free", "retry_feedback": "explained"}
 QWEN = LLAMA | {"model": "qwen3.5:9b", "thinking": True}
 HUMAN = {"player": "human"}
+ANCHOR = {"player": "anchor", "engine": "dragon", "skill": 1}
+D3 = {  # a System 1 side as game_start logs it
+    "player": "system1",
+    "model": "d3:9b",
+    "base_url": "http://localhost:11434",
+    "choice_temperature": 1.0,
+    "prompt_template": DEFAULT_TEMPLATE.log_shape(),
+}
+SAMPLE_LOGS = Path(__file__).parents[2] / "docs" / "samples" / "game-logs"
 
 
 def stats(streak=0, enforced=False):
@@ -306,3 +318,63 @@ def test_no_games_make_an_empty_leaderboard(tmp_path):
 )
 def test_a_sides_outcome_is_read_from_the_result_from_its_own_side(result, white, black):
     assert (side_outcome(result, "white"), side_outcome(result, "black")) == (white, black)
+
+
+def test_system_1_sides_are_configurations_of_their_model_choice_temperature_and_prompt_template_text(leaderboard):
+    renamed = DEFAULT_TEMPLATE.log_shape() | {"id": "my-question@1", "name": "Mine"}
+    edited = DEFAULT_TEMPLATE.log_shape() | {"turn_template": "FEN: $fen"}
+
+    configurations = leaderboard(
+        game(D3, ANCHOR, "1-0", mode="anchor_match"),
+        game(ANCHOR, D3, "1-0", mode="anchor_match"),
+        game(D3 | {"base_url": "http://elsewhere:8080"}, ANCHOR, "1-0", mode="anchor_match"),  # a server is no setting
+        game(D3 | {"prompt_template": renamed}, ANCHOR, "1-0", mode="anchor_match"),  # the same text, another name
+        game(D3 | {"choice_temperature": 1}, ANCHOR, "1-0", mode="anchor_match"),  # 1 and 1.0 are one temperature
+        game(D3 | {"choice_temperature": 0.5}, ANCHOR, "1-0", mode="anchor_match"),
+        game(D3 | {"prompt_template": edited}, ANCHOR, "1-0", mode="anchor_match"),
+        game(D3 | {"model": "d3:2b"}, ANCHOR, "1-0", mode="anchor_match"),
+    )
+
+    assert len({entry["id"] for entry in configurations}) == 4
+    assert sorted(
+        (c["configuration"]["model"], c["configuration"]["choice_temperature"], c["games"]) for c in configurations
+    ) == [("d3:2b", 1.0, 1), ("d3:9b", 0.5, 1), ("d3:9b", 1.0, 1), ("d3:9b", 1.0, 5)]
+    assert {c["configuration"]["rules"] for c in configurations} == {"standard"}
+
+
+def test_system_1_results_are_counted_like_an_llms_but_it_has_no_illegal_move_numbers(leaderboard):
+    entries = leaderboard(
+        game(D3, LLAMA, "1-0", mode="llm_faceoff"),
+        game(LLAMA, D3, "1-0", mode="llm_faceoff"),
+        game(D3, ANCHOR, "0-1", reason="forfeit", mode="anchor_match"),
+        game(ANCHOR, D3, "1/2-1/2", reason="move_cap", mode="anchor_match"),
+    )
+
+    [d3] = [entry for entry in entries if entry["configuration"]["model"] == "d3:9b"]
+    [llama] = [entry for entry in entries if entry["configuration"]["model"] == "llama3:8b"]
+    assert (d3["games"], d3["wins"], d3["draws"], d3["losses"], d3["forfeits"]) == (4, 1, 1, 2, 1)
+    assert (d3["attempts"], d3["average_legal_move_streak"]) == (None, None)
+    assert {o["opponent"]: o["games"] for o in d3["opponents"]} == {llama["id"]: 2, "anchor:dragon:1": 2}
+    assert [(o["opponent"], o["wins"]) for o in llama["opponents"]] == [(d3["id"], 1)]  # not the side's description
+
+
+def test_logs_with_system_1_sides_leave_every_llm_player_configuration_id_as_it_was(leaderboard):
+    llm_games = [game(HUMAN, LLAMA, "1-0"), game(LLAMA, QWEN, "0-1"), game(HUMAN, LLAMA | {"thinking": True}, "0-1")]
+    alone = leaderboard(*llm_games)
+
+    with_system_1 = leaderboard(*llm_games, game(D3, ANCHOR, "1-0", mode="anchor_match"))
+
+    assert [entry for entry in with_system_1 if entry["configuration"]["model"] != "d3:9b"] == alone
+
+
+def test_every_sample_logs_player_configuration_keeps_its_id():
+    ids = {(entry["id"], entry["configuration"]["model"]) for entry in configurations(SAMPLE_LOGS)}
+
+    assert ids == {
+        ("661f81645b39", "llama3:8b"),
+        ("72abebcddb8b", "llama3:8b"),
+        ("762a1f57b270", "qwen3.5:9b"),
+        ("7b2a7c604f9c", "qwen3.8:latest"),
+        ("7ec8267cd89b", "llama3:8b"),
+        ("9ba1663ec0bd", "gemma3:12b"),
+    }

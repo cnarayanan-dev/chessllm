@@ -66,6 +66,26 @@ test('ranks the models by their Rating, the unranked ones last, with a row of nu
   ])
 })
 
+test('a System 1 model is marked, and the mark explains it on hover; an LLM has none', async () => {
+  const user = userEvent.setup()
+  showPage([anEntry('qwen3.5:9b'), anEntry('d3:9b', { rank: 2, kind: 'system1', rating: rated(300) })])
+
+  expect(await screen.findByText('d3:9b')).toBeInTheDocument()
+  expect(rows().map((cells) => cells[1])).toEqual(['qwen3.5:9b', 'd3:9bSystem 1'])
+  expect(screen.getAllByText('System 1')).toHaveLength(1)
+
+  await user.hover(screen.getByText('System 1'))
+  expect(await screen.findByText(/gives a probability for every legal move/)).toBeInTheDocument()
+  expect(screen.getByText(/Choice temperature of 1/)).toBeInTheDocument()
+})
+
+test('an LLM and a System 1 model of one name are two rows', async () => {
+  showPage([anEntry('d3:9b'), anEntry('d3:9b', { rank: 2, kind: 'system1' })])
+
+  expect(await screen.findAllByText('d3:9b')).toHaveLength(2)
+  expect(rows()).toHaveLength(2)
+})
+
 test('the old leaderboard is gone: no All columns switch, no Player configurations, no Score', async () => {
   showPage()
   await screen.findByText('qwen3.5:9b')

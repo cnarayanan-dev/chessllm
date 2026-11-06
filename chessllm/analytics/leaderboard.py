@@ -24,7 +24,16 @@ from chessllm.core.types import COLORS, Color, RulesKey, Sampling, opponent, sco
 from chessllm.game.modes import mode_named
 from chessllm.game.rules import rules_named
 from chessllm.game.settings import Settings
-from chessllm.game.sides import ENFORCED, BenchmarkLlmSide, LlmConstraints, RetryFeedback, ToolName, TurnMemory
+from chessllm.game.sides import (
+    ENFORCED,
+    BenchmarkLlmSide,
+    LlmConstraints,
+    RetryFeedback,
+    System1Side,
+    ToolName,
+    TurnMemory,
+)
+from chessllm.system1.prompt import side_template as system1_side_template
 from chessllm.analytics.move_quality import (
     ConfigurationMoves,
     MoveQuality,
@@ -32,7 +41,7 @@ from chessllm.analytics.move_quality import (
     read_analysed_moves,
     read_validation,
 )
-from chessllm.game.llm_turn.prompt import prompt_file, side_template
+from chessllm.game.llm_turn.prompt import prompt_file, side_template, text_version
 from chessllm.analytics.rating import RatedGame, Rating, ratings
 
 
@@ -97,6 +106,35 @@ class PlayerConfiguration(BaseModel):
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
+    @property
+    def kind(self) -> "ModelKind":
+        return "llm"
+
+
+class System1Configuration(BaseModel):
+    """A System 1 model together with every setting that applies to it (ADR 0012): its Choice temperature, its Prompt
+    template by its text (ADR 0010) and the rules. Its id is a fingerprint of these alone, so it can't be an LLM
+    configuration's, and the server it was reached at is no part of it."""
+
+    model: str
+    rules: RulesKey
+    choice_temperature: float
+    prompt_template: str  # the version of the template's text (text_version), whatever it is named
+
+    @property
+    def kind(self) -> "ModelKind":
+        return "system1"
+
+    def id(self) -> str:
+        canonical = json.dumps(self.model_dump() | {"player": "system1"}, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+
+
+# What a Model player is: an LLM, or a System 1 model (ADR 0012). Each has its own kind of Player configuration.
+ModelKind = Literal["llm", "system1"]
+ModelConfiguration = PlayerConfiguration | System1Configuration
+
+
 class OpponentResults(BaseModel):
     opponent: str  # the id of the other Player configuration, "human", or an Anchor's name, e.g. "anchor:dragon:3"
     games: int
@@ -110,7 +148,7 @@ class LeaderboardEntry(BaseModel):
     faceoff counts once for each side."""
 
     id: str
-    configuration: PlayerConfiguration
+    configuration: ModelConfiguration
     games: int
     wins: int
     draws: int
@@ -161,7 +199,7 @@ class Tally:
 
 @dataclass
 class ConfigurationTally:
-    configuration: PlayerConfiguration
+    configuration: ModelConfiguration
     results: Tally = field(default_factory=Tally)
     forfeits: int = 0
     legal_moves: int = 0
@@ -173,7 +211,11 @@ class ConfigurationTally:
 
     def entry(self, rating: Rating | None, move_quality: MoveQuality | None) -> LeaderboardEntry:
         results = self.results
-        enforced = self.configuration.llm_constraints in ENFORCED
+        # Illegal-move numbers are not applicable under Enforced decoding (ADR 0003), nor for a System 1 model, which
+        # can't make an illegal move (ADR 0012)
+        no_illegal_moves = (
+            not isinstance(self.configuration, PlayerConfiguration) or self.configuration.llm_constraints in ENFORCED
+        )
         return LeaderboardEntry(
             id=self.configuration.id(),
             configuration=self.configuration,
@@ -184,9 +226,9 @@ class ConfigurationTally:
             score=(results.wins + results.draws / 2) / results.games,
             forfeits=self.forfeits,
             legal_moves=self.legal_moves,
-            attempts=None if enforced else self.attempts,
+            attempts=None if no_illegal_moves else self.attempts,
             average_legal_move_streak=(
-                sum(self.streaks) / len(self.streaks) if self.streaks and not enforced else None
+                sum(self.streaks) / len(self.streaks) if self.streaks and not no_illegal_moves else None
             ),
             opponents=[
                 OpponentResults(opponent=opponent, **vars(tally)) for opponent, tally in sorted(self.opponents.items())
@@ -242,9 +284,7 @@ def finished_game(path: Path) -> list[dict[str, Any]] | None:
 def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]]) -> None:
     start, end = events[0], events[-1]
     sides, stats = read_sides(start, end)
-    configurations = {
-        color: llm_configuration(start, color, side) for color, side in sides.items() if side["player"] == "llm"
-    }
+    configurations = model_configurations(start, sides)
     for color, configuration in configurations.items():
         other = opponent(color)
         outcome = side_outcome(end["result"], color)
@@ -255,6 +295,9 @@ def add_game(tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]
         attempts = side_attempts(events, color)
         tally.attempts += len(attempts)
         tally.legal_moves += sum(event["result"] == "legal" for event in attempts)
+        tally.legal_moves += sum(
+            "move" in event for event in events if event["type"] == "system1_turn" and event["color"] == color
+        )
         streak = logged_streak(stats, color)
         if streak is not None:
             tally.streaks.append(streak)
@@ -291,8 +334,8 @@ def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
     sides, _ = read_sides(start, end)
     players = []
     for color, side in sides.items():
-        if side["player"] == "llm":
-            players.append(llm_configuration(start, color, side).id())
+        if configuration := model_configuration(start, color, side):
+            players.append(configuration.id())
         elif side["player"] == "anchor":
             players.append(anchor_name(side))
         else:
@@ -302,21 +345,23 @@ def rated_game(events: list[dict[str, Any]]) -> list[RatedGame]:
 
 
 def add_analysed_moves(analysed: dict[str, ConfigurationMoves], log: Path, events: list[dict[str, Any]]) -> None:
-    """Pool each LLM side's scored moves from the game's analysis file, if it has one, into its configuration's."""
+    """Pool each model side's scored moves from the game's analysis file, if it has one, into its configuration's."""
     start, end = events[0], events[-1]
     sides, _ = read_sides(start, end)
     analysed_sides = read_analysed_moves(analysis_path(log))
     for colour in COLORS:
         side = sides[colour]
-        if colour in analysed_sides and side["player"] == "llm":
+        configuration = model_configuration(start, colour, side)
+        if colour in analysed_sides and configuration is not None:
             key, moves = analysed_sides[colour]
-            analysed[llm_configuration(start, colour, side).id()].add(key, moves)
+            analysed[configuration.id()].add(key, moves)
 
 
 def add_centipawn_loss_and_accuracy(
     tallies: dict[str, ConfigurationTally], events: list[dict[str, Any]], analysis_file: Path
 ) -> None:
-    """Add each LLM side's moves analysed by Stockfish, if the game's analysis file has any (chessllm.analytics.analysis)."""
+    """Add each model side's moves analysed by Stockfish, if the game's analysis file has any
+    (chessllm.analytics.analysis)."""
     try:
         analysis = json.loads(analysis_file.read_text(encoding="utf-8"))
         sides = analysis["centipawn_loss_and_accuracy"]["sides"]
@@ -325,9 +370,10 @@ def add_centipawn_loss_and_accuracy(
     start = events[0]
     for color, side in read_sides(start, events[-1])[0].items():
         analysed = sides.get(color) if isinstance(sides, dict) else None
-        if side["player"] != "llm" or not isinstance(analysed, dict):
+        configuration = model_configuration(start, color, side)
+        if configuration is None or not isinstance(analysed, dict):
             continue
-        tally = tallies[llm_configuration(start, color, side).id()]
+        tally = tallies[configuration.id()]
         for move in analysed.get("moves", []):
             tally.centipawn_losses.append(move["centipawn_loss"])
             tally.accuracies.append(move["accuracy"])
@@ -378,6 +424,42 @@ def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any])
     )
 
 
+def system1_configuration(start: dict[str, Any], side: dict[str, Any]) -> System1Configuration:
+    """The Player configuration of a System 1 side as game_start logs it: its Prompt template by its text."""
+    template = side["prompt_template"]
+    return System1Configuration(
+        model=side["model"],
+        rules=start.get("rules", "standard"),
+        choice_temperature=side["choice_temperature"],
+        prompt_template=text_version(template["system_prompt"], template["turn_template"]),
+    )
+
+
+def system1_side_configuration(side: System1Side, rules: RulesKey) -> System1Configuration:
+    """The Player configuration the System 1 side plays a game with, as its log will record it."""
+    template = system1_side_template(side)
+    return System1Configuration(
+        model=side.model,
+        rules=rules,
+        choice_temperature=side.choice_temperature,
+        prompt_template=text_version(template.system_prompt, template.turn_template),
+    )
+
+
+def model_configuration(start: dict[str, Any], color: Color, side: dict[str, Any]) -> ModelConfiguration | None:
+    """The Player configuration of the side at color as game_start logs it, if a model plays it: an LLM or a System 1
+    model. None for a human or an Anchor."""
+    if side["player"] == "llm":
+        return llm_configuration(start, color, side)
+    return system1_configuration(start, side) if side["player"] == "system1" else None
+
+
+def model_configurations(start: dict[str, Any], sides: dict[Color, dict[str, Any]]) -> dict[Color, ModelConfiguration]:
+    """The Player configuration of each side a model plays."""
+    found = {color: model_configuration(start, color, side) for color, side in sides.items()}
+    return {color: configuration for color, configuration in found.items() if configuration is not None}
+
+
 def logged_prompt(start: dict[str, Any], color: Color, side: dict[str, Any]) -> tuple[str, PositionFormat | None]:
     """The prompt and position of the LLM side at color as game_start logs it (prompt_settings). Logs from before
     Prompt templates have no template, and position: described for a described position."""
@@ -410,8 +492,8 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
     )
 
 
-def opponent_name(side: dict[str, Any], configuration: PlayerConfiguration | None) -> str:
-    """The other configuration's id for an LLM, the Anchor's name for an Anchor, e.g. "anchor:dragon:3", and the
+def opponent_name(side: dict[str, Any], configuration: ModelConfiguration | None) -> str:
+    """The other configuration's id for a model, the Anchor's name for an Anchor, e.g. "anchor:dragon:3", and the
     side's description for anything else: "human" for a human."""
     if configuration is not None:
         return configuration.id()

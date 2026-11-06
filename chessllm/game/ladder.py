@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from chessllm.analytics.leaderboard import PlayerConfiguration, finished_game, llm_configuration
+from chessllm.analytics.leaderboard import ModelConfiguration, finished_game, model_configuration
 from chessllm.engines.anchors import DRAGON_SKILLS, new_seed
 from chessllm.core.types import COLORS, Color, opponent, score_for
 from chessllm.game.modes import mode_named
@@ -23,10 +23,10 @@ TOP_RUNG = DRAGON_SKILLS[-1]
 
 @dataclass(frozen=True)
 class AnchoredGame:
-    """One finished Anchor match, as the ladder sees it: the Anchor's rung, the LLM's colour and its score."""
+    """One finished Anchor match, as the ladder sees it: the Anchor's rung, the model's colour and its score."""
 
     rung: int  # 0 for the random mover, else the engine's Skill
-    llm_color: Color
+    llm_color: Color  # of the model, an LLM or a System 1 model
     score: float  # 1 for a win, 0.5 for a draw, 0 for a loss (a Forfeit included)
 
 
@@ -74,11 +74,11 @@ def logged_rung(anchor: dict[str, Any], engine: str) -> int | None:
 
 
 def earlier_games(
-    games_dir: Path, configuration: PlayerConfiguration, engine: str = "dragon"
+    games_dir: Path, configuration: ModelConfiguration, engine: str = "dragon"
 ) -> list[AnchoredGame]:
-    """The finished Anchor matches of the configuration in games_dir on the engine's ladder (Dragon by default), the
-    random mover's included, oldest first: by game_start's started_at, which is to the microsecond (older logs have
-    whole seconds, and their ties go by file name)."""
+    """The finished Anchor matches of the configuration (an LLM's or a System 1 model's) in games_dir on the engine's
+    ladder (Dragon by default), the random mover's included, oldest first: by game_start's started_at, which is to the
+    microsecond (older logs have whole seconds, and their ties go by file name)."""
     logs = []
     for path in sorted(games_dir.glob("*.jsonl")) if games_dir.is_dir() else []:
         events = finished_game(path)
@@ -91,9 +91,8 @@ def earlier_games(
         for llm_color in COLORS:
             llm, anchor = start[llm_color], start[opponent(llm_color)]
             if (
-                llm["player"] == "llm"
-                and (rung := logged_rung(anchor, engine)) is not None
-                and llm_configuration(start, llm_color, llm) == configuration
+                (rung := logged_rung(anchor, engine)) is not None
+                and model_configuration(start, llm_color, llm) == configuration
             ):
                 history.append(AnchoredGame(rung, llm_color, score_for(end["result"], llm_color)))
     return history

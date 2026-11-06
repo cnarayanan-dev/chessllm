@@ -1,5 +1,5 @@
 // The analytics page against the app with synthetic game logs (tests/e2e/server.py, POST /e2e/ranking-games, the
-// games in tests/e2e/ranking.py): a rated model, one losing every anchored game, one with faceoffs only, one with
+// games in tests/e2e/ranking.py): a rated model, a rated System 1 model, one losing every anchored game, one with faceoffs only, one with
 // Play LLM games only, and one that never played under the Reference configuration.
 import { expect, test, type Page } from '@playwright/test'
 
@@ -19,11 +19,27 @@ async function rows(page: Page): Promise<string[][]> {
   for (const row of await body.all()) texts.push(await row.locator('td').allInnerTexts())
   return texts
 }
+/** The System 1 model's name cell: its name and the mark beside it. */
+const D3_ROW = 'd3:9b\nSystem 1'
 const row = (page: Page, model: string) => page.locator('tbody tr', { hasText: model })
 const tooltip = (page: Page) => page.locator('[data-slot=tooltip-content][data-open]')
 
 test.beforeEach(async ({ page }) => {
   expect((await page.request.post('/e2e/ranking-games')).ok()).toBe(true)
+})
+
+test('a System 1 model is marked in the Ranking, an LLM is not; the mark explains itself on hover', async ({ page }) => {
+  await page.goto('/analytics')
+
+  await expect(page.getByText('System 1', { exact: true })).toHaveCount(1)
+  await expect(row(page, 'd3:9b').getByText('System 1', { exact: true })).toBeVisible()
+  // The mark sits beside the name, not under it: the row is hardly taller than an LLM's (a line more would be 20px).
+  const [system1, llm] = await Promise.all(
+    ['d3:9b', 'llama3:8b'].map(async (model) => (await row(page, model).boundingBox())!.height),
+  )
+  expect(system1! - llm!).toBeLessThan(5)
+  await row(page, 'd3:9b').getByText('System 1', { exact: true }).hover()
+  await expect(tooltip(page)).toHaveText(/^A System 1 model: a decision model/)
 })
 
 test('the Ranking: models by their Rating under the Reference configuration, narrowed by Mode', async ({ page }) => {
@@ -40,30 +56,32 @@ test('the Ranking: models by their Rating under the Reference configuration, nar
     'Forfeits',
   ])
   await expect(page.getByRole('switch', { name: 'All columns' })).toHaveCount(0)
-  await expect(page.locator('tbody tr')).toHaveCount(5)
+  await expect(page.locator('tbody tr')).toHaveCount(6)
   // Ranked by Rating: an estimate, an upper bound; then the unranked, those with games first. gemma4:26b played only
   // with thinking on under Listed enforced, so none of its wins count.
   const ranked = await rows(page)
   expect(ranked.map((cells) => cells.slice(0, 2))).toEqual([
     ['1', 'qwen3.5:9b'],
-    ['2', 'llama3:8b'],
+    ['2', D3_ROW],
+    ['3', 'llama3:8b'],
     ['', 'gemma3:12b'],
     ['', 'mistral:7b'],
     ['', 'gemma4:26b'],
   ])
-  const [qwen, llama] = ranked
+  const [qwen, , llama] = ranked
   expect(qwen![2]).toMatch(/^\d+$/)
   expect(qwen![3]).toMatch(/^\d+ to \d+$/)
   expect(qwen![4]).toMatch(/^\d+\s*unvalidated$/)
   expect(llama![2]).toMatch(/^< \d+$/)
   expect(ranked.map((cells) => cells.slice(5))).toEqual([
     ['20', '10 · 1 · 9', '0'],
+    ['10', '6 · 0 · 4', '0'],
     ['12', '0 · 0 · 12', '4'],
     ['2', '2 · 0 · 0', '0'],
     ['5', '2 · 0 · 3', '0'],
     ['0', '0 · 0 · 0', '0'],
   ])
-  expect(ranked.slice(2).map((cells) => cells[2])).toEqual(['—', '—', '—'])
+  expect(ranked.slice(3).map((cells) => cells[2])).toEqual(['—', '—', '—'])
 
   // Each bounded or missing Rating, and the unvalidated estimate, say why on hover.
   await row(page, 'llama3:8b').getByText(/^< \d+$/).hover()
@@ -85,6 +103,7 @@ test('the Ranking: models by their Rating under the Reference configuration, nar
   await expect.poll(async () => (await rows(page)).map((cells) => [cells[0], cells[1], cells[2], cells[5]])).toEqual([
     ['', 'gemma3:12b', '—', '2'],
     ['', 'llama3:8b', '—', '2'],
+    ['', D3_ROW, '—', '0'],
     ['', 'gemma4:26b', '—', '0'],
     ['', 'mistral:7b', '—', '0'],
     ['', 'qwen3.5:9b', '—', '0'],
@@ -97,18 +116,20 @@ test('the Ranking: models by their Rating under the Reference configuration, nar
   await modes.getByRole('button', { name: 'LLM faceoffs' }).click()
   await expect.poll(async () => (await rows(page)).map((cells) => [cells[0], cells[1], cells[5]])).toEqual([
     ['1', 'qwen3.5:9b', '20'],
-    ['2', 'llama3:8b', '10'],
+    ['2', D3_ROW, '10'],
+    ['3', 'llama3:8b', '10'],
     ['', 'gemma3:12b', '0'],
     ['', 'gemma4:26b', '0'],
     ['', 'mistral:7b', '0'],
   ])
-  expect((await rows(page))[1]![2]).toMatch(/^< \d+$/)
+  expect((await rows(page))[2]![2]).toMatch(/^< \d+$/)
 
   // Play LLM alone: never a Rating, only the record and the Move-quality estimate.
   await modes.getByRole('button', { name: 'Play LLM' }).click()
   await modes.getByRole('button', { name: 'Anchor matches' }).click()
   await expect.poll(async () => (await rows(page)).map((cells) => [cells[0], cells[1], cells[2], cells[5]])).toEqual([
     ['', 'mistral:7b', '—', '5'],
+    ['', D3_ROW, '—', '0'],
     ['', 'gemma3:12b', '—', '0'],
     ['', 'gemma4:26b', '—', '0'],
     ['', 'llama3:8b', '—', '0'],
@@ -168,7 +189,7 @@ test('every text on the page, the secondary text too, passes WCAG AA (4.5:1)', a
 
   const texts = await contrasts(page)
   // The heading, the Mode filter, the headers, the models and the unvalidated mark are among them.
-  for (const text of ['Ranking', 'Play LLM', 'Anchor matches', '95% interval', 'unvalidated', 'llama3:8b']) {
+  for (const text of ['Ranking', 'Play LLM', 'Anchor matches', '95% interval', 'unvalidated', 'llama3:8b', 'System 1']) {
     expect(texts.map((each) => each.text)).toContainEqual(expect.stringContaining(text))
   }
   expect(texts.filter((each) => each.ratio < 4.5)).toEqual([])

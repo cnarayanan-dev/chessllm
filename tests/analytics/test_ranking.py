@@ -7,10 +7,12 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from chessllm.analytics.leaderboard import PlayerConfiguration
+from chessllm.analytics.leaderboard import PlayerConfiguration, System1Configuration, system1_side_configuration
 from chessllm.analytics.ranking import is_reference, reference_configuration
 from chessllm.api.app import create_app
-from tests.analytics.test_leaderboard import HUMAN, LLAMA, QWEN, game, write_log
+from chessllm.game.sides import System1Side
+from chessllm.system1.prompt import DEFAULT_TEMPLATE
+from tests.analytics.test_leaderboard import D3, HUMAN, LLAMA, QWEN, game, write_log
 from tests.analytics.test_leaderboard_move_quality import analysis
 from tests.analytics.test_leaderboard_rating import dragon, result_of
 
@@ -280,3 +282,96 @@ def test_the_ranking_names_the_modes_it_comes_from_all_by_default(tmp_path):
     narrowed = client.get("/api/ranking", params={"modes": ["anchor_match", "play_llm"]}).json()
     assert narrowed["modes"] == ["play_llm", "anchor_match"]
     assert client.get("/api/ranking", params={"modes": ["chess960"]}).status_code == 422
+
+
+D3_REFERENCE = System1Configuration(
+    model="d3:9b",
+    rules="standard",
+    choice_temperature=1.0,
+    prompt_template=DEFAULT_TEMPLATE.id.removeprefix("system1@"),  # the version of its text
+)
+
+
+def test_a_system_1_models_reference_configuration_is_standard_rules_its_default_template_and_choice_temperature_1():
+    assert reference_configuration("d3:9b", "system1") == D3_REFERENCE
+    assert is_reference(D3_REFERENCE)
+    assert system1_side_configuration(System1Side(model="d3:9b", base_url="http://localhost:11434"), "standard") == (
+        D3_REFERENCE
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"rules": "chaos"}, {"choice_temperature": 0.5}, {"choice_temperature": 0.0}, {"prompt_template": "0a1b2c3d"}],
+    ids=lambda change: "+".join(change),
+)
+def test_a_system_1_configuration_differing_in_any_setting_but_the_model_is_not_the_reference(change):
+    assert not is_reference(D3_REFERENCE.model_copy(update=change))
+
+
+def test_system_1_models_are_ranked_with_the_llms_in_one_list_each_entry_saying_its_kind(ranking):
+    entries = ranking(
+        *anchor_games(QWEN_OFF, 3, wins=5, draws=1, losses=4),  # about 500
+        *anchor_games(D3, 1, wins=6, losses=4),  # a little above Skill 1 (250)
+        *anchor_games(LLAMA, 1, wins=3, losses=5, forfeits=2),  # below Skill 1
+    )
+
+    assert [(entry["rank"], entry["model"], entry["kind"]) for entry in entries] == [
+        (1, "qwen3.5:9b", "llm"),
+        (2, "d3:9b", "system1"),
+        (3, "llama3:8b", "llm"),
+    ]
+    assert record(entries[1]) == (10, 6, 0, 4, 0)
+    assert entries[1]["rating"]["estimate"] > 250
+
+
+def test_a_system_1_models_games_under_another_choice_temperature_or_prompt_template_count_apart(ranking):
+    edited = {**D3["prompt_template"], "turn_template": "FEN: $fen"}
+    games = anchor_games(D3, 1, wins=4, losses=6)
+    others = [
+        *anchor_games(D3 | {"choice_temperature": 0.5}, 7, wins=6),
+        *anchor_games(D3 | {"prompt_template": edited}, 7, wins=6),
+        *anchor_games(D3, 7, wins=6, rules="chaos"),
+        *anchor_games(D3 | {"model": "d3:2b", "choice_temperature": 0.0}, 3, wins=6),  # only ever played at 0
+    ]
+
+    alone = ranking(*games)
+    entries = ranking(*games, *others)
+
+    assert entries[0] == alone[0]
+    [nano] = entries[1:]
+    assert (nano["model"], nano["kind"], nano["rank"], nano["rating"], nano["no_rating"]) == (
+        "d3:2b",
+        "system1",
+        None,
+        None,
+        "no_reference_games",
+    )
+
+
+def test_a_system_1_model_playing_an_llm_or_another_system_1_model_counts_a_game_for_each_side(ranking):
+    d3_nano = D3 | {"model": "d3:2b"}
+    entries = ranking(
+        *anchor_games(D3, 1, wins=6, losses=4),
+        *anchor_games(LLAMA, 1, wins=3, losses=7),
+        *faceoff_games(D3, LLAMA, wins=3, losses=1),
+        *faceoff_games(D3, d3_nano, wins=2),
+    )
+
+    by = by_model(entries)
+    assert record(by["d3:9b"]) == (16, 11, 0, 5, 0)
+    assert record(by["llama3:8b"]) == (14, 4, 0, 10, 0)
+    assert record(by["d3:2b"]) == (2, 0, 0, 2, 0)
+    assert by["d3:2b"]["rating"] is not None  # a path to the Anchors through d3:9b
+
+
+def test_an_llm_and_a_system_1_model_of_the_same_name_are_two_models(ranking):
+    entries = ranking(
+        *anchor_games(D3, 1, wins=6, losses=4),
+        *anchor_games(LLAMA | {"model": "d3:9b"}, 1, wins=1, losses=9),
+    )
+
+    assert sorted((entry["kind"], entry["games"], entry["wins"]) for entry in entries) == [
+        ("llm", 10, 1),
+        ("system1", 10, 6),
+    ]

@@ -6,6 +6,7 @@ export function anEntry(model: string, overrides: Partial<RankingEntry> = {}): R
   return {
     rank: 1,
     model,
+    kind: 'llm',
     rating: rated(400, 250, 550),
     no_rating: null,
     move_quality: null,

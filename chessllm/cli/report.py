@@ -42,7 +42,13 @@ from chessllm.core.config import GAMES_DIR, VALIDATION_FILE
 from chessllm.core.types import COLORS, Color, opponent
 from chessllm.game.modes import mode_named
 from chessllm.game.records import ILLEGAL_RESULTS
-from chessllm.analytics.leaderboard import logged_prompt, read_sides, side_outcome
+from chessllm.analytics.leaderboard import (
+    System1Configuration,
+    logged_prompt,
+    read_sides,
+    side_outcome,
+    system1_configuration,
+)
 from chessllm.analytics.move_quality import ConfigurationMoves, move_quality, read_analysed_moves, read_validation
 from chessllm.game.sides import ENFORCED, BenchmarkLlmSide
 
@@ -159,29 +165,6 @@ class LlmSide:
         return [sorted(by_ply[ply], key=lambda attempt: int(attempt.get("attempt", 1))) for ply in sorted(by_ply)]
 
 
-@dataclass(frozen=True)
-class System1Configuration:
-    """A System 1 side's Player configuration as this report groups it: its model, Choice temperature and Prompt
-    template. #126 defines the one the leaderboard and Ranking use; system1_configuration is where to switch to it."""
-
-    model: str
-    choice_temperature: float
-    prompt_template_id: str | None
-    prompt_text: str  # the template's system prompt and turn template, only when it has no id to tell it by
-
-    def label(self) -> str:
-        prompt = self.prompt_template_id or "custom prompt"
-        return f"{self.model} / Choice temperature {self.choice_temperature:g} / {prompt}"
-
-
-def system1_configuration(side: dict[str, Any]) -> System1Configuration:
-    """The Player configuration of the System 1 side game_start logs."""
-    template = side.get("prompt_template") or {}
-    template_id = template.get("id")
-    text = "" if template_id else f"{template.get('system_prompt')}\n{template.get('turn_template')}"
-    return System1Configuration(str(side["model"]), float(side["choice_temperature"]), template_id, text)
-
-
 @dataclass
 class System1Side:
     """One System 1 side of one game."""
@@ -189,8 +172,20 @@ class System1Side:
     game: Game
     color: Color
     configuration: System1Configuration
+    template: str | None  # the Prompt template's ID when it has one, else None
     opponent: str
     outcome: str | None  # win/draw/loss from this side's view; None while unfinished
+
+    def prompt_text(self) -> str:
+        """The Prompt template's text, to tell a template without an ID by."""
+        template = self.game.sides[self.color].get("prompt_template") or {}
+        return f"{template.get('system_prompt')}\n{template.get('turn_template')}"
+
+    def label(self) -> str:
+        """The side's configuration as the report names it: model, Choice temperature and template ID."""
+        configuration = self.configuration
+        prompt = self.template or "custom prompt"
+        return f"{configuration.model} / Choice temperature {configuration.choice_temperature:g} / {prompt}"
 
     def turns(self) -> list[dict[str, Any]]:
         """Its system1_turn events in order."""
@@ -255,8 +250,16 @@ def system1_sides(game: Game) -> list[System1Side]:
         if side.get("player") != "system1":
             continue
         outcome = None if game.end is None else side_outcome(str(game.end.get("result")), color)
+        template = (side.get("prompt_template") or {}).get("id")
         result.append(
-            System1Side(game, color, system1_configuration(side), opponent_label(game.sides[opponent(color)]), outcome)
+            System1Side(
+                game,
+                color,
+                system1_configuration(game.start, side),
+                template,
+                opponent_label(game.sides[opponent(color)]),
+                outcome,
+            )
         )
     return result
 
@@ -645,12 +648,12 @@ def analyse(games: list[Game], filters: Filters, validation_file: Path = VALIDAT
 
 
 def system1_configurations(sides: list[System1Side], validated_for: Any) -> list[dict[str, Any]]:
-    by_configuration: dict[System1Configuration, list[System1Side]] = defaultdict(list)
+    by_configuration: dict[str, list[System1Side]] = defaultdict(list)  # by Player configuration id
     for side in sides:
-        by_configuration[side.configuration].append(side)
+        by_configuration[side.configuration.id()].append(side)
     configurations = []
-    for configuration in sorted(by_configuration, key=System1Configuration.label):
-        its_sides = by_configuration[configuration]
+    for its_sides in sorted(by_configuration.values(), key=lambda its_sides: its_sides[0].label()):
+        configuration = its_sides[0].configuration
         anchors = sorted({side.opponent for side in its_sides if (mode := mode_named(side.game.mode)) is not None and mode.against_an_anchor})
         themes = System1Themes()
         for side in its_sides:
@@ -660,8 +663,8 @@ def system1_configurations(sides: list[System1Side], validated_for: Any) -> list
                 "configuration": {
                     "model": configuration.model,
                     "choice_temperature": configuration.choice_temperature,
-                    "prompt_template": configuration.prompt_template_id or configuration.prompt_text,
-                    "label": configuration.label(),
+                    "prompt_template": its_sides[0].template or its_sides[0].prompt_text(),
+                    "label": its_sides[0].label(),
                 },
                 "record": record(its_sides),
                 "by_anchor": {

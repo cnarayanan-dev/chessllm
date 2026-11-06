@@ -1,7 +1,7 @@
 // The analytics page: the Ranking of models by their Rating under the Reference configuration (prototype
 // model-ranking, variant E's Ranking view), narrowed by a Mode filter, in a Luma card on the Stone page.
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Anchor, Bot, Info, User, type LucideIcon } from 'lucide-react'
+import { Anchor, Bot, Info, User, Zap, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
   ABOUT_RANKING,
@@ -10,6 +10,7 @@ import {
   MODES,
   NO_INTERVAL,
   NO_MOVE_QUALITY,
+  SYSTEM_1_MODEL,
   UNVALIDATED,
   boundReason,
   estimateText,
@@ -99,6 +100,19 @@ function MoveQualityCell({ entry }: { entry: RankingEntry }) {
   )
 }
 
+/** The mark beside a System 1 model's name: an icon and a short name, what it means on hover. */
+function System1Mark() {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<Badge variant="outline" />} className="ml-2 font-normal text-muted-foreground">
+        <Zap aria-hidden="true" />
+        System 1
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80">{SYSTEM_1_MODEL}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function RankingTable({ entries, modes }: { entries: RankingEntry[]; modes: ModeKey[] }) {
   return (
     <Table className="border-separate border-spacing-0">
@@ -121,9 +135,12 @@ function RankingTable({ entries, modes }: { entries: RankingEntry[]; modes: Mode
         {entries.map((entry) => {
           const ratingTip = entry.no_rating ? noRatingReason(entry.no_rating, modes) : boundReason(entry.rating)
           return (
-            <TableRow key={entry.model} className="border-0 [&>td]:border-b [&>td]:border-border/70">
+            <TableRow key={`${entry.kind}:${entry.model}`} className="border-0 [&>td]:border-b [&>td]:border-border/70">
               <TableCell className="w-8 text-muted-foreground">{entry.rank ?? ''}</TableCell>
-              <TableCell className="font-semibold">{entry.model}</TableCell>
+              <TableCell className="font-semibold">
+                {entry.model}
+                {entry.kind === 'system1' && <System1Mark />}
+              </TableCell>
               <TableCell className="text-right font-semibold tabular-nums">
                 <Explained tip={ratingTip}>{estimateText(entry.rating)}</Explained>
               </TableCell>
