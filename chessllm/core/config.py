@@ -33,6 +33,11 @@ OLLAMA_SHOW_TIMEOUT_S = 3.0
 # Long thinking can run for many minutes and still end without an answer, so a turn is cut off here.
 OLLAMA_REPLY_TIMEOUT_S = 300.0
 
+# How long a System 1 model's server gets to answer one question, its first request loading the model, and to say
+# which models it has before a game.
+SYSTEM1_REPLY_TIMEOUT_S = 120.0
+SYSTEM1_LIST_TIMEOUT_S = 3.0
+
 DRAGON_PATH_VARIABLE = "CHESSLLM_DRAGON"
 STOCKFISH_PATH_VARIABLE = "CHESSLLM_STOCKFISH"
 

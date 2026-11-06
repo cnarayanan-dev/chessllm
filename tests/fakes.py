@@ -2,7 +2,8 @@
 (through conftest.py) and the sample games (scripts/sample_logs.py)."""
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import chess
@@ -153,3 +154,43 @@ class NotInstalled:
     def __call__(self, models: list[str]) -> list[str]:
         self.asked.append(models)
         return [model for model in models if model in self.missing]
+
+
+@dataclass(frozen=True)
+class Asked:
+    """One question put to a FakeDecisionModel."""
+
+    state: str
+    question: str
+    options: list[str]
+
+
+class FakeDecisionModel:
+    """Test fake for the decision model port: answers each question from the script in order, then every one
+    with equal probabilities. An entry is the weights of the moves it favours, e.g. {"e4": 3, "d4": 1}, taken as
+    probabilities once the options it doesn't mention (weight 0) are left out; one that mentions none of the
+    options gives equal probabilities. An exception is raised instead of answering. Records every question put to
+    it, and with a clock, advances it by the next of think_s, the time each answer took."""
+
+    def __init__(self, script: Sequence[Mapping[str, float] | BaseException] = ()) -> None:
+        self.script = list(script)
+        self.asked: list[Asked] = []
+        self.clock: FakeClock | None = None
+        self.think_s: list[float] = []
+
+    @classmethod
+    def favouring(cls, *moves: str) -> "FakeDecisionModel":
+        """A fake that gives the SAN moves in turn all the probability, then equal probabilities."""
+        return cls([{move: 1.0} for move in moves])
+
+    def decide(self, state: str, question: str, options: Sequence[str]) -> list[float]:
+        self.asked.append(Asked(state, question, list(options)))
+        if self.clock is not None and self.think_s:
+            self.clock.advance(self.think_s.pop(0))
+        step = self.script.pop(0) if self.script else {}
+        if isinstance(step, BaseException):
+            raise step
+        weights = [step.get(option, 0.0) for option in options]
+        if not sum(weights):
+            weights = [1.0] * len(options)
+        return [weight / sum(weights) for weight in weights]
