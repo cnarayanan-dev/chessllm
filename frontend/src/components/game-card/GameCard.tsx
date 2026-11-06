@@ -13,10 +13,10 @@ import { rematchDescription } from '@/game/rematch'
 import { COLORS, COLOR_NAMES, gameSettings, resultText, type GameSetting } from '@/game/wording'
 import { cn } from '@/lib/utils'
 
-/** Each Mode as its players: you against an LLM, or an LLM against an LLM. */
+/** Each Mode as its players: you against a model, or a model against a model (an LLM or a System 1 model). */
 const MODES = {
-  play_llm: { name: 'Play LLM', players: 'You against an LLM', First: User },
-  llm_faceoff: { name: 'LLM faceoff', players: 'An LLM against an LLM', First: Bot },
+  play_llm: { name: 'Play LLM', players: 'You against a model', First: User },
+  llm_faceoff: { name: 'LLM faceoff', players: 'A model against a model', First: Bot },
 } as const
 
 type GameCardProps = {
@@ -155,7 +155,7 @@ export function GameCard({ game, error, onRematch, pause = null, onPause, onResu
   const sideOf = (color: Color) => settings.filter((setting) => setting.color === color)
   const name = (color: 'white' | 'black') => {
     const side = game.settings[color]
-    return side.player === 'llm' ? side.model : 'You'
+    return side.player === 'human' ? 'You' : side.model
   }
   return (
     <Card role="region" aria-label="Game" className="text-[15px]">

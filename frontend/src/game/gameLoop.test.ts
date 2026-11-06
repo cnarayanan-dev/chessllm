@@ -7,6 +7,7 @@ import {
   orientation,
   phase,
   probesReady,
+  waitingForModel,
   shownPosition,
   type GameLoop,
   type GameLoopAction,
@@ -23,10 +24,12 @@ import {
   NF3,
   START,
   aGame,
+  aSystem1Side,
   aTurn,
   afterE4,
   afterE5,
   plies,
+  withSystem1Black,
 } from '@/test/games'
 
 function run(...actions: GameLoopAction[]): GameLoop {
@@ -56,8 +59,8 @@ describe('opening the page', () => {
   test('starts the LLM turn of a loaded game in which the LLM is to move', () => {
     const state = run(received(initialGameLoop, afterE4()))
 
-    expect(phase(state)).toBe('llm')
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(phase(state)).toBe('model')
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
   })
 
   test('with no current game, stays idle and starts none', () => {
@@ -97,8 +100,8 @@ describe('the human moves', () => {
 
     expect(state.game).toEqual(afterE4())
     expect(state.moveSounds).toBe(humanToMove.moveSounds + 1)
-    expect(phase(state)).toBe('llm')
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(phase(state)).toBe('model')
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
     expect(state.request!.id).not.toBe(sent.request!.id)
   })
 
@@ -134,6 +137,48 @@ describe('the human moves', () => {
 
     expect(gameLoop(waiting, { type: 'human-move', uci: 'e7e5' })).toBe(waiting)
     expect(gameLoop(initialGameLoop, { type: 'human-move', uci: 'e2e4' })).toBe(initialGameLoop)
+  })
+})
+
+describe('waiting for a System 1 model', () => {
+  const system1 = withSystem1Black()
+  const waiting = run(received(initialGameLoop, afterE4(system1)))
+
+  test("its turn is asked for as an LLM's is, and the human is to wait", () => {
+    expect(phase(waiting)).toBe('model')
+    expect(waiting.request).toMatchObject({ kind: 'model-turn' })
+    expect(waitingForModel(waiting)).toBe(true)
+  })
+
+  test('its move lands with its sound though no LLM turn is recorded, and the human is to move', () => {
+    const state = gameLoop(waiting, received(waiting, afterE5({ ...system1, llm_turn: null, llm_turns: [] })))
+
+    expect(state.moveSounds).toBe(waiting.moveSounds + 1)
+    expect(state.flash).toBeNull()
+    expect(phase(state)).toBe('human')
+    expect(state.request).toBeNull()
+  })
+
+  test('a forfeit lands without a sound, and the game is over', () => {
+    const over = afterE4({ ...system1, status: 'over', result: '1-0', end_reason: 'forfeit' })
+
+    const state = gameLoop(waiting, received(waiting, over))
+
+    expect(state.moveSounds).toBe(waiting.moveSounds)
+    expect(phase(state)).toBe('over')
+  })
+
+  test('a faceoff between two System 1 models runs on its own, one turn after the other', () => {
+    const faceoff = {
+      settings: { ...aGame().settings, mode: 'llm_faceoff' as const, white: aSystem1Side, black: aSystem1Side },
+    }
+    const first = run(received(initialGameLoop, aGame(faceoff)))
+    expect(first.request).toMatchObject({ kind: 'model-turn' })
+
+    const second = gameLoop(first, received(first, afterE4(faceoff)))
+
+    expect(second.request).toMatchObject({ kind: 'model-turn' })
+    expect(second.moveSounds).toBe(first.moveSounds + 1)
   })
 })
 
@@ -178,7 +223,7 @@ describe('waiting for the LLM', () => {
     const state = gameLoop(waiting, received(waiting, faceoff))
 
     expect(state.moveSounds).toBe(waiting.moveSounds + 1)
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
     expect(state.request!.id).not.toBe(waiting.request!.id)
   })
 
@@ -188,7 +233,7 @@ describe('waiting for the LLM', () => {
     expect(state.error).toBe('Failed to fetch')
     expect(state.request).toBeNull()
     expect(state.game).toEqual(afterE4())
-    expect(phase(state)).toBe('llm')
+    expect(phase(state)).toBe('model')
   })
 
   test('the human cannot move', () => {
@@ -230,7 +275,7 @@ describe('new game', () => {
 
     const state = gameLoop(starting, received(starting, llmWhite))
 
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
   })
 
   test("drops the abandoned game's LLM turn when it lands after New game", () => {
@@ -260,7 +305,7 @@ describe('new game', () => {
 
     expect(state.error).toBe('unknown model')
     expect(state.game).toEqual(afterE4())
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
   })
 
   test('when the game cannot start and the human is to move, nothing is sent', () => {
@@ -284,7 +329,7 @@ describe('new game', () => {
     const landed = afterE5({ turn: 'black', settings: faceoff.settings })
     const state = gameLoop(refused, received(refused, landed))
 
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
     expect(state.error).toBeNull()
   })
 
@@ -321,8 +366,8 @@ describe('an LLM faceoff', () => {
   const playing = run(received(initialGameLoop, started))
 
   test("asks for White's first turn as soon as the game is shown, and the board takes no move", () => {
-    expect(playing.request).toMatchObject({ kind: 'llm-turn', game: started })
-    expect(phase(playing)).toBe('llm')
+    expect(playing.request).toMatchObject({ kind: 'model-turn', game: started })
+    expect(phase(playing)).toBe('model')
     expect(gameLoop(playing, { type: 'human-move', uci: 'e2e4' })).toBe(playing)
   })
 
@@ -331,7 +376,7 @@ describe('an LLM faceoff', () => {
     const asked: number[] = [state.request!.id]
     for (let plies = 1; plies <= 3; plies++) {
       state = gameLoop(state, received(state, after(plies)))
-      expect(state.request).toMatchObject({ kind: 'llm-turn', game: after(plies) })
+      expect(state.request).toMatchObject({ kind: 'model-turn', game: after(plies) })
       asked.push(state.request!.id)
     }
     state = gameLoop(state, received(state, after(4, { status: 'over', result: '1-0', end_reason: 'checkmate' })))
@@ -396,7 +441,7 @@ describe('Pause', () => {
 
     const resumed = gameLoop(paused, { type: 'resume', at: 0 })
     expect(resumed.pause).toBe('playing')
-    expect(resumed.request).toMatchObject({ kind: 'llm-turn', game: afterOne })
+    expect(resumed.request).toMatchObject({ kind: 'model-turn', game: afterOne })
   })
 
   test('Time used shows no time for a pause: the side to move ticks again only from Resume', () => {
@@ -419,7 +464,7 @@ describe('Pause', () => {
     const state = gameLoop(pausing, received(pausing, other))
 
     expect(state.pause).toBe('playing')
-    expect(state.request).toMatchObject({ kind: 'llm-turn', game: other })
+    expect(state.request).toMatchObject({ kind: 'model-turn', game: other })
   })
 
   test('with nothing running it pauses at once; a game that cannot start leaves it paused, a new one plays on', () => {
@@ -435,7 +480,7 @@ describe('Pause', () => {
     const state = gameLoop(again, received(again, { ...started, game_id: 'game-2' }))
 
     expect(state.pause).toBe('playing')
-    expect(state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(state.request).toMatchObject({ kind: 'model-turn' })
   })
 
   const probe = { ply: 1, color: 'white' as const, prompt_template_id: 'described@1' }
@@ -469,7 +514,7 @@ describe('Pause', () => {
     expect(failed.pause).toBe('paused')
     expect(failed.error).toBe('no')
     expect(probesReady(failed)).toEqual([probe])
-    expect(gameLoop(failed, { type: 'resume', at: 0 }).request).toMatchObject({ kind: 'llm-turn', game: started })
+    expect(gameLoop(failed, { type: 'resume', at: 0 }).request).toMatchObject({ kind: 'model-turn', game: started })
   })
 
   test('Probes waiting for the pause are dropped by Resume, or by another game', () => {
@@ -746,7 +791,7 @@ describe('Time used', () => {
 
     const failed = gameLoop(starting, { type: 'failed', requestId: starting.request!.id, message: 'no', at: 2000 })
 
-    expect(failed.request).toMatchObject({ kind: 'llm-turn' })
+    expect(failed.request).toMatchObject({ kind: 'model-turn' })
     expect(at(failed, 'black', 3000)).toBe(13)
   })
 })

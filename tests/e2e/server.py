@@ -8,6 +8,11 @@ it; each game's LLM plays its own copy of the script, from the start (a Scripted
 thinking off each reply carries a Reasoning, "Reasoning for <san>.", as Ollama's answers do. Every ply is judged by
 material alone (tests/fakes.py's MaterialEvaluator), a stand-in for Stockfish, so a faceoff shows its Evaluation bar.
 
+POST /e2e/script also takes "system1": {"<model>": [...]}, the SAN moves each System 1 model of that name plays, in turn
+(a FakeDecisionModel giving the move all the probability; once the script runs out it gives equal probabilities). Every
+System 1 server has every model, except those "system1_missing" names (a game with one is refused, as when the server
+lacks the model).
+
 POST /e2e/ranking-games replaces every game log with the synthetic games of tests/e2e/ranking.py, for the
 analytics page.
 
@@ -27,14 +32,17 @@ from starlette.types import Receive, Scope, Send
 from chessllm.api.app import create_app
 from chessllm.core.types import Color
 from chessllm.game.settings import Settings
+from chessllm.game.sides import System1Side
 from tests.conftest import Raw, ScriptedPlayer
-from tests.fakes import MaterialEvaluator
+from tests.fakes import FakeDecisionModel, MaterialEvaluator
 from tests.e2e.ranking import write_ranking_games
 
 
 class Script(BaseModel):
     white: list[str] = []
     black: list[str] = []
+    system1: dict[str, list[str]] = {}  # by model name
+    system1_missing: list[str] = []  # the models no System 1 server has
 
 
 def main() -> None:
@@ -50,6 +58,12 @@ def main() -> None:
             replies = [Raw(json.dumps({"reasoning": f"Reasoning for {san}.", "move": san})) for san in replies]
         return ScriptedPlayer(replies).for_settings(settings, color)
 
+    def decision_model_for(side: System1Side) -> FakeDecisionModel:
+        return FakeDecisionModel.favouring(*script.system1.get(side.model, []))
+
+    def system1_missing_models(base_url: str, models: list[str]) -> list[str]:
+        return [model for model in models if model in script.system1_missing]
+
     temp = Path(tempfile.mkdtemp(prefix="chessllm-e2e-"))
     games_dir = temp / "games"
 
@@ -61,6 +75,8 @@ def main() -> None:
             move_quality_validation=temp / "no-validation.json",  # no validation has run: estimates are unvalidated
             evaluator=MaterialEvaluator(),
             prompt_library_dir=temp / "prompt_library",  # the default Prompt templates only
+            decision_model_for=decision_model_for,
+            system1_missing_models=system1_missing_models,
         )
 
         @app.post("/e2e/script", include_in_schema=False)

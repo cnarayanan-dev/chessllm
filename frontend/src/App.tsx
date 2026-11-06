@@ -18,7 +18,7 @@ import { TurnPanel } from '@/components/turn/TurnPanel'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { chaosShown, counterpartAt } from '@/game/chaos'
 import { evaluationBar, previewBar } from '@/game/evaluation'
-import { boardInput, orientation, pausable, probesReady, shownPosition, waitingForLlm } from '@/game/gameLoop'
+import { boardInput, orientation, pausable, probesReady, shownPosition, waitingForModel } from '@/game/gameLoop'
 import { material } from '@/game/material'
 import { rematchOf } from '@/game/rematch'
 import { useGameLoop } from '@/game/useGameLoop'
@@ -175,7 +175,7 @@ export default function App() {
                 live={!history}
                 previewing={previewing}
                 onPreview={togglePreview}
-                llmTurnRunning={waitingForLlm(state)}
+                llmTurnRunning={waitingForModel(state)}
                 pause={pauseShown}
                 onProbeAfterPause={probeAfterPause}
                 onDockTurn={dockTurn}

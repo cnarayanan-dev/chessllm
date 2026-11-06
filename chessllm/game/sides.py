@@ -3,10 +3,8 @@
 from dataclasses import asdict, dataclass
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import Field, GetJsonSchemaHandler
-from pydantic.errors import PydanticInvalidForJsonSchema
-from pydantic.json_schema import JsonSchemaValue, SkipJsonSchema
-from pydantic_core import CoreSchema
+from pydantic import Field
+from pydantic.json_schema import SkipJsonSchema
 
 # What the LLM is told after an illegal move: explained (the default), bare or hinted; or repeat, nothing: the turn's
 # first Prompt is sent again unchanged, as the control for the other levels.
@@ -177,27 +175,25 @@ class AnchorSide:
 @dataclass(frozen=True, kw_only=True)
 class System1Side:
     """A System 1 model side (ADR 0012): the model, the server that serves it, its Choice temperature and its Prompt
-    template. Only the benchmark's commands give one, never the API, so it is left out of the API's schema. Its log
-    shape has none of an LLM side's settings: it has no thinking, LLM constraints, Retry feedback or Turn memory."""
+    template. Its log shape has none of an LLM side's settings: it has no thinking, LLM constraints, Retry feedback or
+    Turn memory."""
 
     player: Literal["system1"] = "system1"
     model: str
     base_url: str  # of the server that serves /v1/systemone
     choice_temperature: float = 1.0  # at least 0; 0 is always the model's top option
+    # The System 1 Prompt template a new game asked for, by its ID in SYSTEM1_TEMPLATES; None for the default, and left
+    # out of the API's output then. The API resolves it into prompt_template; game_start logs the template in full.
+    prompt_template_id: Annotated[str | None, Field(exclude_if=lambda template_id: template_id is None)] = None
     # The Prompt template it plays with, whose System prompt is the question and Turn template the state; None for the
-    # default System 1 template, read when the game starts (system1.prompt.side_template).
+    # default System 1 template, read when the game starts (system1.prompt.side_template). The API takes it only by
+    # its ID, so it is left out of the API's schema and output; the benchmark's commands give it in full.
     prompt_template: Annotated[SkipJsonSchema[PromptTemplate | None], Field(exclude=True)] = None
-
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema: CoreSchema, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        """None: skipping it in a union isn't enough to keep it out of the API's schema, which still lists the class's
-        definition unless it is invalid for a JSON schema."""
-        raise PydanticInvalidForJsonSchema("a System 1 side is not part of the API")
 
     def log_shape(self, template: PromptTemplate) -> dict[str, Any]:
         """The side as game_start logs it, with the Prompt template it plays the game with in full, last."""
         shape = asdict(self)
-        del shape["prompt_template"]
+        del shape["prompt_template_id"], shape["prompt_template"]
         return shape | {"prompt_template": template.log_shape()}
 
     def name(self) -> str:

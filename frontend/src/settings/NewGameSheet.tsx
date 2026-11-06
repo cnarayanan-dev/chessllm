@@ -2,11 +2,12 @@
 // and its short name; what it means, or why it is disabled, is in a Tooltip and its aria-description.
 import { Radio } from '@base-ui/react/radio'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeftRight, Bot, ChevronDown, type LucideIcon, User } from 'lucide-react'
-import { type ReactElement, type ReactNode, useRef, useState } from 'react'
+import { ArrowLeftRight, Bot, ChevronDown, Cpu, type LucideIcon, User } from 'lucide-react'
+import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react'
 import { modelsQuery } from '@/api/models'
 import { promptLibraryQuery } from '@/api/promptLibrary'
-import type { PromptTemplateInfo } from '@/api/types'
+import { system1OptionsQuery } from '@/api/system1'
+import type { PromptTemplateInfo, System1TemplateInfo } from '@/api/types'
 import { settingIcon } from '@/components/game-card/settingIcons'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -21,6 +22,7 @@ import {
   COLORS,
   MAX_ATTEMPTS_CHOICES,
   type Color,
+  type Kind,
   type LlmConstraints,
   type Models,
   type NextGame,
@@ -31,10 +33,13 @@ import {
   chaosAllowed,
   chooseConstraints,
   chooseHumanColor,
+  chooseKind,
   chooseMaxAttempts,
   chooseMode,
   chooseModel,
   choosePromptTemplate,
+  chooseSystem1Template,
+  chosenSystem1Template,
   chosenTemplate,
   chooseRules,
   chooseTurnMemory,
@@ -43,8 +48,12 @@ import {
   fittingTemplates,
   llmColors,
   other,
+  DEFAULT_SYSTEM1_MODEL,
+  setSystem1,
   setValue,
+  startBlocked,
   swapSides,
+  system1Colors,
   thinkingAllowed,
   thinkingOn,
   toggleCustomize,
@@ -52,6 +61,7 @@ import {
   toggleThinking,
   value,
   withDefaultTemplates,
+  withSystem1Url,
 } from '@/settings/next-game'
 import { usePromptLab } from '@/settings/promptLab'
 
@@ -67,8 +77,23 @@ const NOT_ENFORCED = `${LLM_CONSTRAINT_WORDS.free.name} or ${LLM_CONSTRAINT_WORD
 
 const cannotThink = (names: string[]) => `${names.join(' and ')} can't think.`
 
-/** Why Chaos rules can't be chosen: an LLM under an enforced constraint, named by its side when customizing. */
+const KIND_WORDS: Record<Kind, { name: string; description: string }> = {
+  llm: { name: 'LLM', description: 'A language model that reasons in text and answers with a move.' },
+  system1: {
+    name: 'System 1',
+    description: 'A decision model: it writes no text, and gives a probability for each legal move in one pass.',
+  },
+}
+const SYSTEM1_MODEL = `The name of the model the server is to run, e.g. ${DEFAULT_SYSTEM1_MODEL}.`
+const SYSTEM1_URL = 'The server that serves the model at /v1/systemone: Ollama, llama-server or the publisher\'s own.'
+const CHOICE_TEMPERATURE =
+  'How the move is drawn from the model\'s probabilities. 1: as they are. Lower favours its top moves; 0 always plays the top one.'
+const SYSTEM1_PROMPT = 'The question the model is asked, and how the position is described to it.'
+const SYSTEM1_ONLY_STANDARD = 'A System 1 model plays only legal moves, so only under Standard rules.'
+
+/** Why Chaos rules can't be chosen: a System 1 model, or an LLM under an enforced constraint, named by its side when customizing. */
 function chaosReason(next: NextGame): string {
+  if (system1Colors(next).length > 0) return SYSTEM1_ONLY_STANDARD
   if (!next.custom) return `Needs an LLM that can play an illegal move: pick ${NOT_ENFORCED} in Advanced settings.`
   const sides = llmColors(next).filter((color) => enforced(next, color)).map((color) => COLOR_NAMES[color])
   return `Needs every LLM able to play an illegal move: pick ${NOT_ENFORCED} for ${sides.join(' and ')} in Advanced settings.`
@@ -139,7 +164,21 @@ function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStar
   const libraryQuery = useQuery({ ...promptLibraryQuery, enabled: promptLab, refetchOnMount: 'always' })
   const isFaceoff = next.mode === 'llm_faceoff'
   const chaosOk = chaosAllowed(next)
-  const sides: SideProps = { next, models, set, library: promptLab ? (libraryQuery.data ?? null) : undefined }
+  const hasLlm = llmColors(next).length > 0
+  // What a System 1 side is offered, listed afresh at each opening too: the server a System 1 side starts at, which
+  // any side may become one, and its Prompt templates.
+  const system1Query = useQuery({ ...system1OptionsQuery, refetchOnMount: 'always' })
+  const system1Url = system1Query.data?.default_url
+  useEffect(() => {
+    if (system1Url) set((current) => withSystem1Url(current, system1Url))
+  }, [system1Url])
+  const sides: SideProps = {
+    next,
+    models,
+    set,
+    library: promptLab ? (libraryQuery.data ?? null) : undefined,
+    system1Templates: system1Query.data?.templates ?? null,
+  }
 
   return (
     <div className="flex flex-col gap-5 px-6 pt-4 pb-6">
@@ -154,18 +193,18 @@ function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStar
             value: 'play_llm',
             name: 'Play LLM',
             icon: <Players first={User} />,
-            description: 'You play one side, an LLM the other',
+            description: 'You play one side, a model the other',
           },
           {
             value: 'llm_faceoff',
             name: 'LLM faceoff',
             icon: <Players first={Bot} />,
-            description: 'An LLM on each side, to compare models',
+            description: 'A model on each side, to compare them',
           },
         ]}
       />
       <Opponent {...sides} error={query.isError ? query.error.message : null} />
-      {!next.custom && (
+      {hasLlm && !next.custom && (
         <SwitchRow
           label="Thinking"
           description={
@@ -216,7 +255,7 @@ function Sheet({ initial, onStart }: Pick<NewGameSheetProps, 'initial' | 'onStar
           <Advanced {...sides} />
         </CollapsibleContent>
       </Collapsible>
-      <StartButtons next={next} onStart={onStart} isFaceoff={isFaceoff} />
+      <StartButtons next={next} onStart={onStart} isFaceoff={isFaceoff} blocked={startBlocked(next)} />
     </div>
   )
 }
@@ -230,9 +269,11 @@ type SideProps = {
   models: Models
   set: (next: NextGame) => void
   library: PromptTemplateInfo[] | null | undefined
+  /** The System 1 Prompt templates, or null until they have loaded; only the Advanced settings need them. */
+  system1Templates?: System1TemplateInfo[] | null
 }
 
-/** The model of the LLM in Play LLM, or of each side in a faceoff, with the swap button between them. */
+/** The Model player in Play LLM, or each side in a faceoff, with the swap button between them. */
 function Opponent({ next, models, set, error }: SideProps & { error: string | null }) {
   const alert = error && (
     <p role="alert" className="text-xs text-destructive">
@@ -240,10 +281,15 @@ function Opponent({ next, models, set, error }: SideProps & { error: string | nu
     </p>
   )
   if (next.mode === 'play_llm') {
-    const llm = other(next.human_color)
+    const color = other(next.human_color)
     return (
       <Field label="Opponent">
-        <ModelSelect label="Opponent" chosen={next.models[llm]} models={models} onChange={(name) => set(chooseModel(next, llm, name))} />
+        <KindChoice next={next} models={models} set={set} color={color} label="Opponent kind" />
+        {next.kinds[color] === 'llm' ? (
+          <ModelSelect label="Opponent" chosen={next.models[color]} models={models} onChange={(name) => set(chooseModel(next, color, name))} />
+        ) : (
+          <System1Model next={next} set={set} color={color} label="Opponent" />
+        )}
         {alert}
       </Field>
     )
@@ -254,12 +300,17 @@ function Opponent({ next, models, set, error }: SideProps & { error: string | nu
         <SideDot color={color} />
         {COLOR_NAMES[color]}
       </div>
-      <ModelSelect
-        label={`${COLOR_NAMES[color]} model`}
-        chosen={next.models[color]}
-        models={models}
-        onChange={(name) => set(chooseModel(next, color, name))}
-      />
+      <KindChoice next={next} models={models} set={set} color={color} label={`${COLOR_NAMES[color]} kind`} />
+      {next.kinds[color] === 'llm' ? (
+        <ModelSelect
+          label={`${COLOR_NAMES[color]} model`}
+          chosen={next.models[color]}
+          models={models}
+          onChange={(name) => set(chooseModel(next, color, name))}
+        />
+      ) : (
+        <System1Model next={next} set={set} color={color} label={`${COLOR_NAMES[color]} model`} />
+      )}
     </div>
   )
   return (
@@ -275,6 +326,56 @@ function Opponent({ next, models, set, error }: SideProps & { error: string | nu
       </div>
       {alert}
     </div>
+  )
+}
+
+/** Whether a Model player is an LLM or a System 1 model. */
+function KindChoice({
+  next,
+  models,
+  set,
+  color,
+  label,
+}: Pick<SideProps, 'next' | 'models' | 'set'> & { color: Color; label: string }) {
+  return (
+    <Choice<Kind>
+      label={label}
+      hideLabel
+      columns={2}
+      value={next.kinds[color]}
+      onChange={(kind) => set(chooseKind(next, models, color, kind))}
+      options={(['llm', 'system1'] as const).map((kind) => {
+        const Icon = kind === 'llm' ? Bot : Cpu
+        return {
+          value: kind,
+          name: KIND_WORDS[kind].name,
+          icon: <Icon className="size-5" strokeWidth={1.75} aria-hidden="true" />,
+          description: KIND_WORDS[kind].description,
+        }
+      })}
+    />
+  )
+}
+
+/** The classes of a text field, as a select's trigger has them. */
+const INPUT =
+  'h-9 min-w-0 rounded-3xl border border-transparent bg-input/50 px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 aria-invalid:border-destructive'
+
+/** A System 1 side's model, named: the server has it, whatever it is called there. */
+function System1Model({ next, set, color, label }: Pick<SideProps, 'next' | 'set'> & { color: Color; label: string }) {
+  return (
+    <Tip description={SYSTEM1_MODEL}>
+      <input
+        type="text"
+        aria-label={label}
+        aria-description={SYSTEM1_MODEL}
+        aria-invalid={next.system1[color].model.trim() === ''}
+        className={cn(INPUT, 'w-full')}
+        spellCheck={false}
+        value={next.system1[color].model}
+        onChange={(event) => set(setSystem1(next, color, 'model', event.target.value))}
+      />
+    </Tip>
   )
 }
 
@@ -312,14 +413,17 @@ function ModelSelect({
  * What the LLM is given, its Prompt (Prompt lab), Retry feedback, Turn memory, the forfeit limit and Customize per
  * LLM.
  */
-function Advanced({ next, models, set, library }: SideProps) {
+function Advanced({ next, models, set, library, system1Templates }: SideProps) {
+  const hasLlm = llmColors(next).length > 0
   return (
     <>
-      {!next.custom && <Constraints next={next} set={set} library={library} color="white" />}
-      {!next.custom && library !== undefined && <PromptPicker next={next} set={set} library={library} color="white" />}
-      {!next.custom && !enforced(next, 'white') && <Feedback next={next} set={set} color="white" />}
-      {!next.custom && <Memory next={next} set={set} library={library} color="white" />}
-      {!everyLlmEnforced(next) && (
+      {hasLlm && !next.custom && <Constraints next={next} set={set} library={library} color="white" />}
+      {hasLlm && !next.custom && library !== undefined && (
+        <PromptPicker next={next} set={set} library={library} color="white" />
+      )}
+      {hasLlm && !next.custom && !enforced(next, 'white') && <Feedback next={next} set={set} color="white" />}
+      {hasLlm && !next.custom && <Memory next={next} set={set} library={library} color="white" />}
+      {hasLlm && !everyLlmEnforced(next) && (
         <Row label="Illegal moves before forfeit" description={maxAttemptsHint(next)}>
           <Select value={String(next.max_attempts)} onValueChange={(choice) => choice && set(chooseMaxAttempts(next, Number(choice)))}>
             <SelectTrigger
@@ -339,7 +443,7 @@ function Advanced({ next, models, set, library }: SideProps) {
           </Select>
         </Row>
       )}
-      {next.mode === 'llm_faceoff' && (
+      {next.mode === 'llm_faceoff' && llmColors(next).length === 2 && (
         <SwitchRow
           label="Customize per LLM"
           description={CUSTOMIZE}
@@ -371,7 +475,75 @@ function Advanced({ next, models, set, library }: SideProps) {
             </section>
           )
         })}
+      {system1Colors(next).map((color) => (
+        <System1Settings key={color} next={next} set={set} templates={system1Templates ?? null} color={color} />
+      ))}
     </>
+  )
+}
+
+/** A System 1 side's settings besides its model: its server, Choice temperature and Prompt template. */
+function System1Settings({
+  next,
+  set,
+  templates,
+  color,
+}: Pick<SideProps, 'next' | 'set'> & { templates: System1TemplateInfo[] | null; color: Color }) {
+  const values = next.system1[color]
+  const chosen = chosenSystem1Template(next, templates ?? [], color)
+  const name = (template: System1TemplateInfo) => template.name ?? template.id
+  return (
+    <section
+      aria-label={`${COLOR_NAMES[color]} · ${values.model}`}
+      className="flex flex-col gap-4 rounded-3xl bg-card p-4"
+    >
+      <div className="flex items-center gap-2 font-medium">
+        <SideDot color={color} />
+        {COLOR_NAMES[color]} · {values.model}
+      </div>
+      <Row label="Server URL" description={SYSTEM1_URL}>
+        <input
+          type="text"
+          aria-label="Server URL"
+          aria-description={SYSTEM1_URL}
+          aria-invalid={values.base_url.trim() === ''}
+          className={cn(INPUT, 'w-52')}
+          spellCheck={false}
+          value={values.base_url}
+          onChange={(event) => set(setSystem1(next, color, 'base_url', event.target.value))}
+        />
+      </Row>
+      <Row label="Choice temperature" description={CHOICE_TEMPERATURE}>
+        <input
+          type="number"
+          min={0}
+          step={0.1}
+          aria-label="Choice temperature"
+          aria-description={CHOICE_TEMPERATURE}
+          className={cn(INPUT, 'w-24')}
+          value={values.choice_temperature}
+          onChange={(event) => set(setSystem1(next, color, 'choice_temperature', event.target.value))}
+        />
+      </Row>
+      <Row label="Prompt template" description={SYSTEM1_PROMPT}>
+        <Select
+          value={chosen?.id ?? null}
+          onValueChange={(id) => templates && id && set(chooseSystem1Template(next, templates, color, id))}
+        >
+          <SelectTrigger aria-label="Prompt template" aria-description={SYSTEM1_PROMPT} className="min-w-[160px] bg-card">
+            {/* The chosen template's name; until the templates have loaded, the default's or the chosen ID. */}
+            <SelectValue>{() => (chosen ? name(chosen) : (values.prompt_template_id ?? 'Default'))}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {(templates ?? []).map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {name(template)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Row>
+    </section>
   )
 }
 
@@ -468,27 +640,53 @@ function Memory({ next, set, library, color }: Omit<SideProps, 'models'> & { col
   )
 }
 
-/** Lichess style: in Play LLM the colour is chosen by the button that starts the game. */
-function StartButtons({ next, onStart, isFaceoff }: { next: NextGame; onStart: (next: NextGame) => void; isFaceoff: boolean }) {
-  if (isFaceoff)
+/**
+ * Lichess style: in Play LLM the colour is chosen by the button that starts the game. `blocked` is why the game can't
+ * start yet, if it can't: the buttons are then disabled, the reason in a tooltip on a wrapper, as a disabled button
+ * takes no hover.
+ */
+function StartButtons({
+  next,
+  onStart,
+  isFaceoff,
+  blocked,
+}: {
+  next: NextGame
+  onStart: (next: NextGame) => void
+  isFaceoff: boolean
+  blocked: string | null
+}) {
+  const guarded = (button: ReactElement, key?: Color) => {
+    if (blocked === null) return button
     return (
-      <Button size="lg" onClick={() => onStart(next)}>
+      <Tip key={key} description={blocked}>
+        <span className="flex flex-col">{button}</span>
+      </Tip>
+    )
+  }
+  if (isFaceoff)
+    return guarded(
+      <Button size="lg" disabled={blocked !== null} onClick={() => onStart(next)}>
         Start faceoff
-      </Button>
+      </Button>,
     )
   return (
     <div className="grid grid-cols-2 gap-2">
-      {COLORS.map((color) => (
-        <Button
-          key={color}
-          size="lg"
-          variant={next.human_color === color ? 'default' : 'outline'}
-          onClick={() => onStart(chooseHumanColor(next, color))}
-        >
-          <SideDot color={color} />
-          Play as {COLOR_NAMES[color]}
-        </Button>
-      ))}
+      {COLORS.map((color) =>
+        guarded(
+          <Button
+            key={color}
+            size="lg"
+            variant={next.human_color === color ? 'default' : 'outline'}
+            disabled={blocked !== null}
+            onClick={() => onStart(chooseHumanColor(next, color))}
+          >
+            <SideDot color={color} />
+            Play as {COLOR_NAMES[color]}
+          </Button>,
+          color,
+        ),
+      )}
     </div>
   )
 }

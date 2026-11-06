@@ -151,3 +151,34 @@ test("each setting also has its name without the side, for where the side is alr
     'Forfeit after 5 illegal moves',
   ])
 })
+
+test('a System 1 model that forfeits gave no answer: the last LLM turn is not the reason', () => {
+  const system1 = { player: 'system1' as const, model: 'd3:2b', base_url: 'http://localhost:11434', choice_temperature: 1 }
+  const llm = aGame().settings.black
+  const forfeitedBy = (loser: 'white' | 'black') =>
+    aGame({
+      settings: { ...aGame().settings, mode: 'llm_faceoff', white: loser === 'white' ? system1 : llm, black: loser === 'white' ? llm : system1 },
+      status: 'over',
+      result: loser === 'white' ? '0-1' : '1-0',
+      end_reason: 'forfeit',
+    })
+
+  expect(resultText(forfeitedBy('white'))).toEqual({
+    result: 'qwen3.5:9b (Black) wins by forfeit',
+    detail: 'd3:2b gave no answer',
+  })
+  expect(resultText(forfeitedBy('black'))).toEqual({ result: 'qwen3.5:9b (White) wins by forfeit', detail: 'd3:2b gave no answer' })
+})
+
+test("a System 1 model's forfeit shows the error of its failed call, not the last LLM turn's", () => {
+  const system1 = { player: 'system1' as const, model: 'd3:2b', base_url: 'http://localhost:11434', choice_temperature: 1 }
+  const game = aGame({
+    settings: { ...aGame().settings, mode: 'llm_faceoff', white: system1 },
+    status: 'over',
+    result: '0-1',
+    end_reason: 'forfeit',
+    system1_forfeit_error: 'nothing answers at http://localhost:11434',
+  })
+
+  expect(resultText(game).detail).toBe('nothing answers at http://localhost:11434')
+})

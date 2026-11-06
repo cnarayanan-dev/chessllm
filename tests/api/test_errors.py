@@ -171,6 +171,7 @@ def test_every_refusal_a_route_can_give_is_described_with_the_error_detail(scrip
     assert declared == {
         ("GET", "/api/models"): {"500"},
         ("GET", "/api/prompt-templates"): set(),
+        ("GET", "/api/system1/options"): set(),
         ("POST", "/api/prompt-templates"): {"400"},
         ("POST", "/api/prompt-templates/{template_id}/hide"): {"400"},
         ("GET", "/api/games/defaults"): set(),
@@ -178,6 +179,7 @@ def test_every_refusal_a_route_can_give_is_described_with_the_error_detail(scrip
         ("GET", "/api/games/current"): {"404"},
         ("POST", "/api/games/current/moves"): {"400", "404"},
         ("POST", "/api/games/current/llm-turn"): {"404", "409"},
+        ("POST", "/api/games/current/system1-turn"): {"404", "409"},
         ("GET", "/api/games/current/llm-turns/{ply}/attempts/{attempt}/prompt"): {"404"},
         ("POST", "/api/games/current/probes"): {"400", "404", "409"},
         ("GET", "/api/games/{game_id}/probes"): set(),

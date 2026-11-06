@@ -17,6 +17,7 @@ from chessllm.exceptions import (
     NoGameStarted,
     NoLlmAttempt,
     RefusedLlmTurn,
+    RefusedSystem1Turn,
     RejectedHumanMove,
 )
 from chessllm.game.llm_turn.conversation import TurnPrompt, turn_prompt
@@ -24,9 +25,10 @@ from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.records import GameState
 from chessllm.game.session import GameSession
 from chessllm.game.settings import Settings
-from chessllm.game.sides import LlmSide
+from chessllm.game.sides import LlmSide, System1Side
 from chessllm.llm.models import load_sampling
 from chessllm.logs.game_log import GameLog
+from chessllm.system1.prompt import resolve_system1_template
 
 router = APIRouter()
 
@@ -58,27 +60,34 @@ def start_game(
     )
     settings.check(engines.models)
     settings.check_installed(engines.missing_models)
+    settings.check_served(engines.system1_missing_models)
     players = {color: engines.player_for(settings, color) for color in settings.llm_sides()}
+    decision_models = {color: engines.decision_model_for(side) for color, side in settings.system1_sides().items()}
     log = GameLog(config.games_dir, *settings.side_names())
-    session = GameSession(players, settings, log, clock=engines.clock, evaluator=engines.evaluator)
+    session = GameSession(
+        players, settings, log, clock=engines.clock, evaluator=engines.evaluator, decision_models=decision_models
+    )
     games.start(session)
     return session.state()
 
 
 def with_template(side: SideIn, color: Color, library: PromptLibrary) -> SideIn:
     """An LLM side with the Prompt template its ID names in the library, or with none for the Default of its LLM
-    constraints. Raises InvalidSettings if the library has no such template, or if the side gives one's text: the
-    API takes a template by its ID only, so a game always plays one from the library."""
-    if not isinstance(side, LlmSide):
+    constraints; a System 1 side with the one its ID names (resolve_system1_template), or with none for the default. Raises
+    InvalidSettings if there is no such template, or if the side gives one's text: the API takes a template by its ID
+    only, so a game always plays one from the library."""
+    if not isinstance(side, LlmSide | System1Side):
         return side
     if side.prompt_template is not None:
         refused = (
             "A new game takes a Prompt template by its ID in the Prompt library (prompt_template_id), not its text: "
-            f"the LLM side ({color})"
+            f"the {'LLM' if isinstance(side, LlmSide) else 'System 1'} side ({color})"
         )
         raise InvalidSettings(refused, code="prompt_template_not_accepted")
     if side.prompt_template_id is None:
         return side
+    if isinstance(side, System1Side):
+        return replace(side, prompt_template=resolve_system1_template(side.prompt_template_id, library))
     return replace(side, prompt_template=library.resolve(side.prompt_template_id, color))
 
 
@@ -111,6 +120,16 @@ def play_llm_turn(session: CurrentGame, engines: EnginesDep, background: Backgro
 
     The state returned is that of the game the turn was played in, even if a new game has started since."""
     session.play_llm_turn()
+    return respond(session, engines, background)
+
+
+@router.post("/api/games/current/system1-turn", responses=error_responses(NoGameStarted, RefusedSystem1Turn))
+def play_system1_turn(session: CurrentGame, engines: EnginesDep, background: BackgroundTasks) -> GameState:
+    """The only way a System 1 model's turn starts, as /llm-turn is for an LLM's: the page asks for one whenever a
+    state says it is a System 1 model's turn. A single attempt, so it moves or forfeits.
+
+    The state returned is that of the game the turn was played in, even if a new game has started since."""
+    session.play_system1_turn()
     return respond(session, engines, background)
 
 

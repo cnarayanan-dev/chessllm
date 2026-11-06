@@ -5,8 +5,10 @@ from fastapi import APIRouter
 
 from chessllm.api.deps import PromptLibraryDep
 from chessllm.api.errors import error_responses
-from chessllm.api.schemas.prompts import NewPromptTemplate, PromptTemplateInfo
+from chessllm.api.schemas.prompts import NewPromptTemplate, PromptTemplateInfo, System1Options, System1TemplateInfo
+from chessllm.core.config import SYSTEM1_DEFAULT_URL
 from chessllm.exceptions import InvalidSettings
+from chessllm.system1.prompt import SYSTEM1_TEMPLATES
 
 router = APIRouter()
 
@@ -16,6 +18,24 @@ def list_prompt_templates(library: PromptLibraryDep) -> list[PromptTemplateInfo]
     """Every Prompt template that isn't hidden, the defaults first, each with the LLM constraints it fits. The New
     game sheet's Prompt picker offers a side those that fit its LLM constraints."""
     return [PromptTemplateInfo.of(entry) for entry in library.entries()]
+
+
+@router.get("/api/system1/options")
+def system1_options() -> System1Options:
+    """What a System 1 side is offered: the default server URL, and the Prompt templates it can play with, the default
+    first. The New game sheet starts a System 1 side at the URL, and its Prompt picker offers the templates."""
+    return System1Options(
+        default_url=SYSTEM1_DEFAULT_URL,
+        templates=[
+            System1TemplateInfo(
+                id=template.id,
+                name=template.name,
+                system_prompt=template.system_prompt,
+                turn_template=template.turn_template,
+            )
+            for template in SYSTEM1_TEMPLATES.values()
+        ],
+    )
 
 
 @router.post("/api/prompt-templates", responses=error_responses(InvalidSettings))

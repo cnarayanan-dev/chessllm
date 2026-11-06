@@ -23,7 +23,7 @@ type PlayerStripProps = {
 /** The side's icon: the model's family logo or monogram, or a person for the human. */
 function PlayerIcon({ game, color }: { game: GameState; color: Color }) {
   const side = game.settings[color]
-  if (side.player !== 'llm') {
+  if (side.player === 'human') {
     return (
       <Avatar>
         <AvatarFallback data-testid="person">
@@ -69,7 +69,7 @@ export function PlayerStrip({ game, color, timer, children }: PlayerStripProps) 
         )}
       >
         <PlayerIcon game={game} color={color} />
-        <span className="truncate text-base font-semibold">{side.player === 'llm' ? side.model : 'You'}</span>
+        <span className="truncate text-base font-semibold">{side.player === 'human' ? 'You' : side.model}</span>
         {toMove && <span className="sr-only">, to move</span>}
       </span>
       {children}

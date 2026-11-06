@@ -259,3 +259,16 @@ export function aFaceoff(
     ...overrides,
   })
 }
+
+/** A System 1 model's side, on the default Prompt template. */
+export const aSystem1Side = {
+  player: 'system1',
+  model: 'd3:2b',
+  base_url: 'http://localhost:11434',
+  choice_temperature: 1,
+} as const
+
+/** `afterE4()`/`aGame()`'s settings with a System 1 model as the LLM's replacement, so it plays Black. */
+export const withSystem1Black = (): Pick<GameState, 'settings'> => ({
+  settings: { ...aGame().settings, black: aSystem1Side },
+})

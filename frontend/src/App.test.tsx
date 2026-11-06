@@ -240,6 +240,28 @@ describe('with no current game', () => {
     expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
   })
 
+  test.each([
+    ["a server that lacks the model", "The System 1 server at http://localhost:11434 doesn't have d3:2b"],
+    ['a server that does not answer', 'nothing answers at http://localhost:11434'],
+  ])('says so when a System 1 model is refused at the start: %s', async (_, detail) => {
+    fakeBackend()
+      .on('GET /api/games/current', noGame())
+      .on('GET /api/games/defaults', Response.json(defaults))
+      .on('GET /api/models', Response.json(models))
+      .on('GET /api/system1/options', Response.json({ default_url: 'http://localhost:11434', templates: [] }))
+      .on('POST /api/games', Response.json({ detail }, { status: 400 }))
+    renderApp()
+
+    const sheet = await screen.findByRole('dialog', { name: 'New game' })
+    await userEvent.click(within(sheet).getByRole('radio', { name: 'System 1' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Play as White' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('Could not start a game')).toBeInTheDocument()
+    expect(alert).toHaveTextContent(detail)
+    expect(screen.queryByTestId('strip-white')).not.toBeInTheDocument()
+  })
+
   test("says so when the defaults can't be loaded", async () => {
     fakeBackend()
       .on('GET /api/games/current', noGame())

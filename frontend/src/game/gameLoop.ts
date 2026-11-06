@@ -1,7 +1,7 @@
 /*
   The game loop, as a reducer: which game is shown, the one request to the backend in flight, and the error line.
-  Every state the backend sends comes through `received`: it is shown at once and, if an LLM is to move, its turn is
-  asked for. That one rule covers the human's move, a new game in which an LLM plays White, a faceoff and a reload.
+  Every state the backend sends comes through `received`: it is shown at once and, if a Model player (an LLM or a
+  System 1 model) is to move, its turn is asked for. That one rule covers the human's move, a new game in which an LLM plays White, a faceoff and a reload.
 
   The reducer only says which request to send; useGameLoop sends it and answers with `received` or `failed`, tagged
   with the request's id. An answer to any request but the one in flight is dropped: that is how New game abandons
@@ -18,6 +18,7 @@
 */
 import type { Color, GameState, LlmTurn, NewGame, Ply, ProbeRequest } from '@/api/types'
 import { played } from '@/game/chaos'
+import { isModelPlayer } from '@/game/sides'
 import { clockAt, resynced, stopped, type Clock } from '@/game/timeUsed'
 
 /** The one request to the backend in flight. */
@@ -25,7 +26,7 @@ export type Request =
   | { id: number; kind: 'load' } // the current game, if there is one
   | { id: number; kind: 'start'; newGame: NewGame | null } // null: the backend's default settings
   | { id: number; kind: 'move'; uci: string }
-  | { id: number; kind: 'llm-turn'; game: GameState } // the turn of this game, as it was when asked for
+  | { id: number; kind: 'model-turn'; game: GameState } // an LLM's or a System 1 model's turn of this game, as it was when asked for
 
 type NewRequest = Request extends infer R ? (R extends Request ? Omit<R, 'id'> : never) : never
 
@@ -82,8 +83,8 @@ export type GameLoopAction =
   | { type: 'probe'; probe: ProbeRequest }
   | { type: 'probes-asked'; probes: readonly ProbeRequest[] }
 
-/** idle: no game yet. human: the human to move. llm: waiting for an LLM. over: the game has ended. */
-export type Phase = 'idle' | 'human' | 'llm' | 'over'
+/** idle: no game yet. human: the human to move. model: waiting for a Model player. over: the game has ended. */
+export type Phase = 'idle' | 'human' | 'model' | 'over'
 
 export const initialGameLoop: GameLoop = {
   game: null,
@@ -105,14 +106,16 @@ export const humanColor = (game: GameState): Color | null =>
 /** The side at the bottom of the board: the human's in Play LLM, White in an LLM faceoff. */
 export const orientation = (game: GameState): Color => humanColor(game) ?? 'white'
 
-export const llmToMove = (game: GameState): boolean =>
-  game.status === 'playing' && game.settings[game.turn].player === 'llm'
+/** Whether a Model player, an LLM or a System 1 model, is to move: its turn is asked for, one request each. */
+export const modelToMove = (game: GameState): boolean =>
+  game.status === 'playing' && isModelPlayer(game.settings[game.turn])
+
 
 export function phase(state: GameLoop): Phase {
   const game = state.game
   if (!game) return 'idle'
   if (game.status === 'over') return 'over'
-  return game.turn === humanColor(game) ? 'human' : 'llm'
+  return game.turn === humanColor(game) ? 'human' : 'model'
 }
 
 /**
@@ -156,16 +159,21 @@ function view(state: GameLoop, ply: number): GameLoop {
 }
 
 /** Whether the LLM's turn is running: asked for and not yet answered. */
-export const waitingForLlm = (state: GameLoop): boolean => state.request?.kind === 'llm-turn'
+export const waitingForModel = (state: GameLoop): boolean => state.request?.kind === 'model-turn'
 
 /** Whether an LLM turn of the same game has landed in `next`, played or forfeited. */
 function llmTurnLanded(game: GameState | null, next: GameState): boolean {
   return game !== null && next.game_id === game.game_id && next.llm_turns.length > game.llm_turns.length
 }
 
-/** Whether an LLM turn of the same game has landed in `next`, and played a move (a chaos move too) rather than forfeiting. */
-function movedByLlm(game: GameState | null, next: GameState): boolean {
-  return llmTurnLanded(game, next) && (next.llm_turn?.attempts.some(played) ?? false)
+/**
+ * Whether a Model player's turn of the same game has landed in `next` and played a move (a chaos move too) rather than
+ * forfeiting. A System 1 turn leaves no LLM turn in the state, so it is told by the ply it added.
+ */
+function movedByModel(game: GameState | null, next: GameState): boolean {
+  if (game === null || next.game_id !== game.game_id) return false
+  const llmMoved = llmTurnLanded(game, next) && (next.llm_turn?.attempts.some(played) ?? false)
+  return llmMoved || next.plies.length > game.plies.length
 }
 
 /**
@@ -178,7 +186,7 @@ const NO_PROBES: readonly ProbeRequest[] = []
 
 /** The Probes waiting for the pause that the page is to ask now: none until the game is paused. */
 export const probesReady = (state: GameLoop): readonly ProbeRequest[] =>
-  state.pause === 'paused' && !waitingForLlm(state) ? state.probesWaiting : NO_PROBES
+  state.pause === 'paused' && !waitingForModel(state) ? state.probesWaiting : NO_PROBES
 
 function send(state: GameLoop, request: NewRequest): GameLoop {
   return { ...state, request: { ...request, id: state.nextId }, nextId: state.nextId + 1 }
@@ -190,8 +198,8 @@ function send(state: GameLoop, request: NewRequest): GameLoop {
 function show(state: GameLoop, game: GameState, keepError = false): GameLoop {
   const shown = { ...state, game, request: null }
   if (state.pause !== 'playing') return { ...shown, pause: 'paused' }
-  if (!llmToMove(game)) return shown
-  return send({ ...shown, error: keepError ? state.error : null }, { kind: 'llm-turn', game })
+  if (!modelToMove(game)) return shown
+  return send({ ...shown, error: keepError ? state.error : null }, { kind: 'model-turn', game })
 }
 
 export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
@@ -206,8 +214,8 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
     case 'received': {
       const request = state.request
       if (request?.id !== action.requestId) return state
-      const sound = request.kind === 'move' || (request.kind === 'llm-turn' && movedByLlm(state.game, action.game))
-      const turn = request.kind === 'llm-turn' && llmTurnLanded(state.game, action.game) ? action.game.llm_turn : null
+      const sound = request.kind === 'move' || (request.kind === 'model-turn' && movedByModel(state.game, action.game))
+      const turn = request.kind === 'model-turn' && llmTurnLanded(state.game, action.game) ? action.game.llm_turn : null
       const flash = turn
         ? { id: request.id, turn, landedOn: action.game.last_move?.slice(2, 4) ?? null }
         : state.flash
@@ -218,12 +226,12 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       const probesWaiting = same ? state.probesWaiting : NO_PROBES
       const moveSounds = state.moveSounds + (sound ? 1 : 0)
       // The page asks for the LLM's turn as the state arrives (show), so the LLM ticks from then; paused, it doesn't.
-      const clock = clockAt(action.game, action.at, llmToMove(action.game) && pause === 'playing')
+      const clock = clockAt(action.game, action.at, modelToMove(action.game) && pause === 'playing')
       return show({ ...state, clock, noGame: false, moveSounds, flash, history, pause, probesWaiting }, action.game)
     }
     case 'polled': {
       const { request, game, clock } = state
-      if (request?.id !== action.requestId || request.kind !== 'llm-turn' || !game || !clock) return state
+      if (request?.id !== action.requestId || request.kind !== 'model-turn' || !game || !clock) return state
       if (action.game.game_id !== game.game_id) return state
       return { ...state, clock: resynced(clock, game, action.game, action.at) }
     }
@@ -235,7 +243,7 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
       if (request?.id !== action.requestId) return state
       // Nobody drives the game after its LLM turn failed: the clock stands where it was. A new game that could not
       // start leaves the running game's clock as it was, its turn asked for again.
-      const clock = request.kind === 'llm-turn' && state.clock ? stopped(state.clock, action.at) : state.clock
+      const clock = request.kind === 'model-turn' && state.clock ? stopped(state.clock, action.at) : state.clock
       // A game pausing is paused once nothing runs, a failed turn too: Resume asks for it again.
       const pause = state.pause === 'pausing' ? 'paused' : state.pause
       const failed = { ...state, request: null, error: action.message, clock, pause }
@@ -247,12 +255,12 @@ export function gameLoop(state: GameLoop, action: GameLoopAction): GameLoop {
     }
     case 'pause':
       if (state.pause !== 'playing' || !pausable(state.game)) return state
-      return { ...state, pause: waitingForLlm(state) ? 'pausing' : 'paused' }
+      return { ...state, pause: waitingForModel(state) ? 'pausing' : 'paused' }
     case 'resume': {
       if (state.pause === 'playing') return state
       const resumed = { ...state, pause: 'playing' as const, probesWaiting: NO_PROBES }
       // The turn running goes on; else the next is asked for, its LLM ticking from now.
-      if (state.request || !state.game || !llmToMove(state.game)) return resumed
+      if (state.request || !state.game || !modelToMove(state.game)) return resumed
       return show({ ...resumed, clock: clockAt(state.game, action.at, true) }, state.game)
     }
     case 'probe': {

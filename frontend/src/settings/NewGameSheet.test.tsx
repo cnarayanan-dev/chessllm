@@ -88,13 +88,20 @@ const library: PromptTemplateInfo[] = [
   template('terse@1', null, FREE, false, ['fresh', 'chat_position', 'chat_moves']),
 ]
 
+/** The Prompt templates a System 1 model can play with, as GET /api/system1/options lists them. */
+const system1Templates = [
+  { id: 'system1@a1', name: 'System 1', system_prompt: 'Which move should $color play?', turn_template: '$moves' },
+  { id: 'system1-position-only@b2', name: 'Position only', system_prompt: 'Which move?', turn_template: '$fen' },
+]
+
 /** Stubs the models' response; the Prompt library answers with `library`. */
 function stubModels(response: () => Response) {
-  const fetch = vi
-    .fn()
-    .mockImplementation((path: string) =>
-      Promise.resolve(path === '/api/prompt-templates' ? Response.json(library) : response()),
-    )
+  const fetch = vi.fn().mockImplementation((path: string) => {
+    if (path === '/api/prompt-templates') return Promise.resolve(Response.json(library))
+    if (path === '/api/system1/options')
+      return Promise.resolve(Response.json({ default_url: 'http://localhost:11434', templates: system1Templates }))
+    return Promise.resolve(response())
+  })
   vi.stubGlobal('fetch', fetch)
   return fetch
 }
@@ -184,14 +191,14 @@ describe('opening and closing', () => {
   test('the models are listed afresh each time it opens', async () => {
     const fetch = stubModels(() => Response.json([qwen]))
     const { user } = await openSheet()
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    const listings = () => fetch.mock.calls.filter(([path]) => path === '/api/models').length
+    await waitFor(() => expect(listings()).toBe(1))
 
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'New game' }))
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
-    expect(fetch).toHaveBeenCalledWith('/api/models')
+    await waitFor(() => expect(listings()).toBe(2))
   })
 })
 
@@ -260,12 +267,12 @@ describe('Mode', () => {
     const icons = (name: string) => [...radio(name).querySelectorAll('svg')].map((svg) => svg.classList[1])
     expect(icons('Play LLM')).toEqual(['lucide-user', 'lucide-bot'])
     expect(icons('LLM faceoff')).toEqual(['lucide-bot', 'lucide-bot'])
-    expect(radio('Play LLM')).toHaveAttribute('aria-description', 'You play one side, an LLM the other')
-    expect(radio('LLM faceoff')).toHaveAttribute('aria-description', 'An LLM on each side, to compare models')
+    expect(radio('Play LLM')).toHaveAttribute('aria-description', 'You play one side, a model the other')
+    expect(radio('LLM faceoff')).toHaveAttribute('aria-description', 'A model on each side, to compare them')
     expect(sheet).not.toHaveTextContent('You play one side')
 
     await user.hover(radio('LLM faceoff'))
-    expect(await tooltip()).toHaveTextContent(/^An LLM on each side, to compare models$/)
+    expect(await tooltip()).toHaveTextContent(/^A model on each side, to compare them$/)
   })
 })
 
@@ -700,4 +707,147 @@ test('no Move sound, no sampling table, no text glyphs, and no description lines
   expect(sheet).not.toHaveTextContent(/temperature|sampling/i)
   expect(sheet).not.toHaveTextContent(/[♔♚⇄▸]/)
   expect(sheet).not.toHaveTextContent(/default|Default/)
+})
+
+describe('System 1 models', () => {
+  const system1 = (more: Record<string, unknown> = {}) => ({
+    player: 'system1' as const,
+    model: 'd3:2b',
+    base_url: 'http://localhost:11434',
+    choice_temperature: 1,
+    ...more,
+  })
+  const kind = (group: string) => within(screen.getByRole('radiogroup', { name: group }))
+  const openSystem1Settings = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole('button', { name: 'Advanced settings' }))
+
+  test('each Model player is an LLM or a System 1 model, an LLM by default', async () => {
+    await openSheet()
+
+    expect(radiosIn('Opponent kind')).toEqual(['LLM', 'System 1'])
+    expect(kind('Opponent kind').getByRole('radio', { name: 'LLM' })).toBeChecked()
+  })
+
+  test('Play LLM: a System 1 opponent is named in a field, with the server and Choice temperature in Advanced settings', async () => {
+    const { user, started } = await openSheet()
+
+    await user.click(kind('Opponent kind').getByRole('radio', { name: 'System 1' }))
+    expect(screen.queryByRole('combobox', { name: 'Opponent' })).not.toBeInTheDocument()
+    const model = screen.getByRole('textbox', { name: 'Opponent' })
+    expect(model).toHaveValue('d3:2b')
+    await user.clear(model)
+    await user.type(model, 'd1:2b')
+    await openSystem1Settings(user)
+    const url = screen.getByRole('textbox', { name: 'Server URL' })
+    expect(url).toHaveValue('http://localhost:11434')
+    await user.clear(url)
+    await user.type(url, 'http://localhost:9000')
+    const temperature = screen.getByRole('spinbutton', { name: 'Choice temperature' })
+    expect(temperature).toHaveValue(1)
+    await user.clear(temperature)
+    await user.type(temperature, '0.5')
+    await user.click(screen.getByRole('button', { name: 'Play as Black' }))
+
+    expect(started()).toEqual({
+      mode: 'play_llm',
+      white: system1({ model: 'd1:2b', base_url: 'http://localhost:9000', choice_temperature: 0.5 }),
+      black: { player: 'human' },
+      rules: 'standard',
+      max_attempts: 5,
+    })
+  })
+
+  test("a System 1 side's server starts as the one the API names", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((path: string) =>
+        Promise.resolve(
+          path === '/api/system1/options'
+            ? Response.json({ default_url: 'http://api-says:1234', templates: system1Templates })
+            : path === '/api/prompt-templates'
+              ? Response.json(library)
+              : Response.json(models),
+        ),
+      ),
+    )
+    const { user } = await openSheet()
+
+    await user.click(kind('Opponent kind').getByRole('radio', { name: 'System 1' }))
+    await openSystem1Settings(user)
+
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Server URL' })).toHaveValue('http://api-says:1234'))
+  })
+
+  test('its Prompt template is picked from the System 1 templates the API lists, the first being the default', async () => {
+    const { user, started } = await openSheet({ ...playLlm, black: system1() })
+    await openSystem1Settings(user)
+
+    const picker = await screen.findByRole('combobox', { name: 'Prompt template' })
+    await waitFor(() => expect(picker).toHaveTextContent('System 1'))
+    await user.click(picker)
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual([
+      'System 1',
+      'Position only',
+    ])
+    await user.click(screen.getByRole('option', { name: 'Position only' }))
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+
+    expect(started()).toMatchObject({ black: system1({ prompt_template_id: 'system1-position-only@b2' }) })
+  })
+
+  test('the sheet opens with the last game\'s System 1 side and its settings', async () => {
+    const last = { ...faceoff, white: llm('gemma3:4b'), black: system1({ model: 'd1:2b', choice_temperature: 0.25 }) }
+    const { user, started } = await openSheet(last)
+
+    expect(screen.getByRole('textbox', { name: 'Black model' })).toHaveValue('d1:2b')
+    expect(screen.getByRole('combobox', { name: 'White model' })).toHaveTextContent('gemma3:4b')
+    await user.click(screen.getByRole('button', { name: 'Start faceoff' }))
+
+    expect(started()).toMatchObject({ white: llm('gemma3:4b'), black: system1({ model: 'd1:2b', choice_temperature: 0.25 }) })
+  })
+
+  test('LLM faceoff: either side can be a System 1 model, against an LLM or another', async () => {
+    const { user, started } = await openSheet(faceoff)
+
+    await user.click(kind('White kind').getByRole('radio', { name: 'System 1' }))
+    await user.click(kind('Black kind').getByRole('radio', { name: 'System 1' }))
+    await user.type(screen.getByRole('textbox', { name: 'Black model' }), '-x')
+    await user.click(screen.getByRole('button', { name: 'Start faceoff' }))
+
+    expect(started()).toMatchObject({ white: system1(), black: system1({ model: 'd3:2b-x' }) })
+  })
+
+  test('with no LLM in the game, the settings that are an LLM\'s are not offered', async () => {
+    const { user } = await openSheet({ ...playLlm, black: system1() })
+
+    expect(screen.queryByRole('switch', { name: 'Thinking' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Advanced settings' }))
+    expect(screen.queryByRole('radiogroup', { name: 'What the LLM is given' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Illegal moves before forfeit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Server URL' })).toBeVisible()
+  })
+
+  test('Chaos rules cannot be chosen against a System 1 model, the reason in the tooltip', async () => {
+    const { user } = await openSheet({ ...playLlm, black: system1() })
+
+    const chaos = radio(/Chaos/)
+    expect(chaos).toHaveAttribute('aria-disabled', 'true')
+    await user.hover(chaos)
+    expect(await tooltip()).toHaveTextContent('A System 1 model plays only legal moves')
+  })
+
+  test('a game does not start with no model or a Choice temperature below 0, the reason in the tooltip', async () => {
+    const { user, onStart } = await openSheet({ ...playLlm, black: system1() })
+    await user.click(screen.getByRole('button', { name: 'Advanced settings' }))
+    const temperature = screen.getByRole('spinbutton', { name: 'Choice temperature' })
+    await user.clear(temperature)
+    await user.type(temperature, '-1')
+
+    const start = screen.getByRole('button', { name: 'Play as White' })
+    expect(start).toBeDisabled()
+    await user.hover(start.parentElement!)
+    expect(await tooltip()).toHaveTextContent('Choice temperature must be a number, 0 or more.')
+    await user.click(start)
+    expect(onStart).not.toHaveBeenCalled()
+  })
 })

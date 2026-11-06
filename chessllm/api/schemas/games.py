@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from chessllm.game.settings import MAX_ATTEMPTS_RANGE, Settings
-from chessllm.game.sides import HumanSide, LlmSide
+from chessllm.game.sides import HumanSide, LlmSide, System1Side
 from chessllm.core.types import RulesKey
 
 
@@ -16,12 +16,13 @@ class HumanMove(BaseModel):
 # The app starts Play LLM games and LLM faceoffs; an Anchor match is started from the command line
 # (anchor-match), so no Anchor side is taken here.
 AppMode = Literal["play_llm", "llm_faceoff"]
-SideIn = Annotated[HumanSide | LlmSide, Field(discriminator="player")]
+SideIn = Annotated[HumanSide | LlmSide | System1Side, Field(discriminator="player")]
 
 
 class NewGame(BaseModel):
-    """The settings chosen in the New game sheet: the Mode and who plays each side, with the settings of each LLM
-    side, and the rules for every LLM in the game. Sampling isn't one of them: it comes from the config file."""
+    """The settings chosen in the New game sheet: the Mode and who plays each side, with the settings of each LLM or
+    System 1 side, and the rules for every LLM in the game (a System 1 side plays Standard rules only). Sampling isn't
+    one of them: it comes from the config file."""
 
     model_config = ConfigDict(extra="forbid")
 

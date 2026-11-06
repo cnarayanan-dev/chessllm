@@ -1,18 +1,17 @@
 // Rematch (CONTEXT.md): a new game with the same Mode and settings as the game just played, the colours swapped.
 import type { GameSettings, NewGame } from '@/api/types'
+import { isLlm, type Side } from '@/game/sides'
 import { COLOR_NAMES } from '@/game/wording'
-
-type Side = GameSettings['white']
 
 /** With Prompt lab off, an LLM side plays the Default of its LLM constraints, whatever it played before. */
 function withDefaultTemplate(side: Side): Side {
-  if (side.player !== 'llm') return side
+  if (!isLlm(side)) return side
   const { prompt_template_id: _, ...rest } = side
   return rest
 }
 
 /**
- * The rematch's new-game request: each side, the human or an LLM with its model and the settings it played under,
+ * The rematch's new-game request: each side, the human or a Model player with its model and the settings it played under,
  * its Prompt template too with Prompt lab on, takes the other colour.
  */
 export const rematchOf = (settings: GameSettings, promptLab: boolean): NewGame => ({
@@ -25,9 +24,9 @@ export const rematchOf = (settings: GameSettings, promptLab: boolean): NewGame =
   ...(settings.legal_counterpart != null && { legal_counterpart: settings.legal_counterpart }),
 })
 
-/** What Rematch does, for its tooltip: the colour you will play, or that the LLMs swap. */
+/** What Rematch does, for its tooltip: the colour you will play, or that the models swap. */
 export function rematchDescription(settings: GameSettings): string {
-  if (settings.mode === 'llm_faceoff') return 'Same settings, the LLMs swap colours'
+  if (settings.mode === 'llm_faceoff') return 'Same settings, the models swap colours'
   const yours = settings.white.player === 'human' ? 'black' : 'white'
   return `Same settings, you play ${COLOR_NAMES[yours]}`
 }

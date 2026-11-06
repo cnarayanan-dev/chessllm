@@ -422,3 +422,68 @@ test('the tab chosen stays chosen on the next turn and after a reload', async ()
 
   expect(tab('Answer')).toHaveAttribute('aria-selected', 'true')
 })
+
+describe('a System 1 model', () => {
+  const system1 = {
+    player: 'system1' as const,
+    model: 'd3:2b',
+    base_url: 'http://localhost:11434',
+    choice_temperature: 1,
+  }
+  /** 1. e4 e5 2. Nf3 Nc6, with Black the System 1 model: no LLM turn is in the state. */
+  const game = (overrides: Partial<GameState> = {}) =>
+    afterE5({
+      plies: plies(E4, E5, NF3, NC6),
+      llm_turn: null,
+      llm_turns: [],
+      settings: { ...afterE5().settings, black: system1 },
+      ...overrides,
+    })
+
+  test("says plainly that its move has no Thinking, Prompt or Answer to show, naming the move", () => {
+    render(<TurnPanel game={game()} ply={4} live />)
+
+    expect(badge()).toBe('2… Nc6')
+    expect(within(panel()).getByTestId('system1-turn')).toHaveTextContent(
+      'd3:2b is a System 1 model: it gives a probability for each legal move and writes no text, so this turn has no Thinking, Prompt or Answer to show.',
+    )
+    expect(within(panel()).queryByRole('tab')).not.toBeInTheDocument()
+  })
+
+  test("at a move of the human's it shows the System 1 model's last move before it, as an LLM's turn would show", () => {
+    render(<TurnPanel game={game()} ply={3} live={false} />)
+
+    expect(badge()).toBe('1… e5')
+    expect(within(panel()).getByTestId('system1-turn')).toBeVisible()
+  })
+
+  test('before it has moved, it says so plainly', () => {
+    render(<TurnPanel game={game()} ply={1} live={false} />)
+
+    expect(within(panel()).queryByTestId('system1-turn')).not.toBeInTheDocument()
+    expect(within(panel()).getByText('The System 1 model has not moved yet.')).toBeVisible()
+  })
+
+  test('its forfeit is shown live as forfeited', () => {
+    const over = game({ plies: plies(E4), turn: 'black', status: 'over', result: '1-0', end_reason: 'forfeit' })
+
+    render(<TurnPanel game={over} ply={1} live />)
+
+    expect(badge()).toBe('forfeited')
+    expect(within(panel()).getByTestId('system1-turn')).toBeVisible()
+  })
+
+  test("beside an LLM, the LLM's move still shows its Reasoning", () => {
+    const llmTurn = aTurn('e5')
+    const mixed = afterE5({
+      settings: { ...afterE5().settings, white: system1, black: afterE5().settings.black },
+      llm_turn: llmTurn,
+      llm_turns: [llmTurn],
+    })
+
+    render(<TurnPanel game={mixed} ply={2} live />)
+
+    expect(within(panel()).getByText('Reasoning for e5.')).toBeVisible()
+    expect(within(panel()).queryByTestId('system1-turn')).not.toBeInTheDocument()
+  })
+})

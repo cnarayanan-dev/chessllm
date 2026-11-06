@@ -26,6 +26,7 @@ def test_every_api_endpoint_describes_its_response_with_a_named_model():
             "items": {"$ref": "#/components/schemas/PromptTemplateInfo"},
             "title": "Response List Prompt Templates Api Prompt Templates Get",
         },
+        ("GET", "/api/system1/options"): {"$ref": "#/components/schemas/System1Options"},
         ("POST", "/api/prompt-templates"): {"$ref": "#/components/schemas/PromptTemplateInfo"},
         ("POST", "/api/prompt-templates/{template_id}/hide"): {
             "type": "array",
@@ -37,6 +38,7 @@ def test_every_api_endpoint_describes_its_response_with_a_named_model():
         ("GET", "/api/games/current"): {"$ref": "#/components/schemas/GameState"},
         ("POST", "/api/games/current/moves"): {"$ref": "#/components/schemas/GameState"},
         ("POST", "/api/games/current/llm-turn"): {"$ref": "#/components/schemas/GameState"},
+        ("POST", "/api/games/current/system1-turn"): {"$ref": "#/components/schemas/GameState"},
         ("GET", "/api/games/current/llm-turns/{ply}/attempts/{attempt}/prompt"): {
             "$ref": "#/components/schemas/TurnPrompt"
         },

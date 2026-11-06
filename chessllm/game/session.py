@@ -132,6 +132,7 @@ class GameSession:
         # Every LLM turn of the game, the last one included. A turn joins only once it has landed, played or
         # forfeited.
         self._llm_turns: list[LlmTurn] = []
+        self._system1_forfeit_error: str | None = None
         self._end: GameEnd | None = None
         self._time_used: dict[Color, float] = dict.fromkeys(COLORS, 0.0)  # each side's finished moves
         # When the move of the side to move started, while it runs: a human's once the position is ready, an LLM's
@@ -358,7 +359,10 @@ class GameSession:
         def log(outcome: System1Outcome) -> None:
             self._log.write("system1_turn", **outcome.turn.log_shape())
 
-        self._play_model_turn(SYSTEM1_TURN, self._system1_sides, produce, land, log)
+        def settle(outcome: System1Outcome, color: Color) -> None:
+            self._system1_forfeit_error = outcome.turn.error if outcome.forfeit else None
+
+        self._play_model_turn(SYSTEM1_TURN, self._system1_sides, produce, land, log, settle)
 
     def _play_model_turn(
         self,
@@ -598,6 +602,7 @@ class GameSession:
             running_s=self._time_since_move_started(self._clock()) if self._end is None else None,
             evaluator=self._evaluation_engine,
             prompt_templates=self._played_templates,
+            system1_forfeit_error=self._system1_forfeit_error,
         )
 
     def _position_ready(self) -> None:

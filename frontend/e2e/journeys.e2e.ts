@@ -235,7 +235,7 @@ test('Rematch after an LLM faceoff: the two LLMs change sides, each with its own
   await expect(players).toHaveText([/^White qwen3\.5:9b/, /^Black llama3:8b/])
 
   const rematch = card.getByRole('button', { name: 'Rematch' })
-  await expect(rematch).toHaveAttribute('aria-description', 'Same settings, the LLMs swap colours')
+  await expect(rematch).toHaveAttribute('aria-description', 'Same settings, the models swap colours')
   await rematch.click()
 
   await expect(players).toHaveText([/^White llama3:8b/, /^Black qwen3\.5:9b/])

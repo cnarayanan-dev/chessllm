@@ -37,9 +37,11 @@ def test_a_mode_accepts_the_sides_it_needs():
     ANCHOR_MATCH.check_sides(AnchorSide(), LlmSide())
 
 
-def test_a_faceoff_and_an_anchor_match_take_a_system_1_side_wherever_they_take_an_llm_side():
+def test_every_mode_takes_a_system_1_side_wherever_it_takes_an_llm_side():
     system1 = System1Side(model="d3:2b", base_url="http://localhost:11434")
 
+    PLAY_LLM.check_sides(HumanSide(), system1)
+    PLAY_LLM.check_sides(system1, HumanSide())
     LLM_FACEOFF.check_sides(system1, LlmSide())
     LLM_FACEOFF.check_sides(system1, system1)
     ANCHOR_MATCH.check_sides(AnchorSide(), system1)
@@ -56,7 +58,7 @@ SYSTEM1 = System1Side(model="d3:2b", base_url="http://localhost:11434")
         (LLM_FACEOFF, HumanSide(), LlmSide(), "LLM faceoff needs no human side, not 1"),
         (ANCHOR_MATCH, LlmSide(), LlmSide(), "Anchor match needs one Model player side, not 2"),
         (LLM_FACEOFF, AnchorSide(), AnchorSide(), "LLM faceoff needs two Model player sides, not 0"),
-        (PLAY_LLM, SYSTEM1, HumanSide(), "Play LLM needs one LLM side, not 0"),
+        (PLAY_LLM, AnchorSide(), HumanSide(), "Play LLM needs one Model player side, not 0"),
         (LLM_FACEOFF, SYSTEM1, AnchorSide(), "LLM faceoff needs two Model player sides, not 1"),
         (ANCHOR_MATCH, SYSTEM1, LlmSide(), "Anchor match needs one Model player side, not 2"),
         (ANCHOR_MATCH, HumanSide(), AnchorSide(), "Anchor match needs no human side, not 1"),

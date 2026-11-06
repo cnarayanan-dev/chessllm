@@ -34,16 +34,16 @@ const rules = () => {
 const line = (name: string) =>
   within(within(gameCard()).getByRole('list', { name })).getAllByRole('listitem').map((item) => item.textContent!.replace(/^\u00a0·\u00a0/, ''))
 
-test("the Mode icon shows the players beside the Mode's name: you against an LLM, or an LLM against an LLM", () => {
+test("the Mode icon shows the players beside the Mode's name: you against a model, or a model against a model", () => {
   const { unmount } = renderCard(aGame())
 
-  const mode = within(gameCard()).getByRole('img', { name: 'You against an LLM' })
+  const mode = within(gameCard()).getByRole('img', { name: 'You against a model' })
   expect(icons(mode)).toEqual(['user', 'bot'])
   expect(within(gameCard()).getByText('Play LLM')).toBeInTheDocument()
   unmount()
 
   renderCard(faceoffOf({}, {}))
-  expect(icons(within(gameCard()).getByRole('img', { name: 'An LLM against an LLM' }))).toEqual(['bot', 'bot'])
+  expect(icons(within(gameCard()).getByRole('img', { name: 'A model against a model' }))).toEqual(['bot', 'bot'])
   expect(within(gameCard()).getByText('LLM faceoff')).toBeInTheDocument()
 })
 
@@ -190,7 +190,7 @@ test('no Rematch while the game is playing; the result\'s room is held under "Pl
   expect(within(gameCard()).queryByTestId('result')).not.toBeInTheDocument()
 })
 
-test("Rematch's tooltip and aria-description say which colour you will play, or that the LLMs swap", async () => {
+test("Rematch's tooltip and aria-description say which colour you will play, or that the models swap", async () => {
   const { unmount } = renderCard(over(aGame()))
   const rematch = within(gameCard()).getByRole('button', { name: 'Rematch' })
 
@@ -203,7 +203,7 @@ test("Rematch's tooltip and aria-description say which colour you will play, or 
   renderCard(over(faceoffOf({}, {})))
   expect(within(gameCard()).getByRole('button', { name: 'Rematch' })).toHaveAttribute(
     'aria-description',
-    'Same settings, the LLMs swap colours',
+    'Same settings, the models swap colours',
   )
 })
 

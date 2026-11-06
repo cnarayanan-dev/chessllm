@@ -1,10 +1,11 @@
 // Runs the game loop: sends the request the reducer asks for and answers it with the backend's state or error.
 // A request the reducer no longer waits for is aborted, and its answer, should one arrive, is dropped.
 import { useCallback, useEffect, useReducer, useRef } from 'react'
-import { ApiError, getGame, playLlmTurn, playMove, startGame } from '@/api/client'
+import { ApiError, getGame, playLlmTurn, playMove, playSystem1Turn, startGame } from '@/api/client'
 import type { GameState, NewGame, ProbeRequest } from '@/api/types'
 import { playMoveSound } from '@/components/board/moveSound'
-import { gameLoop, initialGameLoop, llmToMove, type Request } from '@/game/gameLoop'
+import { isSystem1 } from '@/game/sides'
+import { gameLoop, initialGameLoop, modelToMove, type Request } from '@/game/gameLoop'
 
 const POLL_MS = 2000
 const CLOCK_POLL_MS = 1000
@@ -32,13 +33,14 @@ async function pollEverySecond(signal: AbortSignal, onPoll: (game: GameState) =>
 }
 
 /**
- * Asks for the LLM's turn in `game`. Its answer only comes once the turn and what follows it are over, so meanwhile
+ * Asks for the turn of the Model player to move in `game`, an LLM's or a System 1 model's, each at its own endpoint.
+ * Its answer only comes once the turn and what follows it are over, so meanwhile
  * the game is checked every second and handed to `onPoll`, for the LLM's Time used. A 409 means the backend won't
  * start the turn, most often because one is already running (another tab, or this page before a reload). The page
  * can't attach to that turn, so it checks the game every 2 s until the turn has landed, each check handed to `onPoll`
  * too. A stale state also gets a 409, and the first check settles it.
  */
-export async function requestLlmTurn(
+export async function requestModelTurn(
   game: GameState,
   signal: AbortSignal,
   onPoll: (game: GameState) => void = () => {},
@@ -47,7 +49,7 @@ export async function requestLlmTurn(
   signal.addEventListener('abort', () => polling.abort())
   void pollEverySecond(polling.signal, onPoll)
   try {
-    return await playLlmTurn(signal)
+    return await (isSystem1(game.settings[game.turn]) ? playSystem1Turn(signal) : playLlmTurn(signal))
   } catch (error) {
     if (!(error instanceof ApiError) || error.status !== 409) throw error
     polling.abort() // the checks below take over
@@ -55,8 +57,9 @@ export async function requestLlmTurn(
       await wait(POLL_MS, signal)
       const current = await getGame(signal)
       onPoll(current)
-      const moved = current.llm_turns.length > game.llm_turns.length
-      if (current.game_id !== game.game_id || moved || !llmToMove(current)) return current
+      // A System 1 turn leaves no LLM turn in the state, only the ply it played (or the game's end, if it forfeited).
+      const moved = current.llm_turns.length > game.llm_turns.length || current.plies.length > game.plies.length
+      if (current.game_id !== game.game_id || moved || !modelToMove(current)) return current
     }
   } finally {
     polling.abort()
@@ -82,8 +85,8 @@ function perform(request: Request, signal: AbortSignal, onPoll: (game: GameState
       return startGame(request.newGame, signal)
     case 'move':
       return playMove(request.uci, signal)
-    case 'llm-turn':
-      return requestLlmTurn(request.game, signal, onPoll)
+    case 'model-turn':
+      return requestModelTurn(request.game, signal, onPoll)
   }
 }
 

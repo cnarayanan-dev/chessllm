@@ -127,13 +127,15 @@ function GainCell({ game, color }: { game: GameState; color: Color }) {
 
 export function MistakesCard({ game }: { game: GameState }) {
   const sides = new Map(llmColors(game).map((color) => [color, counts(game, color)]))
+  // Illegal moves and notation slips are an LLM's: a System 1 model has none, by construction (ADR 0012).
+  if (sides.size === 0) return null
   const chaosRules = game.settings.rules === 'chaos'
   const metrics: Metric[] = chaosRules ? ['illegal', 'spawns'] : ['illegal', 'slips']
   // Gains need an evaluator: without one there are none to add up.
   const gains = showsChaosGains(game) && game.evaluator != null
   const model = (color: Color) => {
     const side = game.settings[color]
-    return side.player === 'llm' ? side.model : ''
+    return side.player === 'human' ? '' : side.model
   }
   const countCell = (color: Color, metric: Metric) => {
     const mine = sides.get(color)![metric]

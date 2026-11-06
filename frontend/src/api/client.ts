@@ -7,6 +7,7 @@ import type {
   ProbeRequest,
   PromptTemplateInfo,
   Ranking,
+  System1Options,
   TurnPrompt,
 } from '@/api/types'
 
@@ -63,6 +64,14 @@ export const playMove = (uci: string, signal?: AbortSignal) =>
 
 export const playLlmTurn = (signal?: AbortSignal) =>
   api<GameState>('POST', '/api/games/current/llm-turn', undefined, signal)
+
+/** Asks for the turn of the System 1 model to move; refused (409) unless it is one's turn. */
+export const playSystem1Turn = (signal?: AbortSignal) =>
+  api<GameState>('POST', '/api/games/current/system1-turn', undefined, signal)
+
+/** The Prompt templates a System 1 side can play with, the default first. */
+export const getSystem1Options = (signal?: AbortSignal) =>
+  api<System1Options>('GET', '/api/system1/options', undefined, signal)
 
 /**
  * The whole Prompt of an attempt (numbered from 1) of the current game's LLM turn at `ply`, by turn, rebuilt by the API

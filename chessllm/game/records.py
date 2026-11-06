@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, Field, SerializerFunctionWrapHandler, model_serializer
-from pydantic.json_schema import SkipJsonSchema
 
 from chessllm.core.types import Color, GameResult, ModeKey, RulesKey, Sampling
 from chessllm.game.sides import AnchorSide, HumanSide, LlmSide, System1Side
@@ -42,8 +41,7 @@ EndReason = Literal[
 ]
 
 
-# A System 1 side is the benchmark's commands' alone, so the API's schema doesn't list it (System1Side).
-SideOut = Annotated[HumanSide | LlmSide | AnchorSide | SkipJsonSchema[System1Side], Field(discriminator="player")]
+SideOut = Annotated[HumanSide | LlmSide | AnchorSide | System1Side, Field(discriminator="player")]
 
 
 def is_none(value: object) -> bool:
@@ -361,3 +359,6 @@ class GameState(BaseModel):
     evaluator: EvaluationEngine | None = Field(default=None, exclude_if=is_none)
     # The Prompt template of each LLM side, a side on the Default too; a human's or an Anchor's side has none.
     prompt_templates: dict[Color, PlayedTemplate] = Field(default_factory=dict)
+    # Why a System 1 model forfeited the game: the error of its failed call. An LLM's is in its last turn's attempts;
+    # a System 1 turn is not in the state, only in the game log.
+    system1_forfeit_error: str | None = Field(default=None, exclude_if=is_none)

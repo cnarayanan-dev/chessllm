@@ -44,3 +44,21 @@ class NewPromptTemplate(BaseModel):
     system_prompt: str
     turn_template: str
     llm_constraints: LlmConstraints
+
+
+class System1TemplateInfo(BaseModel):
+    """A Prompt template a System 1 model can play with: its System prompt is the question it is asked, its Turn
+    template the state it is given."""
+
+    id: str
+    name: str | None
+    system_prompt: str
+    turn_template: str
+
+
+class System1Options(BaseModel):
+    """What a new game's System 1 side is offered: the server a System 1 model is looked for at unless the game says
+    another (the app's default), and the Prompt templates it can play with, the default first."""
+
+    default_url: str
+    templates: list[System1TemplateInfo]

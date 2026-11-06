@@ -5,6 +5,8 @@ type Schemas = components['schemas']
 
 /** An LLM side, with the settings it plays under. */
 export type LlmSide = Schemas['LlmSide']
+/** A System 1 model's side: the model, the server that serves it, its Choice temperature and its Prompt template. */
+export type System1Side = Schemas['System1Side']
 /** The Turn memory of an LLM side (CONTEXT.md): fresh, chat_position or chat_moves. */
 export type TurnMemory = LlmSide['turn_memory']
 // The page only shows games it starts, Play LLM and LLM faceoffs: an Anchor match is played from the command
@@ -32,6 +34,9 @@ export type NewGame = Omit<Schemas['NewGame'], 'legal_counterpart'> & { legal_co
 export type ModelInfo = Schemas['ModelInfo']
 /** A Prompt template of the Prompt library, with the LLM constraints it fits and those it is the Default of. */
 export type PromptTemplateInfo = Schemas['PromptTemplateInfo']
+/** A Prompt template a System 1 model can play with: its System prompt is the question, its Turn template the state. */
+export type System1TemplateInfo = Schemas['System1TemplateInfo']
+export type System1Options = Schemas['System1Options']
 /** A Probe (CONTEXT.md): the LLM asked again about a past turn's position with a Prompt template, outside the game. */
 export type Probe = Schemas['Probe']
 /**

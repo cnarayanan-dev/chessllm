@@ -2,9 +2,9 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { GameLoop } from '@/game/gameLoop'
 import { liveTotal } from '@/game/timeUsed'
-import { requestLlmTurn, useGameLoop } from '@/game/useGameLoop'
+import { requestModelTurn, useGameLoop } from '@/game/useGameLoop'
 import { fakeBackend, later } from '@/test/fakeBackend'
-import { aGame, aTurn, afterE4, afterE5 } from '@/test/games'
+import { aGame, aTurn, afterE4, afterE5, withSystem1Black } from '@/test/games'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
@@ -14,7 +14,7 @@ const refused = () => Response.json({ detail: 'an LLM turn is already running' }
 test('returns the state the LLM turn was played in', async () => {
   fakeBackend().on('POST /api/games/current/llm-turn', Response.json(afterE5()))
 
-  expect(await requestLlmTurn(afterE4(), new AbortController().signal)).toEqual(afterE5())
+  expect(await requestModelTurn(afterE4(), new AbortController().signal)).toEqual(afterE5())
 })
 
 test('when a turn is already running, checks the game every 2 s until it has landed', async () => {
@@ -22,7 +22,7 @@ test('when a turn is already running, checks the game every 2 s until it has lan
     .on('POST /api/games/current/llm-turn', refused())
     .on('GET /api/games/current', Response.json(afterE4()), Response.json(afterE5()))
 
-  const turn = requestLlmTurn(afterE4(), new AbortController().signal)
+  const turn = requestModelTurn(afterE4(), new AbortController().signal)
   await vi.advanceTimersByTimeAsync(1999)
   expect(backend.sentTo('GET /api/games/current')).toHaveLength(0)
   await vi.advanceTimersByTimeAsync(2001)
@@ -43,7 +43,7 @@ test('a faceoff reloaded mid-turn waits for the running turn, which the game sho
     .on('POST /api/games/current/llm-turn', refused())
     .on('GET /api/games/current', Response.json(midTurn), Response.json(landed))
 
-  const turn = requestLlmTurn(midTurn, new AbortController().signal)
+  const turn = requestModelTurn(midTurn, new AbortController().signal)
   await vi.advanceTimersByTimeAsync(4000)
 
   expect(await turn).toEqual(landed)
@@ -54,7 +54,7 @@ test('stops checking once abandoned', async () => {
   const backend = fakeBackend().on('POST /api/games/current/llm-turn', refused())
   const controller = new AbortController()
 
-  const turn = requestLlmTurn(afterE4(), controller.signal)
+  const turn = requestModelTurn(afterE4(), controller.signal)
   const outcome = turn.catch((error: unknown) => error)
   await vi.advanceTimersByTimeAsync(1000)
   controller.abort()
@@ -67,7 +67,32 @@ test('stops checking once abandoned', async () => {
 test('any other failure is the error to show', async () => {
   fakeBackend().on('POST /api/games/current/llm-turn', Response.json({ detail: 'no game started' }, { status: 404 }))
 
-  await expect(requestLlmTurn(afterE4(), new AbortController().signal)).rejects.toThrow('no game started')
+  await expect(requestModelTurn(afterE4(), new AbortController().signal)).rejects.toThrow('no game started')
+})
+
+describe('a System 1 model', () => {
+  const system1 = withSystem1Black()
+
+  test('has its turn asked for at its own endpoint, whose state is the turn played in', async () => {
+    const backend = fakeBackend().on('POST /api/games/current/system1-turn', Response.json(afterE5(system1)))
+
+    const played = await requestModelTurn(afterE4(system1), new AbortController().signal)
+
+    expect(played).toEqual(afterE5(system1))
+    expect(backend.sentTo('POST /api/games/current/llm-turn')).toHaveLength(0)
+  })
+
+  test('when a turn is already running, the game is checked until a ply has landed, as no LLM turn does', async () => {
+    const backend = fakeBackend()
+      .on('POST /api/games/current/system1-turn', refused())
+      .on('GET /api/games/current', Response.json(afterE4(system1)), Response.json(afterE5(system1)))
+
+    const turn = requestModelTurn(afterE4(system1), new AbortController().signal)
+    await vi.advanceTimersByTimeAsync(4000)
+
+    expect(await turn).toEqual(afterE5(system1))
+    expect(backend.sentTo('GET /api/games/current')).toHaveLength(2)
+  })
 })
 
 describe("the LLM's Time used", () => {
@@ -81,7 +106,7 @@ describe("the LLM's Time used", () => {
       .on('POST /api/games/current/llm-turn', later().promise)
     const { result } = renderHook(() => useGameLoop())
     await act(() => vi.advanceTimersByTimeAsync(0))
-    expect(result.current.state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(result.current.state.request).toMatchObject({ kind: 'model-turn' })
 
     await act(() => vi.advanceTimersByTimeAsync(7000))
 
@@ -126,7 +151,7 @@ describe("the LLM's Time used", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(3000))
 
-    expect(result.current.state.request).toMatchObject({ kind: 'llm-turn' })
+    expect(result.current.state.request).toMatchObject({ kind: 'model-turn' })
     expect(now(result.current.state, 'black')).toBe(66)
   })
 

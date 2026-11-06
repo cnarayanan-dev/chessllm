@@ -2,6 +2,7 @@
 import type { Color, GameSettings, GameState, TurnMemory } from '@/api/types'
 import { chaosResolution } from '@/game/chaos'
 import { humanColor } from '@/game/gameLoop'
+import { isLlm, isSystem1 } from '@/game/sides'
 
 export const COLORS: readonly Color[] = ['white', 'black']
 export const COLOR_NAMES: Record<Color, string> = { white: 'White', black: 'Black' }
@@ -23,8 +24,10 @@ const END_REASONS: Record<string, string> = {
 type LlmSide = Extract<GameSettings['white'], { player: 'llm' }>
 
 export const faceoff = (game: GameState) => game.settings.mode === 'llm_faceoff'
-export const llmColors = (game: GameState) => COLORS.filter((color) => game.settings[color].player === 'llm')
+export const llmColors = (game: GameState) => COLORS.filter((color) => isLlm(game.settings[color]))
 const llmSide = (game: GameState, color: Color) => game.settings[color] as LlmSide
+/** The model of a Model player's side, an LLM's or a System 1 model's. */
+export const modelName = (game: GameState, color: Color) => (game.settings[color] as { model: string }).model
 /**
  * Who took whose king. A king taken by a legal move was left hanging by its side; one taken by a chaos move was
  * taken by the mover, which may even have taken its own king.
@@ -33,7 +36,7 @@ function kingCapture(game: GameState, winner: Color): string {
   const loser = other(winner)
   const last = game.plies.at(-1)
   const human = humanColor(game)
-  const name = (color: Color) => (faceoff(game) ? `${llmSide(game, color).model} (${COLOR_NAMES[color]})` : llmSide(game, color).model)
+  const name = (color: Color) => (faceoff(game) ? `${modelName(game, color)} (${COLOR_NAMES[color]})` : modelName(game, color))
   if (last && chaosResolution(last)) {
     if (last.color === loser) return `${name(loser)} took its own king`
     return loser === human ? `${name(winner)} took your king` : `${name(winner)} took the king of ${name(loser)}`
@@ -44,7 +47,7 @@ function kingCapture(game: GameState, winner: Color): string {
 /** Whose chaos move left its own king in check, which loses at once. */
 function kingLeftInCheck(game: GameState, winner: Color): string {
   const loser = other(winner)
-  const model = faceoff(game) ? `${llmSide(game, loser).model} (${COLOR_NAMES[loser]})` : llmSide(game, loser).model
+  const model = faceoff(game) ? `${modelName(game, loser)} (${COLOR_NAMES[loser]})` : modelName(game, loser)
   return `${model} left its own king in check`
 }
 
@@ -54,7 +57,7 @@ export function resultText(game: GameState): { result: string; detail: string | 
   const winner = ({ '1-0': 'white', '0-1': 'black' } as const)[game.result as '1-0' | '0-1'] as Color | undefined
   const title =
     faceoff(game) && winner
-      ? `${llmSide(game, winner).model} (${COLOR_NAMES[winner]}) wins`
+      ? `${modelName(game, winner)} (${COLOR_NAMES[winner]}) wins`
       : (RESULT_TITLES[game.result ?? ''] ?? game.result ?? '')
   const endReason = game.end_reason ?? ''
   const reason = END_REASONS[endReason] ?? `by ${endReason.replaceAll('_', ' ')}`
@@ -63,10 +66,13 @@ export function resultText(game: GameState): { result: string; detail: string | 
   let detail: string | null = null
   if (endReason === 'king_capture' && winner) detail = kingCapture(game, winner)
   else if (endReason === 'king_left_in_check' && winner) detail = kingLeftInCheck(game, winner)
+  // A System 1 model's turn is one call, which failed: its error is the game's own, as the last LLM turn may be another side's.
+  else if (endReason === 'forfeit' && winner && isSystem1(game.settings[other(winner)]))
+    detail = game.system1_forfeit_error ?? `${modelName(game, other(winner))} gave no answer`
   else if (endReason === 'forfeit' && error) detail = error
   else if (endReason === 'forfeit' && faceoff(game) && winner) {
     const tries = game.llm_turn?.attempts.length ?? 0
-    detail = `${llmSide(game, other(winner)).model} gave no legal move in ${tries} tries`
+    detail = `${modelName(game, other(winner))} gave no legal move in ${tries} tries`
   }
   return { result: `${title} ${reason}`, detail }
 }

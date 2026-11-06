@@ -1,7 +1,7 @@
 // The Turn panel, under the Game card: how the LLM decided the move on the board, in tabs.
 import { Brain, ChevronLeft, ChevronRight, CornerDownLeft, Eye, MessageSquareText, Scale, Undo2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import type { Attempt, GameState, LlmTurn, ProbeRequest } from '@/api/types'
+import type { Attempt, Color, GameState, LlmTurn, ProbeRequest } from '@/api/types'
 import { ChaosGainLine } from '@/components/turn/ChaosGainLine'
 import { Probes } from '@/components/turn/Probes'
 import { draftFor, type DockDraft } from '@/components/turn/dockDraft'
@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { shownGain } from '@/game/chaosGain'
 import type { PauseState } from '@/game/gameLoop'
-import { faceoff } from '@/game/wording'
+import { isLlm, isSystem1 } from '@/game/sides'
+import { faceoff, llmColors, modelName } from '@/game/wording'
 import { usePromptLab } from '@/settings/promptLab'
 
 type Decision = 'Thinking' | 'Reasoning'
@@ -55,8 +56,23 @@ function turnShown(game: GameState, ply: number, live: boolean): LlmTurn | null 
   return game.llm_turns.findLast((turn) => turn.ply <= upTo) ?? null
 }
 
+/**
+ * The System 1 model's move that goes with the position after `ply`: its move there, or its last move before it, as
+ * for an LLM's turn; live after a Forfeit, the forfeit. Its turns are not in the state, so the panel has no Thinking or
+ * Answer to show for it. Null when no System 1 model has moved yet. `ply` is the ply of the move, or of the forfeit,
+ * which has none of its own.
+ */
+function system1Mover(game: GameState, ply: number, live: boolean): { color: Color; move: string; ply: number } | null {
+  if (live && game.end_reason === 'forfeit' && isSystem1(game.settings[game.turn])) {
+    return { color: game.turn, move: 'forfeited', ply: game.plies.length + 1 }
+  }
+  const shown = game.plies.slice(0, ply).findLast((each) => isSystem1(game.settings[each.color]))
+  if (!shown) return null
+  return { color: shown.color, move: `${moveNumber(shown)} ${shown.written}`, ply: shown.ply }
+}
+
 /** The turn's move number as the move list has it, e.g. "10…". */
-const moveNumber = (turn: LlmTurn) => `${Math.ceil(turn.ply / 2)}${turn.color === 'white' ? '.' : '…'}`
+const moveNumber = (turn: Pick<LlmTurn, 'ply' | 'color'>) => `${Math.ceil(turn.ply / 2)}${turn.color === 'white' ? '.' : '…'}`
 
 /** The turn's move as the move list numbers it, e.g. "10… Nxa1", or "forfeited" for a turn that played none. */
 function moveName(game: GameState, turn: LlmTurn): string {
@@ -67,7 +83,7 @@ function moveName(game: GameState, turn: LlmTurn): string {
 /** Whether the side thinks, so its tab shows the Thinking rather than the Reasoning written in the answer. */
 const thinks = (game: GameState, turn: LlmTurn) => {
   const side = game.settings[turn.color]
-  return side.player === 'llm' && side.thinking
+  return isLlm(side) && side.thinking
 }
 
 /** The attempt's Thinking or Reasoning, by what its side produces; else why there is none, as a quiet line. */
@@ -126,7 +142,11 @@ export function TurnPanel({
     if (open(next) !== open(dock)) onDockTurn?.(next.open ? next.ply : null)
     setDock(next)
   }
-  const turn = docked ?? turnShown(game, ply, live)
+  // The System 1 model's move or the LLM's turn, whichever is the later one up to the position shown.
+  const llmTurn = docked ?? turnShown(game, ply, live)
+  const latestSystem1 = docked ? null : system1Mover(game, ply, live)
+  const system1 = latestSystem1 && (!llmTurn || latestSystem1.ply > llmTurn.ply) ? latestSystem1 : null
+  const turn = system1 ? null : llmTurn
   const move = turn && moveName(game, turn)
   const gain = turn ? shownGain(game, turn) : undefined
   const [tab, setTab] = useState(storedTab)
@@ -143,9 +163,19 @@ export function TurnPanel({
             {move}
           </Badge>
         )}
+        {system1 && (
+          <Badge variant={system1.move === 'forfeited' ? 'destructive' : 'secondary'} data-testid="turn-move">
+            {system1.move}
+          </Badge>
+        )}
       </CardHeader>
       <CardContent>
-        {turn ? (
+        {system1 ? (
+          <p className={quiet} data-testid="system1-turn">
+            {modelName(game, system1.color)} is a System 1 model: it gives a probability for each legal move and writes
+            no text, so this turn has no Thinking, Prompt or Answer to show.
+          </p>
+        ) : turn ? (
           <TurnTabs
             // A new turn, or a new attempt of the live one, opens on its last attempt.
             key={`${turn.color}-${turn.ply}-${turn.attempts.length}`}
@@ -172,7 +202,15 @@ export function TurnPanel({
             }
           />
         ) : (
-          <p className={quiet}>{faceoff(game) ? 'No LLM has moved yet.' : 'The LLM has not moved yet.'}</p>
+          <p className={quiet}>
+            {llmColors(game).length === 0
+              ? faceoff(game)
+                ? 'No System 1 model has moved yet.'
+                : 'The System 1 model has not moved yet.'
+              : faceoff(game)
+                ? 'No LLM has moved yet.'
+                : 'The LLM has not moved yet.'}
+          </p>
         )}
         {turn?.legal_counterpart && turn.ply === ply && (
           <Counterpart

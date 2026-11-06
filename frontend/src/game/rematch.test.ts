@@ -71,12 +71,34 @@ test('each LLM keeps its Turn memory, with Prompt lab on or off', () => {
   expect(rematchOf(settings, false).white).toMatchObject({ turn_memory: 'chat_moves' })
 })
 
-test('the tooltip says which colour you will play, or that the LLMs swap', () => {
+test('the tooltip says which colour you will play, or that the models swap', () => {
   const asBlack = { ...aGame().settings, white: llm, black: { player: 'human' as const } }
 
   expect(rematchDescription(aGame().settings)).toBe('Same settings, you play Black')
   expect(rematchDescription(asBlack)).toBe('Same settings, you play White')
   expect(rematchDescription({ ...aGame().settings, mode: 'llm_faceoff', white: llm })).toBe(
-    'Same settings, the LLMs swap colours',
+    'Same settings, the models swap colours',
   )
+})
+
+test('a System 1 model keeps its model, server, Choice temperature and Prompt template, with Prompt lab on or off', () => {
+  const system1 = {
+    player: 'system1' as const,
+    model: 'd1:2b',
+    base_url: 'http://localhost:11500',
+    choice_temperature: 0.5,
+    prompt_template_id: 'system1-position-only@4e096016',
+  }
+  const settings = { ...aGame().settings, black: system1 }
+
+  for (const promptLab of [false, true]) {
+    expect(rematchOf(settings, promptLab)).toMatchObject({ white: system1, black: { player: 'human' } })
+  }
+})
+
+test('a faceoff of a System 1 model and an LLM swaps them with all their settings', () => {
+  const system1 = { player: 'system1' as const, model: 'd3:2b', base_url: 'http://localhost:11434', choice_temperature: 1 }
+  const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: system1, black: llm }
+
+  expect(rematchOf(settings, false)).toMatchObject({ white: llm, black: system1 })
 })

@@ -9,14 +9,16 @@ from fastapi.staticfiles import StaticFiles
 
 from chessllm.api.errors import register_error_handlers
 from chessllm.api.routes import games, models as model_routes, pages, probes, prompts, ranking
-from chessllm.api.state import Engines, GameStore
+from chessllm.api.state import Engines, GameStore, no_decision_model
 from chessllm.core.config import DIST_DIR, GAMES_DIR, PROMPT_LIBRARY_DIR, SAMPLING_FILE, VALIDATION_FILE, AppConfig
 from chessllm.core.types import Color, Sampling
 from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.game.settings import Settings
+from chessllm.game.sides import System1Side
 from chessllm.llm.models import LLM_MODELS, LlmModel
 from chessllm.llm.players import LlmPlayer
+from chessllm.system1.port import DecisionModel
 
 
 def create_app(
@@ -32,6 +34,8 @@ def create_app(
     evaluator: Evaluator | None = None,
     clock: Callable[[], float] = time.monotonic,
     prompt_library_dir: Path = PROMPT_LIBRARY_DIR,
+    decision_model_for: Callable[[System1Side], DecisionModel] = no_decision_model,
+    system1_missing_models: Callable[[str, list[str]], list[str]] = lambda base_url, models: [],
 ) -> FastAPI:
     """The app with its AppConfig and Engines built from the arguments, and no game yet (see Engines for what
     each engine is for). With a move_model or an evaluator, each game is analysed when it ends, after the response
@@ -45,7 +49,10 @@ def create_app(
     )
     app = FastAPI(title="ChessLLM")
     app.state.config = config
-    app.state.engines = Engines(player_for, models, sampling_defaults, missing_models, move_model, evaluator, clock)
+    app.state.engines = Engines(
+        player_for, models, sampling_defaults, missing_models, move_model, evaluator, clock, decision_model_for,
+        system1_missing_models,
+    )
     app.state.games = GameStore()
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
     register_error_handlers(app)
