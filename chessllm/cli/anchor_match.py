@@ -83,7 +83,7 @@ def main(
     else:
         anchor_side = AnchorSide(engine=args.engine, skill=args.skill)
     try:
-        system1 = system1_side(args, prompt_library)
+        system1 = system1_side(args, library=prompt_library)
         if system1 is None:
             settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
         else:

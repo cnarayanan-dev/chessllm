@@ -219,41 +219,66 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     add_games_dir_argument(parser)
 
 
-# The settings that only an LLM side has, by the name of their argument and their flag: refused for a System 1 side
-# when given (ADR 0012), never silently ignored. A flag given its default is the same as none given.
+# The settings that only an LLM side has, by the name of their argument and their flag, across the commands: refused
+# when no side is an LLM (ADR 0012), never silently ignored. A command has some of them (refuse_llm_settings).
 LLM_ONLY_FLAGS: dict[str, str] = {
     "model": "--model",
     "thinking": "--thinking",
+    "thinking_for": "--thinking-for",
     "thinking_level": "--thinking-level",
     "thinking_budget": "--thinking-budget",
+    "thinking_budget_for": "--thinking-budget-for",
     "llm_constraints": "--llm-constraints",
     "retry_feedback": "--retry-feedback",
     "prompt_template": "--prompt-template",
     "turn_memory": "--turn-memory",
     "tools": "--tools",
+    "tools_for": "--tools-for",
     "tool_call_cap": "--tool-call-cap",
+    "tool_call_cap_for": "--tool-call-cap-for",
     "rules": "--rules",
     "no_legal_counterpart": "--no-legal-counterpart",
     "max_attempts": "--max-attempts",
 }
 
 
-def add_system1_arguments(parser: argparse.ArgumentParser) -> None:
-    """A System 1 side in place of the LLM side (ADR 0012): --system1-model names it, and the rest set it."""
+def refuse_llm_settings(args: argparse.Namespace, unchanged: argparse.Namespace, reason: str) -> None:
+    """Raises InvalidSettings, naming the flag and giving the reason, if args has any of the LLM_ONLY_FLAGS that
+    unchanged, the command's arguments with none given, has and args has changed. A command has only some of them."""
+    for dest, flag in LLM_ONLY_FLAGS.items():
+        if dest in vars(unchanged) and getattr(args, dest) != getattr(unchanged, dest):
+            raise InvalidSettings(f"{flag} sets an LLM, but {reason}")
+
+
+def _flag(side: str | None, name: str) -> str:
+    """The flag of a System 1 side's setting, e.g. "system1-model": --system1-model, or for the named side "first",
+    --first-system1-model."""
+    return f"--{side}-{name}" if side else f"--{name}"
+
+
+def _dest(side: str | None, name: str) -> str:
+    """The name of the argument _flag(side, name) is parsed into."""
+    return _flag(side, name).removeprefix("--").replace("-", "_")
+
+
+def add_system1_arguments(parser: argparse.ArgumentParser, side: str | None = None) -> None:
+    """A System 1 side in place of the LLM side (ADR 0012): --system1-model names it, and the rest set it. For a
+    command with two such sides, side names one, e.g. "first" for --first-system1-model, and gives it no seed: the
+    command's games each get a fresh one."""
     parser.add_argument(
-        "--system1-model",
+        _flag(side, "system1-model"),
         metavar="MODEL",
         help="play a System 1 model, e.g. d3:2b, instead of an LLM: its name on the server (the LLM's settings, such "
         "as --model and --thinking, then don't apply and are refused)",
     )
     parser.add_argument(
-        "--system1-url",
+        _flag(side, "system1-url"),
         metavar="URL",
         default=SYSTEM1_DEFAULT_URL,
         help=f"the base URL of the server that serves the System 1 model's /v1/systemone (default {SYSTEM1_DEFAULT_URL})",
     )
     parser.add_argument(
-        "--choice-temperature",
+        _flag(side, "choice-temperature"),
         type=float,
         default=System1Side.choice_temperature,
         metavar="T",
@@ -261,45 +286,50 @@ def add_system1_arguments(parser: argparse.ArgumentParser) -> None:
         "often as its probability, below 1 its favourites more often, at 0 always its top move",
     )
     parser.add_argument(
-        "--system1-template",
+        _flag(side, "system1-template"),
         metavar="ID",
         help="the System 1 model's Prompt template, by its ID in the Prompt library: "
         + ", ".join(SYSTEM1_TEMPLATES)
         + f" or a saved one that doesn't place the Legal-move list (default {DEFAULT_TEMPLATE.id}; --prompt-template "
         "is the LLM's)",
     )
-    parser.add_argument(
-        "--system1-seed",
-        type=int,
-        metavar="SEED",
-        help="the System 1 side's seed, for the order of its options and its draws, e.g. a logged one to replay "
-        "(default: fresh)",
-    )
+    if side is None:
+        parser.add_argument(
+            "--system1-seed",
+            type=int,
+            metavar="SEED",
+            help="the System 1 side's seed, for the order of its options and its draws, e.g. a logged one to replay "
+            "(default: fresh)",
+        )
 
 
-def system1_side(args: argparse.Namespace, library: PromptLibrary | None = None) -> System1Side | None:
-    """The System 1 side --system1-model asks for (add_system1_arguments), or None if it isn't given. Its Prompt
-    template is --system1-template's, found in the Prompt library (by default the project's), else the default one.
-    Raises InvalidSettings, naming the flag, if an LLM's setting (add_configuration_arguments) is also given, if
-    --system1-template is given without a System 1 model, or if the library has no such template or the side can't
-    play it."""
-    if args.system1_model is None:
-        if args.system1_template is not None:
-            raise InvalidSettings(f"--system1-template {args.system1_template} needs --system1-model")
+def system1_side(
+    args: argparse.Namespace, side: str | None = None, library: PromptLibrary | None = None
+) -> System1Side | None:
+    """The System 1 side --system1-model asks for (add_system1_arguments, or its --{side}- flags for a named side),
+    or None if it isn't given. Its Prompt template is --system1-template's, found in the Prompt library (by default
+    the project's), else the default one. Raises InvalidSettings, naming the flag, if --system1-template is given
+    without a System 1 model, or if the library has no such template or the side can't play it; without a side name,
+    also if an LLM's setting (add_configuration_arguments) is given."""
+    model = getattr(args, _dest(side, "system1-model"))
+    template_id = getattr(args, _dest(side, "system1-template"))
+    if model is None:
+        if template_id is not None:
+            raise InvalidSettings(
+                f"{_flag(side, 'system1-template')} {template_id} needs {_flag(side, 'system1-model')}"
+            )
         return None
-    defaults = argparse.ArgumentParser()
-    add_configuration_arguments(defaults)
-    unchanged = defaults.parse_args([])
-    for dest, flag in LLM_ONLY_FLAGS.items():
-        if getattr(args, dest) != getattr(unchanged, dest):
-            raise InvalidSettings(f"{flag} sets an LLM, but --system1-model {args.system1_model} is a System 1 model")
+    if side is None:
+        defaults = argparse.ArgumentParser()
+        add_configuration_arguments(defaults)
+        refuse_llm_settings(args, defaults.parse_args([]), f"--system1-model {model} is a System 1 model")
     template = None
-    if args.system1_template is not None:
-        template = resolve_system1_template(args.system1_template, library or PromptLibrary(PROMPT_LIBRARY_DIR))
+    if template_id is not None:
+        template = resolve_system1_template(template_id, library or PromptLibrary(PROMPT_LIBRARY_DIR))
     return System1Side(
-        model=args.system1_model,
-        base_url=args.system1_url,
-        choice_temperature=args.choice_temperature,
+        model=model,
+        base_url=getattr(args, _dest(side, "system1-url")),
+        choice_temperature=getattr(args, _dest(side, "choice-temperature")),
         prompt_template=template,
     )
 
