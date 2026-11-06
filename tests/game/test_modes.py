@@ -5,7 +5,7 @@ import pytest
 
 from chessllm.exceptions import InvalidSettings
 from chessllm.game.modes import ANCHOR_MATCH, LLM_FACEOFF, MODES, PLAY_LLM, mode_named
-from chessllm.game.sides import AnchorSide, HumanSide, LlmSide
+from chessllm.game.sides import AnchorSide, HumanSide, LlmSide, System1Side
 
 
 def test_each_mode_is_found_by_its_key_and_has_its_name():
@@ -37,13 +37,29 @@ def test_a_mode_accepts_the_sides_it_needs():
     ANCHOR_MATCH.check_sides(AnchorSide(), LlmSide())
 
 
+def test_a_faceoff_and_an_anchor_match_take_a_system_1_side_wherever_they_take_an_llm_side():
+    system1 = System1Side(model="d3:2b", base_url="http://localhost:11434")
+
+    LLM_FACEOFF.check_sides(system1, LlmSide())
+    LLM_FACEOFF.check_sides(system1, system1)
+    ANCHOR_MATCH.check_sides(AnchorSide(), system1)
+    ANCHOR_MATCH.check_sides(system1, AnchorSide())
+
+
+SYSTEM1 = System1Side(model="d3:2b", base_url="http://localhost:11434")
+
+
 @pytest.mark.parametrize(
     ("mode", "white", "black", "why"),
     [
         (PLAY_LLM, LlmSide(), LlmSide(), "Play LLM needs one human side, not 0"),
         (LLM_FACEOFF, HumanSide(), LlmSide(), "LLM faceoff needs no human side, not 1"),
-        (ANCHOR_MATCH, LlmSide(), LlmSide(), "Anchor match needs one LLM side, not 2"),
-        (LLM_FACEOFF, AnchorSide(), AnchorSide(), "LLM faceoff needs two LLM sides, not 0"),
+        (ANCHOR_MATCH, LlmSide(), LlmSide(), "Anchor match needs one Model player side, not 2"),
+        (LLM_FACEOFF, AnchorSide(), AnchorSide(), "LLM faceoff needs two Model player sides, not 0"),
+        (PLAY_LLM, SYSTEM1, HumanSide(), "Play LLM needs one LLM side, not 0"),
+        (LLM_FACEOFF, SYSTEM1, AnchorSide(), "LLM faceoff needs two Model player sides, not 1"),
+        (ANCHOR_MATCH, SYSTEM1, LlmSide(), "Anchor match needs one Model player side, not 2"),
+        (ANCHOR_MATCH, HumanSide(), AnchorSide(), "Anchor match needs no human side, not 1"),
     ],
 )
 def test_a_mode_refuses_sides_it_does_not_have(mode, white, black, why):
@@ -56,3 +72,9 @@ def test_a_faceoff_logs_the_prompt_file_of_each_side_and_the_other_modes_their_o
 
     assert LLM_FACEOFF.logged_prompt_files(files) == {"prompt_files": files}
     assert PLAY_LLM.logged_prompt_files({"black": "system.txt"}) == {"prompt_file": "system.txt"}
+
+
+def test_a_faceoff_with_a_system_1_side_logs_only_the_prompt_file_an_llm_side_has_and_keeps_it_by_colour():
+    assert LLM_FACEOFF.logged_prompt_files({"black": "system.txt"}) == {"prompt_files": {"black": "system.txt"}}
+    assert ANCHOR_MATCH.logged_prompt_files({"white": "system.txt"}) == {"prompt_file": "system.txt"}
+    assert ANCHOR_MATCH.logged_prompt_files({}) == {}

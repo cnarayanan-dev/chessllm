@@ -37,6 +37,8 @@ OLLAMA_REPLY_TIMEOUT_S = 300.0
 # which models it has before a game.
 SYSTEM1_REPLY_TIMEOUT_S = 120.0
 SYSTEM1_LIST_TIMEOUT_S = 3.0
+# Where a System 1 model's server is unless the command is told: Ollama's, which serves three of the first six models.
+SYSTEM1_DEFAULT_URL = "http://localhost:11434"
 
 DRAGON_PATH_VARIABLE = "CHESSLLM_DRAGON"
 STOCKFISH_PATH_VARIABLE = "CHESSLLM_STOCKFISH"

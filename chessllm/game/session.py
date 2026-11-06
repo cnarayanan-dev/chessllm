@@ -5,10 +5,11 @@ import logging
 import random
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, TypeVar
 
 import chess
 
@@ -25,7 +26,7 @@ from chessllm.game.evaluation import judge
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer
 from chessllm.game.llm_turn.probe import Probe
 from chessllm.game.llm_turn.prompt import check_prompt_template, default_kind, move_record, prompt_file, side_template
-from chessllm.game.llm_turn.turn import LlmTurns
+from chessllm.game.llm_turn.turn import LlmTurns, TurnOutcome
 from chessllm.game.records import (
     ChaosGain, Evaluation, EvaluationEngine, GameSettings, GameState, LlmTurn, PlayedTemplate, Ply, Stats,
     TimeUsed,
@@ -38,7 +39,46 @@ from chessllm.logs.game_log import GameLog, now
 from chessllm.logs.probe_log import ProbeLog
 from chessllm.system1.port import DecisionModel
 from chessllm.system1.prompt import side_template as system1_side_template
-from chessllm.system1.turn import System1Turns
+from chessllm.system1.turn import System1Outcome, System1Turns
+
+
+class _Timed(Protocol):
+    @property
+    def time_s(self) -> float: ...
+
+
+class _Outcome(Protocol):
+    """How a Model player's turn ended, of either kind: its turn record, and whether it is a Forfeit."""
+
+    @property
+    def turn(self) -> _Timed: ...
+
+    @property
+    def forfeit(self) -> bool: ...
+
+
+O = TypeVar("O", bound=_Outcome)
+
+
+@dataclass(frozen=True)
+class TurnRefusals:
+    """How a kind of Model player's turn is refused: the error, and the message and code of a turn already running
+    and of a turn that isn't one of its sides'."""
+
+    error: type[RefusedLlmTurn] | type[RefusedSystem1Turn]
+    running: str
+    running_code: str
+    not_its_turn: str
+    not_its_turn_code: str
+
+
+LLM_TURN = TurnRefusals(
+    RefusedLlmTurn, "an LLM turn is already running", "llm_turn_running", "it is not an LLM's turn", "not_llm_turn"
+)
+SYSTEM1_TURN = TurnRefusals(
+    RefusedSystem1Turn, "a turn is already running", "system1_turn_running", "it is not a System 1 model's turn",
+    "not_system1_turn",
+)
 
 
 def started(evaluator: Evaluator | None) -> tuple[Evaluator | None, EvaluationEngine | None]:
@@ -113,7 +153,7 @@ class GameSession:
         self._legal_counterparts = bool(self._game_settings.legal_counterpart)
         # Requests run in a threadpool, so two could otherwise both find it an LLM's turn and both ask it to move.
         # The lock is the game's own, so a new game can start while an abandoned game's turn finishes.
-        self._llm_turn_running = threading.Lock()
+        self._turn_running = threading.Lock()
         # Held by each Probe for as long as it runs, so probes are asked one at a time, and taken by an LLM turn before
         # it starts, so a turn asked for during a probe waits for it to end rather than being refused (probe).
         self._probe_running = threading.Lock()
@@ -253,65 +293,52 @@ class GameSession:
 
         Raises RefusedLlmTurn and leaves the game unchanged if it isn't an LLM's turn, the game is over, or
         another LLM turn is still running."""
-        with self._probe_running:  # a running probe ends first
-            turn_started = self._llm_turn_running.acquire(blocking=False)
-        if not turn_started:
-            raise RefusedLlmTurn("an LLM turn is already running", code="llm_turn_running")
-        try:
-            if self._abandoned.is_set():
-                return
-            if self._end is not None:
-                raise RefusedLlmTurn("the game is over", code="game_over")
-            color = color_of(self._board.turn)
-            if color not in self._llm_sides:
-                raise RefusedLlmTurn("it is not an LLM's turn", code="not_llm_turn")
+        counterpart: CounterpartAnswer | None = None
+        baselines: GainBaselines | None = None
+        counterpart_ply = 0  # the ply of the chaos move the counterpart is for
+
+        def produce(color: Color, started: float) -> TurnOutcome:
+            nonlocal counterpart, baselines, counterpart_ply
             turns, moves = self._turns_of[color], [written for _, written in self._moves]
-            self._move_started = started = self._clock()
             outcome = turns.play(self._board, moves, self._plies, started)
-            time_s = outcome.turn.time_s
-            counterpart, baselines = None, None
+            counterpart_ply = len(moves) + 1
             if outcome.chaos_move is not None:
                 # Its Legal counterpart is asked and judged once the turn is over and before its chaos move is
                 # played, so the move and its counterpart land together. The side's clock stops at the turn's last
                 # attempt: neither is ever its Time used, nor on its running clock.
                 with self._landing:
-                    self._move_ended = started + time_s
+                    self._move_ended = started + outcome.turn.time_s
                 if self._legal_counterparts:
                     counterpart = turns.legal_counterpart(self._board, moves)
                 baselines = self._gain_baselines(color, counterpart)
                 if counterpart is not None:
                     outcome.turn.legal_counterpart = counterpart.counterpart
-            with self._ending:
-                with self._landing:
-                    if outcome.move is not None:
-                        self._play_legal(outcome.move, time_s)
-                    elif outcome.chaos_move is not None and outcome.written is not None:
-                        self._play_chaos(outcome.chaos_move, outcome.written, time_s)
-                    if self._abandoned.is_set():
-                        return  # the running turn, stopped early or not, is never published, nor its time added
-                    self._publish_llm_turn(outcome.turn)
-                    self._charge(color, time_s)
-                    if outcome.forfeit:
-                        self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
-                    else:
-                        self._check_end()
-                    if baselines is not None and self._end is not None:
-                        # A chaos move that ends the game counts by its result, so its gains land with it.
-                        outcome.turn.chaos_gain = baselines.gain(result_for_mover(self._end.result, color))
-                    self._position_ready()
-                    played = outcome.move is not None or outcome.chaos_move is not None
-                    unjudged = self._ply_to_judge() if played else None
-                if counterpart is not None:  # logged only with its turn: an abandoned game's never is
-                    turns.log_legal_counterpart(counterpart, len(moves) + 1)
-                if outcome.turn.chaos_gain is not None:
-                    self._log_chaos_gain(outcome.turn)
-                if self._end is not None:
-                    self._write_end(self._end)
-            evaluation = self._judge(unjudged)
+            return outcome
+
+        def land(outcome: TurnOutcome) -> bool:
+            if outcome.move is not None:
+                self._play_legal(outcome.move, outcome.turn.time_s)
+            elif outcome.chaos_move is not None and outcome.written is not None:
+                self._play_chaos(outcome.chaos_move, outcome.written, outcome.turn.time_s)
+            return outcome.move is not None or outcome.chaos_move is not None
+
+        def settle(outcome: TurnOutcome, color: Color) -> None:
+            self._publish_llm_turn(outcome.turn)
+            if baselines is not None and self._end is not None:
+                # A chaos move that ends the game counts by its result, so its gains land with it.
+                outcome.turn.chaos_gain = baselines.gain(result_for_mover(self._end.result, color))
+
+        def log(outcome: TurnOutcome) -> None:
+            if counterpart is not None:  # logged only with its turn: an abandoned game's never is
+                self._turns_of[outcome.turn.color].log_legal_counterpart(counterpart, counterpart_ply)
+            if outcome.turn.chaos_gain is not None:
+                self._log_chaos_gain(outcome.turn)
+
+        def finish(color: Color, evaluation: Evaluation | None) -> None:
             if baselines is not None and evaluation is not None:
                 self._add_chaos_gain(baselines.gain(for_mover(evaluation, color)))
-        finally:
-            self._llm_turn_running.release()
+
+        self._play_model_turn(LLM_TURN, self._llm_sides, produce, land, log, settle, finish)
 
     def play_system1_turn(self) -> None:
         """Play the turn of the System 1 model to move: it moves or forfeits, like an LLM's turn but in a single
@@ -319,38 +346,77 @@ class GameSession:
 
         Raises RefusedSystem1Turn and leaves the game unchanged if it isn't a System 1 model's turn, the game is over,
         or another turn is still running."""
-        if not self._llm_turn_running.acquire(blocking=False):
-            raise RefusedSystem1Turn("a turn is already running", code="system1_turn_running")
+
+        def produce(color: Color, started: float) -> System1Outcome:
+            return self._system1_turns_of[color].play(self._board, [written for _, written in self._moves], started)
+
+        def land(outcome: System1Outcome) -> bool:
+            if outcome.move is not None:
+                self._play_legal(outcome.move, outcome.turn.time_s)
+            return outcome.move is not None
+
+        def log(outcome: System1Outcome) -> None:
+            self._log.write("system1_turn", **outcome.turn.log_shape())
+
+        self._play_model_turn(SYSTEM1_TURN, self._system1_sides, produce, land, log)
+
+    def _play_model_turn(
+        self,
+        refusals: TurnRefusals,
+        sides: Mapping[Color, object],
+        produce: Callable[[Color, float], O],
+        land: Callable[[O], bool],
+        log: Callable[[O], None],
+        settle: Callable[[O, Color], None] | None = None,
+        finish: Callable[[Color, Evaluation | None], None] | None = None,
+    ) -> None:
+        """The turn of the Model player to move, whichever kind: it moves or forfeits, and in an abandoned game does
+        neither. Raises the refusals' error, leaving the game unchanged, if it isn't the turn of one of sides, the
+        game is over, or another turn is still running.
+
+        produce(color, started) plays the turn, without a lock held and with the clock started; the rest run once
+        it ends. land(outcome) puts the turn's move into the game, with _landing held, and says whether a ply landed;
+        an abandoned game's turn ends there. settle(outcome, color), with _landing held, adds the turn to the game and
+        what depends on how the game stands once it has landed, been charged and the game's end been checked. log(outcome), with _ending held, writes
+        what the turn leaves in the game log, before the game's end. finish(color, evaluation) comes last, once the
+        ply is judged."""
+        with self._probe_running:  # a running probe ends first
+            started_turn = self._turn_running.acquire(blocking=False)
+        if not started_turn:
+            raise refusals.error(refusals.running, code=refusals.running_code)
         try:
             if self._abandoned.is_set():
                 return
             if self._end is not None:
-                raise RefusedSystem1Turn("the game is over", code="game_over")
+                raise refusals.error("the game is over", code="game_over")
             color = color_of(self._board.turn)
-            turns = self._system1_turns_of.get(color)
-            if turns is None:
-                raise RefusedSystem1Turn("it is not a System 1 model's turn", code="not_system1_turn")
+            if color not in sides:
+                raise refusals.error(refusals.not_its_turn, code=refusals.not_its_turn_code)
             self._move_started = started = self._clock()
-            outcome = turns.play(self._board, [written for _, written in self._moves], started)
+            outcome = produce(color, started)
+            time_s = outcome.turn.time_s
             with self._ending:
                 with self._landing:
+                    played = land(outcome)
                     if self._abandoned.is_set():
-                        return  # the running turn is never published, nor its time added
-                    if outcome.move is not None:
-                        self._play_legal(outcome.move, outcome.turn.time_s)
-                    self._charge(color, outcome.turn.time_s)
+                        return  # the running turn, stopped early or not, is never published, nor its time added
+                    self._charge(color, time_s)
                     if outcome.forfeit:
                         self._end = GameEnd("0-1" if color == "white" else "1-0", "forfeit")  # the side to move loses
                     else:
                         self._check_end()
+                    if settle is not None:
+                        settle(outcome, color)
                     self._position_ready()
-                    unjudged = self._ply_to_judge() if outcome.move is not None else None
-                self._log.write("system1_turn", **outcome.turn.log_shape())
+                    unjudged = self._ply_to_judge() if played else None
+                log(outcome)
                 if self._end is not None:
                     self._write_end(self._end)
-            self._judge(unjudged)
+            evaluation = self._judge(unjudged)
+            if finish is not None:
+                finish(color, evaluation)
         finally:
-            self._llm_turn_running.release()
+            self._turn_running.release()
 
     def probe(self, ply: int, color: Color, template: PromptTemplate) -> Probe:
         """Ask a Probe about the position of the past LLM turn at ply, color's, with the template, and append it to the
@@ -376,12 +442,12 @@ class GameSession:
             )
             raise InvalidSettings(reason, code="invalid_prompt_template")
         with self._probe_running:
-            if not self._llm_turn_running.acquire(blocking=False):
+            if not self._turn_running.acquire(blocking=False):
                 raise RefusedProbe("an LLM turn is running: a Probe never runs alongside one", code="llm_turn_running")
             try:
                 attempt = self._turns_of[color].probe(chess.Board(fen), moves, template)
             finally:
-                self._llm_turn_running.release()
+                self._turn_running.release()
             probe = Probe(
                 game_id=self._log.game_id, ply=ply, color=color, model=side.model, thinking=side.thinking,
                 llm_constraints=side.llm_constraints, sampling=self._settings.sampling, prompt_template=template,

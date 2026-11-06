@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, get_args
 
 from chessllm.analytics.analysis import analyse_game
 from chessllm.analytics.leaderboard import settings_configuration
-from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH_VARIABLE
+from chessllm.core.config import DRAGON_PATH_VARIABLE, GAMES_DIR, STOCKFISH_PATH_VARIABLE, SYSTEM1_DEFAULT_URL
 from chessllm.engines.anchors import (
     Anchor,
     DragonAnchor,
@@ -50,6 +50,8 @@ from chessllm.game.sides import (
     LlmSide,
     PromptTemplate,
     RetryFeedback,
+    Side,
+    System1Side,
     ALL_TOOLS,
     TOOL_NAMES,
     ToolName,
@@ -60,6 +62,7 @@ from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
 from chessllm.llm.models import LLM_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
+from chessllm.system1.port import DecisionModel
 
 if TYPE_CHECKING:
     from chessllm.llm.ollama_player import OllamaPlayer
@@ -208,13 +211,85 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     add_games_dir_argument(parser)
 
 
+# The settings that only an LLM side has, by the name of their argument and their flag: refused for a System 1 side
+# when given (ADR 0012), never silently ignored. A flag given its default is the same as none given.
+LLM_ONLY_FLAGS: dict[str, str] = {
+    "model": "--model",
+    "thinking": "--thinking",
+    "thinking_level": "--thinking-level",
+    "thinking_budget": "--thinking-budget",
+    "llm_constraints": "--llm-constraints",
+    "retry_feedback": "--retry-feedback",
+    "prompt_template": "--prompt-template",
+    "turn_memory": "--turn-memory",
+    "tools": "--tools",
+    "tool_call_cap": "--tool-call-cap",
+    "rules": "--rules",
+    "no_legal_counterpart": "--no-legal-counterpart",
+    "max_attempts": "--max-attempts",
+}
+
+
+def add_system1_arguments(parser: argparse.ArgumentParser) -> None:
+    """A System 1 side in place of the LLM side (ADR 0012): --system1-model names it, and the rest set it. The Prompt
+    template is the default System 1 one; picking another is for a later flag."""
+    parser.add_argument(
+        "--system1-model",
+        metavar="MODEL",
+        help="play a System 1 model, e.g. d3:2b, instead of an LLM: its name on the server (the LLM's settings, such "
+        "as --model and --thinking, then don't apply and are refused)",
+    )
+    parser.add_argument(
+        "--system1-url",
+        metavar="URL",
+        default=SYSTEM1_DEFAULT_URL,
+        help=f"the base URL of the server that serves the System 1 model's /v1/systemone (default {SYSTEM1_DEFAULT_URL})",
+    )
+    parser.add_argument(
+        "--choice-temperature",
+        type=float,
+        default=System1Side.choice_temperature,
+        metavar="T",
+        help="how the System 1 model's probabilities become its move: at 1 (the default) each move is played as "
+        "often as its probability, below 1 its favourites more often, at 0 always its top move",
+    )
+    parser.add_argument(
+        "--system1-seed",
+        type=int,
+        metavar="SEED",
+        help="the System 1 side's seed, for the order of its options and its draws, e.g. a logged one to replay "
+        "(default: fresh)",
+    )
+
+
+def system1_side(args: argparse.Namespace) -> System1Side | None:
+    """The System 1 side --system1-model asks for (add_system1_arguments), or None if it isn't given. Raises
+    InvalidSettings, naming the flag, if an LLM's setting (add_configuration_arguments) is also given."""
+    if args.system1_model is None:
+        return None
+    defaults = argparse.ArgumentParser()
+    add_configuration_arguments(defaults)
+    unchanged = defaults.parse_args([])
+    for dest, flag in LLM_ONLY_FLAGS.items():
+        if getattr(args, dest) != getattr(unchanged, dest):
+            raise InvalidSettings(f"{flag} sets an LLM, but --system1-model {args.system1_model} is a System 1 model")
+    return System1Side(model=args.system1_model, base_url=args.system1_url, choice_temperature=args.choice_temperature)
+
+
 def anchor_match_settings(
     args: argparse.Namespace, llm_color: Color, anchor_side: AnchorSide, sampling_file: Path
 ) -> Settings:
     """The settings of an Anchor match of the LLM in args at llm_color against the Anchor side. Raises
     InvalidSettings with the reason when they can't be played, and InvalidSamplingConfig for a broken config."""
-    llm = benchmark_llm_side(args)
-    white, black = (llm, anchor_side) if llm_color == "white" else (anchor_side, llm)
+    return side_anchor_match_settings(benchmark_llm_side(args), args, llm_color, anchor_side, sampling_file)
+
+
+def side_anchor_match_settings(
+    model_side: Side, args: argparse.Namespace, color: Color, anchor_side: AnchorSide, sampling_file: Path
+) -> Settings:
+    """The settings of an Anchor match of the Model player's side at color against the Anchor side, with the
+    sampling and Rules in args. Raises InvalidSettings and InvalidSamplingConfig as anchor_match_settings does."""
+    white, black = (model_side, anchor_side) if color == "white" else (anchor_side, model_side)
     settings = Settings(
         "anchor_match",
         white,
@@ -260,6 +335,22 @@ def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
     return OllamaPlayer(
         side.model, side.think(), timeout_s=timeout_s, sampling=settings.sampling, budget=budget, tool_call_cap=cap
     )
+
+
+def system1_missing_models(base_url: str, models: list[str]) -> list[str]:
+    """The models the System 1 server at base_url doesn't have, from the server itself; raises System1Unavailable if
+    it can't say. Checked before the first game (Settings.check_served), as missing_models is for Ollama."""
+    # Imported late, so the tests never load the HTTP client.
+    from chessllm.system1 import http_model
+
+    return http_model.missing_models(base_url, models)
+
+
+def decision_model_for(side: System1Side) -> DecisionModel:
+    """The decision model of a System 1 side, asking its server over HTTP; built when the game starts."""
+    from chessllm.system1.http_model import SystemOneModel
+
+    return SystemOneModel(side.base_url, side.model)
 
 
 def missing_models(models: list[str]) -> list[str]:

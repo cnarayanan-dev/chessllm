@@ -33,8 +33,8 @@ class System1Turn:
 
     ply: int
     color: Color
-    # False for a position with only one legal move, which is played without asking the model: Ollama's choice
-    # questions take 2 to 26 options. Then nothing was sent.
+    # False for a position with only one legal move, which is played without asking the model: with one option its
+    # answer can only be probability 1, so asking would add a server call and nothing else. Then nothing was sent.
     asked: bool
     state: str | None
     question: str | None
@@ -114,7 +114,8 @@ class System1Turns:
         if len(sans) == 1:
             [san] = sans
             turn = System1Turn(
-                ply, self._color, False, None, None, [Option(san)], legal[san].uci(), san, self._time(started)
+                ply=ply, color=self._color, asked=False, state=None, question=None, options=[Option(san)],
+                move=legal[san].uci(), san=san, time_s=self._time(started),
             )
             return System1Outcome(turn, legal[san])
         state = turn_message(self._template, TurnPosition(board, moves))
@@ -123,14 +124,16 @@ class System1Turns:
             probabilities = self._model.decide(state, question, sans)
         except DecisionModelFailed as error:
             turn = System1Turn(
-                ply, self._color, True, state, question, [Option(san) for san in sans], None, None,
-                self._time(started), str(error),
+                ply=ply, color=self._color, asked=True, state=state, question=question,
+                options=[Option(san) for san in sans], move=None, san=None, time_s=self._time(started),
+                error=str(error),
             )
             return System1Outcome(turn)
         san = sans[draw(probabilities, self._temperature, self._rng)]
         options = [Option(option, probability) for option, probability in zip(sans, probabilities, strict=True)]
         turn = System1Turn(
-            ply, self._color, True, state, question, options, legal[san].uci(), san, self._time(started)
+            ply=ply, color=self._color, asked=True, state=state, question=question, options=options,
+            move=legal[san].uci(), san=san, time_s=self._time(started),
         )
         return System1Outcome(turn, legal[san])
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from chessllm.core.types import COLORS, Color, ModeKey, RulesKey, Sampling
 from chessllm.engines.anchors import DRAGON_SKILLS
-from chessllm.exceptions import InvalidSettings, OllamaUnavailable
+from chessllm.exceptions import InvalidSettings, OllamaUnavailable, System1Unavailable
 from chessllm.game.llm_turn.prompt import (
     check_prompt_template,
     check_tools_template,
@@ -150,10 +150,32 @@ class Settings:
             missing_sides = " or ".join(named[model] for model in missing)
             raise InvalidSettings(f"Ollama doesn't have {missing_sides}: install them with `ollama pull`")
 
+    def check_served(self, missing_models: Callable[[str, list[str]], list[str]]) -> None:
+        """Raises InvalidSettings, naming each System 1 side's model that missing_models finds its server doesn't
+        have, and with the code system1_unavailable if a server can't be asked: the game is refused rather than
+        started to forfeit every turn. missing_models(base_url, models) says which of the models the server at
+        base_url lacks. Apart from check, so checking settings needs no server; the LLMs and Anchors aren't asked
+        about."""
+        sides_by_server: dict[str, dict[str, list[Color]]] = {}
+        for color, side in self.system1_sides().items():
+            sides_by_server.setdefault(side.base_url, {}).setdefault(side.model, []).append(color)
+        for base_url, sides_by_model in sides_by_server.items():
+            named = {model: f"{model} ({' and '.join(colors)})" for model, colors in sides_by_model.items()}
+            try:
+                missing = [model for model in missing_models(base_url, list(sides_by_model)) if model in named]
+            except System1Unavailable as error:
+                raise InvalidSettings(f"{' and '.join(named.values())} can't play: {error}", code=error.code) from None
+            if missing:
+                lacks = " or ".join(named[model] for model in missing)
+                raise InvalidSettings(f"The System 1 server at {base_url} doesn't have {lacks}")
+
     def _check_system1(self, color: Color, side: System1Side) -> None:
-        """Raises InvalidSettings if a System 1 side can't be played: a negative Choice temperature, or a Prompt
-        template that isn't a System 1 template."""
+        """Raises InvalidSettings if a System 1 side can't be played: Rules other than Standard (it offers only legal
+        moves, so it has no illegal ones to play), a negative Choice temperature, or a Prompt template that isn't a
+        System 1 template."""
         player = f"{side.model} ({color})"
+        if self.rules != "standard":
+            raise InvalidSettings(f"{player} is a System 1 model, so it must play under Standard rules, not {self.rules}")
         if not side.choice_temperature >= 0:  # also refuses NaN
             raise InvalidSettings(f"{player} has a Choice temperature of {side.choice_temperature:g}, not at least 0")
         try:
