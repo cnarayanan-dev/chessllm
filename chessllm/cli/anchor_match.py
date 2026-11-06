@@ -20,9 +20,11 @@ from pathlib import Path
 from chessllm.cli.common import (
     add_configuration_arguments,
     add_system1_arguments,
+    add_system1_seed_argument,
     anchor_match_settings,
     default_anchor,
     fail,
+    model_under_test,
     side_anchor_match_settings,
     system1_side,
 )
@@ -55,6 +57,7 @@ def parser() -> argparse.ArgumentParser:
     )
     add_configuration_arguments(parser)
     add_system1_arguments(parser)
+    add_system1_seed_argument(parser)
     parser.add_argument("--skill", type=int, default=1, help="Dragon's Skill level, 1-7 (default 1)")
     parser.add_argument("--color", choices=COLORS, default="white", help="the model's colour (default white)")
     parser.add_argument("--seed", type=int, help="the random mover's seed, e.g. a logged one to replay (default: fresh)")
@@ -100,8 +103,7 @@ def main(
         return fail(FAILED, str(error))
     anchor_color = opponent(llm_color)
     try:
-        players = {} if system1 else {llm_color: player_for(settings, llm_color)}
-        decision_models = {llm_color: decision_model_for(system1)} if system1 else {}
+        players, decision_models = model_under_test(settings, llm_color, system1, player_for, decision_model_for)
         log = GameLog(args.games_dir, *settings.side_names())
         state = play_anchor_match(
             settings, players, {anchor_color: anchor}, log, decision_models=decision_models, seed=args.system1_seed

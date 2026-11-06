@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, get_args
 
 from chessllm.analytics.analysis import analyse_game
-from chessllm.analytics.leaderboard import settings_configuration
+from chessllm.analytics.leaderboard import settings_configuration, system1_side_configuration
 from chessllm.core.config import (
     DRAGON_PATH_VARIABLE,
     GAMES_DIR,
@@ -263,8 +263,8 @@ def _dest(side: str | None, name: str) -> str:
 
 def add_system1_arguments(parser: argparse.ArgumentParser, side: str | None = None) -> None:
     """A System 1 side in place of the LLM side (ADR 0012): --system1-model names it, and the rest set it. For a
-    command with two such sides, side names one, e.g. "first" for --first-system1-model, and gives it no seed: the
-    command's games each get a fresh one."""
+    command with two such sides, side names one, e.g. "first" for --first-system1-model. The seed is apart
+    (add_system1_seed_argument): a command of many games gives each a fresh one."""
     parser.add_argument(
         _flag(side, "system1-model"),
         metavar="MODEL",
@@ -293,14 +293,17 @@ def add_system1_arguments(parser: argparse.ArgumentParser, side: str | None = No
         + f" or a saved one that doesn't place the Legal-move list (default {DEFAULT_TEMPLATE.id}; --prompt-template "
         "is the LLM's)",
     )
-    if side is None:
-        parser.add_argument(
-            "--system1-seed",
-            type=int,
-            metavar="SEED",
-            help="the System 1 side's seed, for the order of its options and its draws, e.g. a logged one to replay "
-            "(default: fresh)",
-        )
+
+
+def add_system1_seed_argument(parser: argparse.ArgumentParser) -> None:
+    """--system1-seed, for a command of a single game with one System 1 side."""
+    parser.add_argument(
+        "--system1-seed",
+        type=int,
+        metavar="SEED",
+        help="the System 1 side's seed, for the order of its options and its draws, e.g. a logged one to replay "
+        "(default: fresh)",
+    )
 
 
 def system1_side(
@@ -494,17 +497,45 @@ def first_rung(args: argparse.Namespace) -> AnchorSide:
     return AnchorSide(engine=args.engine, skill=args.skill or FIRST_SKILL)
 
 
+def model_under_test(
+    settings: Settings,
+    color: Color,
+    system1: System1Side | None,
+    player_for: Callable[[Settings, Color], LlmPlayer],
+    decision_model_for: Callable[[System1Side], DecisionModel],
+) -> tuple[dict[Color, LlmPlayer], dict[Color, DecisionModel]]:
+    """The players and decision models (play_anchor_match's) of the Model player at color: the System 1 side's
+    decision model (system1), else the LLM's player, built for these settings."""
+    if system1 is None:
+        return {color: player_for(settings, color)}, {}
+    return {}, {color: decision_model_for(system1)}
+
+
+def ladder_settings(
+    args: argparse.Namespace, color: Color, anchor_side: AnchorSide, sampling_file: Path, system1: System1Side | None
+) -> Settings:
+    """The settings of a game of the ladder in args: the System 1 model's (system1) or else the LLM's, at color."""
+    if system1 is None:
+        return anchor_match_settings(args, color, anchor_side, sampling_file)
+    return side_anchor_match_settings(system1, args, color, anchor_side, sampling_file)
+
+
 def check_ladder(
     args: argparse.Namespace,
     anchor_for: Callable[[AnchorSide], Anchor],
     sampling_file: Path,
     missing_models: Callable[[list[str]], list[str]],
+    system1: System1Side | None = None,
+    system1_missing_models: Callable[[str, list[str]], list[str]] = system1_missing_models,
 ) -> str | None:
     """Why the ladder in args can't be played, or None: its settings, whether Ollama has its model (missing_models),
-    then its engine, which is started once now, so a missing engine stops a batch before it starts, not once the
-    ladder reaches it. Done before the analysis engines are built."""
+    or for a System 1 model (system1) whether its server answers and has it (system1_missing_models), then its
+    engine, which is started once now, so a missing engine stops a batch before it starts, not once the ladder
+    reaches it. Done before the analysis engines are built."""
     try:
-        anchor_match_settings(args, "white", first_rung(args), sampling_file).check_installed(missing_models)
+        settings = ladder_settings(args, "white", first_rung(args), sampling_file, system1)
+        settings.check_installed(missing_models)
+        settings.check_served(system1_missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return str(error)
     try:
@@ -521,15 +552,23 @@ def play_ladder(
     sampling_file: Path,
     analyser: Analyser,
     failed: str = "Anchor match batch stopped",
+    system1: System1Side | None = None,
+    decision_model_for: Callable[[System1Side], DecisionModel] = decision_model_for,
 ) -> int:
     """Play args.games Anchor matches of the Player configuration in args up and down the ladder, going on from its
     earlier games in args.games_dir, as chessllm.cli.anchor_batch describes; returns the exit code, after failed,
     e.g. "Anchor match batch stopped", when it stops. Its settings and engine are checked first, by check_ladder;
-    each finished game is analysed by analyser, which the caller closes."""
-    settings = anchor_match_settings(args, "white", first_rung(args), sampling_file)
-    history = earlier_games(args.games_dir, settings_configuration(settings, "white"), args.engine)
+    each finished game is analysed by analyser, which the caller closes. For a System 1 model (system1) the ladder is
+    its Player configuration's, and its games each get a fresh seed, logged, by decision_model_for(system1) built
+    for each game."""
+    settings = ladder_settings(args, "white", first_rung(args), sampling_file, system1)
+    configuration = (
+        system1_side_configuration(system1, settings.rules) if system1 else settings_configuration(settings, "white")
+    )
+    history = earlier_games(args.games_dir, configuration, args.engine)
     if history:
         print(f"Going on from {len(history)} earlier Anchor matches of this Player configuration.")
+    model = "System 1 model" if system1 else "LLM"
     played: list[AnchoredGame] = []
     log: GameLog | None = None
     try:
@@ -537,19 +576,19 @@ def play_ladder(
             rung = args.skill if number == 1 and args.skill is not None else next_rung(history)
             llm_color = next_color(history)
             anchor_side = rung_side(rung, args.engine)
-            settings = anchor_match_settings(args, llm_color, anchor_side, sampling_file)
+            settings = ladder_settings(args, llm_color, anchor_side, sampling_file, system1)
             try:
                 anchor = anchor_for(anchor_side)
             except AnchorUnavailable as error:
-                ladder_summary(played, history)
+                ladder_summary(played, history, model)
                 return fail(failed, str(error))
             anchor_color = opponent(llm_color)
             try:
-                players = {llm_color: player_for(settings, llm_color)}
+                players, decision_models = model_under_test(settings, llm_color, system1, player_for, decision_model_for)
                 log = GameLog(args.games_dir, *settings.side_names())
-                state = play_anchor_match(settings, players, {anchor_color: anchor}, log)
+                state = play_anchor_match(settings, players, {anchor_color: anchor}, log, decision_models=decision_models)
             except AnchorUnavailable as error:
-                ladder_summary(played, history)
+                ladder_summary(played, history, model)
                 return fail(failed, f"{error}. Game {number} was left unfinished in {log and log.path}")
             finally:
                 anchor.close()
@@ -557,15 +596,15 @@ def play_ladder(
             game = AnchoredGame(rung, llm_color, score_for(state.result, llm_color))
             history.append(game)
             played.append(game)
-            print(f"Game {number}/{args.games}: {rung_name(rung)}, LLM as {llm_color}: {outcome(game, state)}", flush=True)
+            print(f"Game {number}/{args.games}: {rung_name(rung)}, {model} as {llm_color}: {outcome(game, state)}", flush=True)
             finished, log = log.path, None
             analyser.analyse(finished)
     except KeyboardInterrupt:
         unfinished = f"; game {len(played) + 1} was left unfinished in {log.path}" if log is not None else ""
         print(f"Interrupted after {len(played)} of {args.games} games{unfinished}.", file=sys.stderr)
-        ladder_summary(played, history)
+        ladder_summary(played, history, model)
         return INTERRUPTED_EXIT_CODE
-    ladder_summary(played, history)
+    ladder_summary(played, history, model)
     return 0
 
 
@@ -574,14 +613,14 @@ def outcome(game: AnchoredGame, state: GameState) -> str:
     return f"{word} ({state.result}, {state.end_reason})"
 
 
-def ladder_summary(played: list[AnchoredGame], history: list[AnchoredGame]) -> None:
-    """Print the batch's results, per rung, and where the ladder stands."""
+def ladder_summary(played: list[AnchoredGame], history: list[AnchoredGame], model: str = "LLM") -> None:
+    """Print the batch's results, per rung, and where the ladder stands; model is the kind of the Model player."""
     counts = Counter(game.score for game in played)
     print(f"Batch: {len(played)} games, {counts[1.0]} wins, {counts[0.5]} draws, {counts[0.0]} losses.")
     for rung in sorted({game.rung for game in played}):
         at_rung = Counter(game.score for game in played if game.rung == rung)
         print(f"  {rung_name(rung)}: {at_rung[1.0]} W · {at_rung[0.5]} D · {at_rung[0.0]} L")
-    print(f"Next game: {rung_name(next_rung(history))}, LLM as {next_color(history)}.")
+    print(f"Next game: {rung_name(next_rung(history))}, {model} as {next_color(history)}.")
 
 
 def close(engine: object) -> None:
