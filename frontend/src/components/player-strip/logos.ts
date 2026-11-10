@@ -1,5 +1,6 @@
 // A model's icon in its player strip: its family's logo (LobeHub Icons, MIT; see assets/logos/LICENSE), else a
 // monogram in a colour fixed per family.
+import claude from '@/assets/logos/claude.svg'
 import deepseek from '@/assets/logos/deepseek.svg'
 import gemma from '@/assets/logos/gemma.svg'
 import meta from '@/assets/logos/meta.svg'
@@ -16,6 +17,7 @@ const LOGOS: Record<string, { logo: string; family: string }> = {
   mistral: { logo: mistral, family: 'Mistral' },
   ministral: { logo: mistral, family: 'Mistral' },
   deepseek: { logo: deepseek, family: 'DeepSeek' },
+  claude: { logo: claude, family: 'Claude' },
 }
 
 /** The monograms' colours, each dark enough for white text to pass WCAG AA on it. */

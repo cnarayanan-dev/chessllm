@@ -6,7 +6,7 @@ const logoOf = (model: string) => {
   return 'logo' in icon ? icon.family : null
 }
 
-test('qwen, llama, gemma, mistral and deepseek models show their family logo, matched on the name before the version', () => {
+test('qwen, llama, gemma, mistral, deepseek and claude models show their family logo, matched on the name before the version', () => {
   expect(logoOf('qwen3.5:9b')).toBe('Qwen')
   expect(logoOf('qwen2.5-coder:7b')).toBe('Qwen')
   expect(logoOf('llama3.2:3b')).toBe('Meta')
@@ -15,6 +15,7 @@ test('qwen, llama, gemma, mistral and deepseek models show their family logo, ma
   expect(logoOf('ministral-3:8b')).toBe('Mistral')
   expect(logoOf('deepseek-r1:8b')).toBe('DeepSeek')
   expect(logoOf('Qwen3:latest')).toBe('Qwen')
+  expect(logoOf('claude-haiku-5-5')).toBe('Claude')
 })
 
 test('a family without a logo gets a monogram, in the same colour for every model of the family', () => {
