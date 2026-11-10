@@ -1,5 +1,6 @@
 """One game, each side played by a human, an LLM player or an Anchor as the settings' Mode says: the board, the
-order of turns, and the human's and the Anchor's moves. An LLM's turn is played by llm_turn, under the game's Rules."""
+order of turns, and the human's and the Anchor's moves. An LLM's turn is played by llm_turn, under the game's Rules.
+A Hosted model whose provider fails aborts the game instead of ending it (ADR 0013)."""
 
 import logging
 import random

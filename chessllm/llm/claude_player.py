@@ -68,7 +68,10 @@ class ClaudePlayer:
             "max_tokens": MAX_TOKENS,
             "messages": turn,
             "thinking": thinking,
-            "output_config": {"effort": EFFORT, "format": {"type": "json_schema", "schema": anthropic.transform_schema(schema)}},
+            "output_config": {
+                "effort": EFFORT,
+                "format": {"type": "json_schema", "schema": anthropic.transform_schema(schema)},
+            },
         }
         if system:
             request["system"] = system

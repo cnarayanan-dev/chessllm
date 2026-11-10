@@ -353,8 +353,8 @@ class GameState(BaseModel):
     end_reason: EndReason | None
     stats: Stats
     time_used: TimeUsed
-    # How long the side to move had been on its move when the state was built. None once the game is over, and
-    # while an LLM's Turn or an Anchor's move hasn't been asked for: their time only runs once it has.
+    # How long the side to move had been on its move when the state was built. None once the game is over or aborted,
+    # and while an LLM's Turn or an Anchor's move hasn't been asked for: their time only runs once it has.
     running_s: float | None
     # Only with an evaluator: the engine every ply's Evaluation comes from.
     evaluator: EvaluationEngine | None = Field(default=None, exclude_if=is_none)

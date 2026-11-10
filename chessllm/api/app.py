@@ -51,8 +51,8 @@ def create_app(
     app = FastAPI(title="ChessLLM")
     app.state.config = config
     app.state.engines = Engines(
-        player_for, offered_models() if models is None else models, sampling_defaults, missing_models, move_model, evaluator, clock, decision_model_for,
-        system1_missing_models,
+        player_for, offered_models() if models is None else models, sampling_defaults, missing_models, move_model,
+        evaluator, clock, decision_model_for, system1_missing_models,
     )
     app.state.games = GameStore()
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")

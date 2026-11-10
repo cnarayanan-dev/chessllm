@@ -1,6 +1,6 @@
 """The Ranking: the models in order of their Rating under the Reference configuration, each with its Move-quality
-estimate and record (ADR 0011). It ranks models, never Player configurations. LLMs and System 1 models are ranked
-together, each entry saying which kind it is (ADR 0012).
+estimate and record (ADR 0011). It ranks models, never Player configurations. LLMs (local or Hosted, ADR 0013) and
+System 1 models are ranked together, each entry saying which kind it is (ADR 0012) and whether it is hosted.
 
 Only games in which every model side plays under the Reference configuration count, so a game under any other settings
 is left out of every number, the Rating's fit included. Narrowed to some Modes, every number comes from those Modes'

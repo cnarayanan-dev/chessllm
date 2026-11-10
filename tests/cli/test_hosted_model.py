@@ -48,7 +48,10 @@ def test_a_command_asked_for_the_hosted_model_without_a_token_stops_before_the_f
     scripted = ScriptedAnchor([])
 
     code = command.main(
-        ["--games-dir", str(tmp_path / "games"), *model, *args, *([] if command is anchor_match else ["--no-analysis"])],
+        [
+            "--games-dir", str(tmp_path / "games"), *model, *args,
+            *([] if command is anchor_match else ["--no-analysis"]),
+        ],
         player_for=no_player,
         **({"anchor_for": lambda side: scripted} if command is not faceoff_batch else {}),
         sampling_file=tmp_path / "no-sampling.toml",

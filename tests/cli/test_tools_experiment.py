@@ -244,3 +244,14 @@ def test_with_no_game_to_play_ollama_isnt_asked(experiment):
 
     assert code == 0
     assert missing_models.asked == []
+
+
+@pytest.mark.parametrize("flags", [[], ["--tools", "board"], ["--anchor-games", "0", "--faceoff-games", "1"]])
+def test_the_hosted_model_is_refused_with_the_reason_that_it_has_no_tools(experiment, tmp_path, capsys, flags):
+    code, planted = experiment([], [], "--model", "claude-haiku-5-5", *flags)
+
+    assert code == 1
+    error = capsys.readouterr().err
+    assert "claude-haiku-5-5 (white) is a Hosted model, so it has no Tools" in error
+    assert "model list" not in error
+    assert planted.ladder.anchors == [] and not (tmp_path / "games").exists()

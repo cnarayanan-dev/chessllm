@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, get_args
 from chessllm.analytics.analysis import analyse_game
 from chessllm.analytics.leaderboard import settings_configuration, system1_side_configuration
 from chessllm.core.config import (
-    CLAUDE_TOKEN_VARIABLE,
     DRAGON_PATH_VARIABLE,
     GAMES_DIR,
     PROMPT_LIBRARY_DIR,
@@ -68,7 +67,7 @@ from chessllm.game.sides import (
     side_tool_call_cap,
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
-from chessllm.llm.models import KNOWN_MODELS, load_sampling
+from chessllm.llm.models import KNOWN_MODELS, is_hosted, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 from chessllm.system1.port import DecisionModel
@@ -396,7 +395,7 @@ def player_for(settings: Settings, color: Color) -> "OllamaPlayer | ClaudePlayer
     model's speed (ADR 0007), and its Tool-call cap the player's (ADR 0011)."""
     side = settings.side(color)
     assert isinstance(side, LlmSide)
-    if any(model.hosted and model.name == side.model for model in KNOWN_MODELS):
+    if is_hosted(side.model):
         # Imported late, so the tests never load the Anthropic client.
         from chessllm.llm.claude_player import ClaudePlayer
 
@@ -546,8 +545,8 @@ def check_ladder(
     """Why the ladder in args can't be played, or None: its settings, whether Ollama has its model (missing_models),
     or for a System 1 model (system1) whether its server answers and has it (system1_missing_models), then its
     engine, which is started once now, so a missing engine stops a batch before it starts, not once the ladder
-    reaches it. A Hosted model needs the provider's token, not checked with the provider. Done before the analysis engines
-    are built."""
+    reaches it. A Hosted model needs the provider's token, not checked with the provider. Done before the analysis
+    engines are built."""
     try:
         settings = ladder_settings(args, "white", first_rung(args), sampling_file, system1)
         settings.check_installed(missing_models)

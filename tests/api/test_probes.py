@@ -12,11 +12,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from chessllm.api.app import create_app
-from chessllm.exceptions import InvalidSettings
+from chessllm.exceptions import HostedModelFailed, InvalidSettings
 from chessllm.game.llm_turn.prompt import default_template
 from chessllm.game.session import GameSession
 from chessllm.game.settings import Settings
 from chessllm.game.sides import HumanSide, LlmSide
+from chessllm.llm.models import KNOWN_MODELS
 from chessllm.logs.game_log import GameLog
 
 AFTER_NF3 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"
@@ -322,3 +323,21 @@ def test_a_side_on_the_moves_template_is_probed_with_one_that_shows_the_position
     assert len(player.prompts) == 3
     assert [message.role for message in player.prompts[-1]] == ["system", "user"]
     assert player.prompts[-1][1].content == f"PGN: 1. e4 e5 2. Nf3\nFEN: {AFTER_NF3}"
+
+
+def test_a_probe_of_a_hosted_model_whose_provider_fails_is_an_errored_attempt_and_aborts_nothing(
+    scripted, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("CLAUDE_TOKEN", "a-token-for-a-test")
+    failed = HostedModelFailed("claude-haiku-5-5: the provider refused the token: invalid x-api-key")
+    client, _ = scripted(["e5", "Nc6", failed], models=KNOWN_MODELS)
+    two_moves_in(client, model="claude-haiku-5-5")
+
+    response = probe(client, 4, "black", template_id(client, "Described"))
+
+    assert response.status_code == 200, response.text  # a probe has no Aborted game: not a server error
+    attempt = response.json()["attempt"]
+    assert attempt["result"] == "error"
+    assert "the provider refused the token" in attempt["error"]
+    assert client.get("/api/games/current").json()["status"] == "playing"
+    assert [event["type"] for event in probe_log(tmp_path / "games")] == ["probe"]
