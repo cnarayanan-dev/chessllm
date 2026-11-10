@@ -87,3 +87,10 @@ def faceoff(tmp_path):
         return client, response.json(), players
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def no_claude_token(monkeypatch):
+    """No test has a token for the Hosted model's provider, whatever the machine's environment or .env holds: a test
+    that needs one sets it, and none calls the real API (the Claude player takes a fake client)."""
+    monkeypatch.delenv("CLAUDE_TOKEN", raising=False)

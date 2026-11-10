@@ -8,6 +8,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PACKAGE_DIR = Path(__file__).parent.parent  # chessllm/
 PROJECT_ROOT = PACKAGE_DIR.parent
 
@@ -42,6 +44,26 @@ SYSTEM1_DEFAULT_URL = "http://localhost:11434"
 
 DRAGON_PATH_VARIABLE = "CHESSLLM_DRAGON"
 STOCKFISH_PATH_VARIABLE = "CHESSLLM_STOCKFISH"
+# The token that gives the app access to the Hosted model's provider (ADR 0013). It is a secret: it is never logged,
+# printed or written to a game log, and the file that may hold it is git-ignored.
+CLAUDE_TOKEN_VARIABLE = "CLAUDE_TOKEN"  # noqa: S105  the variable's name, not a token
+# Where the environment variables may be set instead of in the shell: a file of NAME=value lines.
+ENV_FILE = PROJECT_ROOT / ".env"
+
+
+def load_environment(env_file: Path = ENV_FILE) -> None:
+    """Add the variables of the env file to the environment, those the environment doesn't already have: a real
+    environment variable wins over the file (override=False). A missing file adds nothing."""
+    load_dotenv(env_file, override=False)
+
+
+load_environment()  # once, here, so every other module just reads the environment
+
+
+def claude_token_from_environment() -> str | None:
+    """The token CLAUDE_TOKEN sets, read when asked like Dragon's path; None when it is unset or empty, and then the
+    Hosted model is not offered."""
+    return os.environ.get(CLAUDE_TOKEN_VARIABLE) or None
 
 
 def dragon_path_from_environment() -> str | None:

@@ -4,7 +4,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from chessllm.core.config import SAMPLING_FILE
+from chessllm.core.config import SAMPLING_FILE, claude_token_from_environment
 from chessllm.core.types import Sampling
 from chessllm.exceptions import InvalidSamplingConfig
 
@@ -29,9 +29,15 @@ SAMPLING_OPTIONS = frozenset(
 )
 
 
+# The context Ollama loads every model here with (`ollama ps`). A Thinking budget must fit in it with the prompt (up
+# to about 1,500 tokens late in a long game) and the forced answer, so at most 6,144, rounded down to a multiple of
+# 1,024; a budget smaller than the forced answer's cap can't hold an answer (ADR 0007).
+CONTEXT_TOKENS = 8192
+
+
 @dataclass(frozen=True)
 class LlmModel:
-    name: str  # the Ollama model name
+    name: str  # the Ollama model name, or for a Hosted model its provider's id
     # The thinking values `ollama show` lists for it: false and true for on/off, or false and its Thinking levels,
     # e.g. "xhigh". Empty when it can't think (no "thinking" capability).
     thinking_values: tuple[bool | str, ...] = ()
@@ -41,6 +47,13 @@ class LlmModel:
     # Whether it can call tools natively, the "tools" capability `ollama show` lists for it: only then may it have
     # Tools (ADR 0011). Hand-set, like thinking_values.
     tools: bool = False
+    # Whether it is a Hosted model (ADR 0013): run on a provider's servers, never asked of Ollama, offered only with
+    # the provider's token. Only the settings its provider allows apply to it: thinking on or off, never sampling, a
+    # Thinking level, a Thinking budget or Tools.
+    hosted: bool = False
+    # The tokens its context holds, which a conversation kept by Turn memory is trimmed to; None for the context Ollama
+    # loads every local model with, CONTEXT_TOKENS.
+    context_tokens: int | None = None
 
     @property
     def thinking(self) -> bool:
@@ -73,11 +86,30 @@ LLM_MODELS = [
 FORCED_ANSWER_TOKENS = 64
 # Closes the thinking handed back when a Thinking budget runs out, so the model gives its move (ADR 0007).
 BUDGET_SENTENCE = "\n\nConsidering the limited time, I have to give my move now, based on the thinking so far."
-# The context Ollama loads every model here with (`ollama ps`). A Thinking budget must fit in it with the prompt (up
-# to about 1,500 tokens late in a long game) and the forced answer, so at most 6,144, rounded down to a multiple of
-# 1,024; a budget smaller than the forced answer's cap can't hold an answer (ADR 0007).
-CONTEXT_TOKENS = 8192
 THINKING_BUDGET_RANGE = range(FORCED_ANSWER_TOKENS, 6144 + 1)
+
+# The Hosted models (ADR 0013): a single hard-coded entry, so adding another is one line. Claude Haiku 5.5 thinks on
+# or off (adaptive thinking), has a 1M-token context, and none of the local models' other capabilities here.
+HOSTED_MODELS = [LlmModel("claude-haiku-5-5", (False, True), hosted=True, context_tokens=1_000_000)]
+# Every model a command can be asked to play, whether or not the app has access to its provider.
+KNOWN_MODELS = [*LLM_MODELS, *HOSTED_MODELS]
+
+
+def offered_models() -> list[LlmModel]:
+    """The models the New game sheet offers: the local ones, and the Hosted ones only while the app has access to
+    their provider (a token is set), read when asked."""
+    return list(KNOWN_MODELS if claude_token_from_environment() is not None else LLM_MODELS)
+
+
+def is_hosted(model: str) -> bool:
+    """Whether the named model is a Hosted model (ADR 0013)."""
+    return any(known.hosted and known.name == model for known in KNOWN_MODELS)
+
+
+def context_tokens(model: str) -> int | None:
+    """The tokens the named model's context holds, or None for Ollama's CONTEXT_TOKENS: a local model's, and that of
+    a model not in the lists."""
+    return next((known.context_tokens for known in KNOWN_MODELS if known.name == model), None)
 
 
 def load_sampling(path: Path = SAMPLING_FILE) -> Sampling:

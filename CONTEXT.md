@@ -1,6 +1,6 @@
 # ChessLLM
 
-A benchmark of how well small local LLMs play chess, by playing them against humans and against each other (and later engines).
+A benchmark of how well LLMs, local and hosted, play chess, by playing them against humans and against each other (and later engines).
 
 ## Language
 
@@ -29,6 +29,10 @@ _Avoid_: Bot, engine (alone), reference player
 **Model player**:
 An LLM or a **System 1 model**: the side of a game that a model plays. The **Modes** keep their names, "LLM" in them standing for any model player.
 _Avoid_: AI, bot, engine, model side
+
+**Hosted model**:
+An LLM that runs on a provider's servers and is paid for per token, such as Claude Haiku 5.5, as opposed to a local one. Still an LLM and a **Model player**, playable in every **Mode** and ranked in the same **Ranking**, marked as hosted. Offered only when the human has given the app access to its provider. Only the settings of a **Player configuration** that its provider allows apply to it: **Thinking** on or off, the **LLM constraints**, **Chaos rules** or **Standard rules**, **Retry feedback**, **Turn memory** and the **Prompt template**; never sampling, a **Thinking level**, a **Thinking budget** or **Tools**. Its **Thinking** is only the summary the provider gives, never the raw reasoning.
+_Avoid_: Cloud model, API model, remote model
 
 **Choice temperature**:
 How a **System 1 model**'s probabilities are turned into the chance of each move being played: at 1 each move is played as often as the model's probability for it, below 1 its favourites are played more often, and at 0 always its top move. Fixed for a whole game, 1 by default, and part of the **Player configuration**. It is what makes two games between the same System 1 models differ.
@@ -224,6 +228,10 @@ _Avoid_: Error message, hint mode
 Loss of the game by an LLM after it uses up its retries without proposing a legal move, or at once when it gives no answer at all (it thinks past the time limit or the call fails).
 _Avoid_: Resign, disqualification
 
+**Aborted game**:
+A game stopped because something outside the players' play failed, so no side loses: a **Hosted model**'s provider refuses the app's access, has no credit left, limits its use or is down. It stays in the game log with the reason, but counts towards no **Rating**, **Move-quality estimate** or record. A **Hosted model**'s reply that times out or is declined for its content is no such failure: it is a **Forfeit**.
+_Avoid_: Void game, errored game, crashed game
+
 **Time used**:
 The total time a side has spent on its moves in a game, added up move by move and shown for both sides in every **Mode**. For an LLM, the time its **Turns** ran, from when each started to its move or **Forfeit**, so a game nobody is driving charges no one; for an **Anchor**, from when its move is asked for to its move. For the human, the time from their position being ready to their move. It stops when the game ends. Not a time control: no side loses on it.
 _Avoid_: Clock, move timer, latency (one call's time)
@@ -239,11 +247,11 @@ A **Model player** together with every setting it plays a game with: model, thin
 _Avoid_: Model (when settings differ), entrant, agent, bot
 
 **Reference configuration**:
-The one set of settings, everything in a **Player configuration** but the model, under which every model is compared with every other: thinking off, **Free**, **Standard rules**, 5 attempts per turn with *explained* **Retry feedback**, *fresh* **Turn memory**, no **Tools**, the default **Prompt template** and the model's own sampling. For a **System 1 model**, only the settings that apply to it: **Standard rules**, its default Prompt template and a **Choice temperature** of 1. Chosen to be what a model can do unaided and what most games were played under, not where it plays best. A model's **Rating** under it is the model's overall number; every other Player configuration of that model is shown as how far it moves the Rating from there. A model without games under it has no overall number.
+The one set of settings, everything in a **Player configuration** but the model, under which every model is compared with every other: thinking off, **Free**, **Standard rules**, 5 attempts per turn with *explained* **Retry feedback**, *fresh* **Turn memory**, no **Tools**, the default **Prompt template** and the model's own sampling. For a **Hosted model**, only the settings that apply to it, its own sampling being the provider's. For a **System 1 model**, only the settings that apply to it: **Standard rules**, its default Prompt template and a **Choice temperature** of 1. Chosen to be what a model can do unaided and what most games were played under, not where it plays best. A model's **Rating** under it is the model's overall number; every other Player configuration of that model is shown as how far it moves the Rating from there. A model without games under it has no overall number.
 _Avoid_: Default settings, baseline, standard configuration, overall rating (pooled over settings)
 
 **Ranking**:
-The models in order of their **Rating** under the **Reference configuration**, each with its **Move-quality estimate** and its record, counting only games under the Reference configuration. It can be narrowed to some **Modes**, and then every number in it comes from those games alone, so a Mode with no path to an **Anchor** gives no Rating. It ranks models, never Player configurations, LLMs and **System 1 models** in one list.
+The models in order of their **Rating** under the **Reference configuration**, each with its **Move-quality estimate** and its record, counting only games under the Reference configuration. It can be narrowed to some **Modes**, and then every number in it comes from those games alone, so a Mode with no path to an **Anchor** gives no Rating. It ranks models, never Player configurations, local LLMs, **Hosted models** and **System 1 models** in one list, each of the last two marked as such.
 _Avoid_: Leaderboard (for a list of Player configurations), standings, model rating
 
 **Setting effect**:
