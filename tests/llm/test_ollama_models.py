@@ -3,11 +3,11 @@ import time
 from functools import partial
 
 import pytest
-from ollama import ResponseError, ShowResponse
+from ollama import ListResponse, ResponseError, ShowResponse
 
 from chessllm.exceptions import OllamaUnavailable
 from chessllm.llm.models import LlmModel
-from chessllm.llm.ollama_models import missing_models, sampling_defaults
+from chessllm.llm.ollama_models import decision_models, missing_models, sampling_defaults
 
 PARAMETERS = {
     "qwen3.5:9b": "presence_penalty               1.5\ntemperature                    1\ntop_k                          20\ntop_p                          0.95",
@@ -129,3 +129,57 @@ def test_with_ollama_stalled_the_models_are_unavailable_within_one_timeout(stall
         missing_models(["qwen3.5:9b", "llama3:8b"], ollama, timeout_s=0.3)
 
     assert time.monotonic() - start < 0.3 * 2  # the models are asked at once, not one after another
+
+
+class ListingOllama:
+    """Lists the models in CAPABILITIES and shows each with its capabilities, as Ollama does."""
+
+    CAPABILITIES = {
+        "d3:2b": ["decision", "vision"],
+        "llama3:8b": ["completion"],
+        "d1:2b": ["decision", "vision"],
+        "qwen3.5:9b": ["completion", "vision", "tools", "thinking"],
+    }
+
+    def list(self) -> ListResponse:
+        return ListResponse(models=[ListResponse.Model(model=name) for name in self.CAPABILITIES])
+
+    def show(self, model: str) -> ShowResponse:
+        return ShowResponse(model_info={}, capabilities=self.CAPABILITIES[model])
+
+
+def test_the_decision_models_are_the_installed_models_with_the_decision_capability_in_the_order_listed():
+    assert decision_models(ListingOllama()) == ["d3:2b", "d1:2b"]
+
+
+def test_with_ollama_not_running_there_are_no_decision_models():
+    class NotRunning(ListingOllama):
+        def list(self) -> ListResponse:
+            raise ConnectionError("Failed to connect to Ollama")
+
+    assert decision_models(NotRunning()) == []
+
+
+def test_a_model_ollama_cant_show_is_left_out_of_the_decision_models():
+    class CantShowD3(ListingOllama):
+        def show(self, model: str) -> ShowResponse:
+            if model == "d3:2b":
+                raise ResponseError("out of memory", 500)
+            return super().show(model)
+
+    assert decision_models(CantShowD3()) == ["d1:2b"]
+
+
+def test_with_ollama_stalled_the_decision_models_are_none_within_one_timeout(stalled_ollama):
+    class Stalled(ListingOllama):
+        def __init__(self) -> None:
+            self.stall = stalled_ollama(set(self.CAPABILITIES))
+
+        def show(self, model: str) -> ShowResponse:
+            self.stall.show(model)
+            return super().show(model)
+
+    start = time.monotonic()
+    assert decision_models(Stalled(), timeout_s=0.3) == []
+
+    assert time.monotonic() - start < 0.3 * 2

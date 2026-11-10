@@ -361,6 +361,34 @@ describe('a System 1 model as a side', () => {
     expect(newGameRequest(back, models).black).toEqual(newGameRequest(next, models).black)
   })
 
+  describe('becoming a System 1 model, with models listed at the default server', () => {
+    const listed = { default_url: 'http://localhost:11434', models: ['d3:9b', 'd1:2b'] }
+    const blackAfter = (next: ReturnType<typeof nextGameFrom>) =>
+      newGameRequest(chooseKind(next, models, 'black', 'system1', listed), models).black
+    const atServer = (url: string, model?: string) => {
+      const next = withSystem1Url(nextGameFrom(playLlm), url)
+      return model ? setSystem1(next, 'black', 'model', model) : next
+    }
+
+    test('takes the first listed when its model is not listed', () => {
+      expect(blackAfter(atServer(listed.default_url))).toMatchObject({ model: 'd3:9b' })
+    })
+
+    test('keeps its model when that is listed', () => {
+      expect(blackAfter(atServer(listed.default_url, 'd1:2b'))).toMatchObject({ model: 'd1:2b' })
+    })
+
+    test('keeps a model named for another server, which Ollama would not list', () => {
+      expect(blackAfter(atServer('http://localhost:8080', 'mine'))).toMatchObject({ model: 'mine' })
+    })
+
+    test('keeps its model when none are listed', () => {
+      const next = chooseKind(atServer(listed.default_url), models, 'black', 'system1', { ...listed, models: [] })
+
+      expect(newGameRequest(next, models).black).toMatchObject({ model: 'd3:2b' })
+    })
+  })
+
   test('customizing per LLM ends when a side stops being an LLM, the other LLM keeping its settings', () => {
     const custom = nextGameFrom(faceoff) // its sides differ, so it opens customized
     expect(custom.custom).toBe(true)

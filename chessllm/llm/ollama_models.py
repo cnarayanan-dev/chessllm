@@ -1,4 +1,4 @@
-"""What Ollama shows of its models: their sampling defaults, and which of them it doesn't have."""
+"""What Ollama shows of its models: their sampling defaults, which of them it doesn't have, and which are decision models."""
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +14,10 @@ from chessllm.llm.models import SAMPLING_OPTIONS
 
 class OllamaClient(Protocol):
     def show(self, model: str) -> ollama.ShowResponse: ...
+
+
+class OllamaLister(OllamaClient, Protocol):
+    def list(self) -> ollama.ListResponse: ...
 
 
 def sampling_defaults(model: str, client: OllamaClient | None = None, timeout_s: float = OLLAMA_SHOW_TIMEOUT_S) -> Sampling:
@@ -58,6 +62,30 @@ def missing_models(
     with ThreadPoolExecutor(len(models)) as pool:
         found = list(pool.map(has, models))
     return [model for model, there in zip(models, found, strict=True) if not there]
+
+
+def decision_models(client: OllamaLister | None = None, timeout_s: float = OLLAMA_SHOW_TIMEOUT_S) -> list[str]:
+    """The installed models that are System 1 models, those with the "decision" capability (LLMs have "completion"),
+    in the order Ollama lists them. Empty if Ollama can't say, e.g. when it isn't running; a model it can't show in
+    timeout_s is left out. They are asked at once, so a stalled Ollama holds them up for one timeout, not one per
+    model."""
+    ask = client or ollama.Client(timeout=timeout_s)
+    try:
+        names = [entry.model for entry in ask.list().models if entry.model]
+    except Exception:
+        return []
+
+    def is_decision_model(name: str) -> bool:
+        try:
+            return "decision" in (_show(ask, name, timeout_s).capabilities or [])
+        except Exception:
+            return False
+
+    if not names:
+        return []
+    with ThreadPoolExecutor(len(names)) as pool:
+        decision = list(pool.map(is_decision_model, names))
+    return [name for name, yes in zip(names, decision, strict=True) if yes]
 
 
 def _show(client: OllamaClient, model: str, timeout_s: float) -> ollama.ShowResponse:

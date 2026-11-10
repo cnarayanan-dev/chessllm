@@ -11,6 +11,15 @@ async function clickMove(page: Page, uci: string) {
   await square(page, uci.slice(2, 4)).click()
 }
 
+/** Picks a System 1 side's model from the dropdown of those the fake Ollama has (tests/e2e/server.py). */
+async function pickModel(page: Page, side: string, model: string) {
+  const picker = page.getByRole('dialog', { name: 'New game' }).getByRole('combobox', { name: side })
+  await picker.click()
+  await expect(page.getByRole('option')).toHaveText(['d3:2b', 'd3:9b', 'd1:2b'])
+  await page.getByRole('option', { name: model }).click()
+  await expect(picker).toContainText(model)
+}
+
 test('a human plays a System 1 model from the New game sheet to checkmate, and Rematch keeps its settings', async ({ page }) => {
   await page.request.post('/e2e/restart')
   await page.request.post('/e2e/script', { data: { system1: { 'd1:2b': ['e5', 'Qh4#'] } } })
@@ -18,7 +27,7 @@ test('a human plays a System 1 model from the New game sheet to checkmate, and R
 
   const sheet = page.getByRole('dialog', { name: 'New game' })
   await sheet.getByRole('radiogroup', { name: 'Opponent kind' }).getByRole('radio', { name: 'System 1' }).click()
-  await sheet.getByRole('textbox', { name: 'Opponent' }).fill('d1:2b')
+  await pickModel(page, 'Opponent', 'd1:2b')
   await sheet.getByRole('button', { name: 'Advanced settings' }).click()
   await sheet.getByRole('spinbutton', { name: 'Choice temperature' }).fill('0.5')
   await sheet.getByRole('button', { name: 'Play as White' }).click()
@@ -59,7 +68,7 @@ test('a faceoff between two System 1 models runs on its own to checkmate', async
   await sheet.getByRole('radio', { name: 'LLM faceoff' }).click()
   await sheet.getByRole('radiogroup', { name: 'White kind' }).getByRole('radio', { name: 'System 1' }).click()
   await sheet.getByRole('radiogroup', { name: 'Black kind' }).getByRole('radio', { name: 'System 1' }).click()
-  await sheet.getByRole('textbox', { name: 'Black model' }).fill('d1:2b')
+  await pickModel(page, 'Black model', 'd1:2b')
   await sheet.getByRole('button', { name: 'Start faceoff' }).click()
 
   await expect(page.getByTestId('result')).toContainText('d1:2b (Black) wins')
@@ -74,7 +83,7 @@ test('a System 1 model the server lacks is refused at the start: "Could not star
 
   const sheet = page.getByRole('dialog', { name: 'New game' })
   await sheet.getByRole('radiogroup', { name: 'Opponent kind' }).getByRole('radio', { name: 'System 1' }).click()
-  await sheet.getByRole('textbox', { name: 'Opponent' }).fill('d1:2b')
+  await pickModel(page, 'Opponent', 'd1:2b')
   await sheet.getByRole('button', { name: 'Play as White' }).click()
 
   const alert = page.getByRole('alert')

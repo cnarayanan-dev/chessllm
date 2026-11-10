@@ -58,7 +58,9 @@ class System1TemplateInfo(BaseModel):
 
 class System1Options(BaseModel):
     """What a new game's System 1 side is offered: the server a System 1 model is looked for at unless the game says
-    another (the app's default), and the Prompt templates it can play with, the default first."""
+    another (the app's default), the System 1 models installed in Ollama there (none if it can't say), and the Prompt
+    templates it can play with, the default first."""
 
     default_url: str
+    models: list[str]
     templates: list[System1TemplateInfo]
