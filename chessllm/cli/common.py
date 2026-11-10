@@ -12,11 +12,13 @@ from typing import TYPE_CHECKING, get_args
 from chessllm.analytics.analysis import analyse_game
 from chessllm.analytics.leaderboard import settings_configuration, system1_side_configuration
 from chessllm.core.config import (
+    CLAUDE_TOKEN_VARIABLE,
     DRAGON_PATH_VARIABLE,
     GAMES_DIR,
     PROMPT_LIBRARY_DIR,
     STOCKFISH_PATH_VARIABLE,
     SYSTEM1_DEFAULT_URL,
+    claude_token_from_environment,
 )
 from chessllm.engines.anchors import (
     Anchor,
@@ -66,13 +68,14 @@ from chessllm.game.sides import (
     side_tool_call_cap,
 )
 from chessllm.game.llm_turn.prompt import DefaultTemplate, default_template
-from chessllm.llm.models import LLM_MODELS, load_sampling
+from chessllm.llm.models import KNOWN_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 from chessllm.system1.port import DecisionModel
 from chessllm.system1.prompt import DEFAULT_TEMPLATE, SYSTEM1_TEMPLATES, resolve_system1_template
 
 if TYPE_CHECKING:
+    from chessllm.llm.claude_player import ClaudePlayer
     from chessllm.llm.ollama_player import OllamaPlayer
 
 # The default Prompt templates --prompt-template offers: Moves is not one, as it is the Default under chat_moves and
@@ -360,7 +363,7 @@ def side_anchor_match_settings(
         max_attempts=args.max_attempts,
         legal_counterpart=not args.no_legal_counterpart,
     )
-    settings.check(LLM_MODELS)
+    settings.check(KNOWN_MODELS)
     return settings
 
 
@@ -381,16 +384,28 @@ def benchmark_llm_side(args: argparse.Namespace) -> BenchmarkLlmSide:
     )
 
 
-def player_for(settings: Settings, color: Color) -> "OllamaPlayer":
-    """The LLM player of one LLM side of a game, built when the game starts. A benchmark side's Thinking budget
-    sets its time limit, from its model's speed (ADR 0007), and its Tool-call cap the player's (ADR 0011)."""
+def has_claude_token() -> bool:
+    """Whether the app has access to the Hosted model's provider: a token is set, in the environment or in .env.
+    Read when asked, and not checked with the provider: a wrong one surfaces as an Aborted game (ADR 0013)."""
+    return claude_token_from_environment() is not None
+
+
+def player_for(settings: Settings, color: Color) -> "OllamaPlayer | ClaudePlayer":
+    """The LLM player of one LLM side of a game, built when the game starts: Claude for a Hosted model, with the
+    token CLAUDE_TOKEN gives, else an Ollama model's. A benchmark side's Thinking budget sets its time limit, from its
+    model's speed (ADR 0007), and its Tool-call cap the player's (ADR 0011)."""
+    side = settings.side(color)
+    assert isinstance(side, LlmSide)
+    if any(model.hosted and model.name == side.model for model in KNOWN_MODELS):
+        # Imported late, so the tests never load the Anthropic client.
+        from chessllm.llm.claude_player import ClaudePlayer
+
+        return ClaudePlayer(side.model, side.think() is True, token=claude_token_from_environment())
     # Imported late, so the tests never load the Ollama client.
     from chessllm.llm.ollama_player import OllamaPlayer, time_limit_s
 
-    side = settings.side(color)
-    assert isinstance(side, LlmSide)
     budget = side.thinking_budget if isinstance(side, BenchmarkLlmSide) else None
-    speed = next((model.tokens_per_s for model in LLM_MODELS if model.name == side.model), None)
+    speed = next((model.tokens_per_s for model in KNOWN_MODELS if model.name == side.model), None)
     timeout_s = time_limit_s(budget, speed)
     cap = side_tool_call_cap(side)
     return OllamaPlayer(
@@ -531,10 +546,12 @@ def check_ladder(
     """Why the ladder in args can't be played, or None: its settings, whether Ollama has its model (missing_models),
     or for a System 1 model (system1) whether its server answers and has it (system1_missing_models), then its
     engine, which is started once now, so a missing engine stops a batch before it starts, not once the ladder
-    reaches it. Done before the analysis engines are built."""
+    reaches it. A Hosted model needs the provider's token, not checked with the provider. Done before the analysis engines
+    are built."""
     try:
         settings = ladder_settings(args, "white", first_rung(args), sampling_file, system1)
         settings.check_installed(missing_models)
+        settings.check_hosted_access(has_claude_token())
         settings.check_served(system1_missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return str(error)
@@ -592,6 +609,9 @@ def play_ladder(
                 return fail(failed, f"{error}. Game {number} was left unfinished in {log and log.path}")
             finally:
                 anchor.close()
+            if state.status == "aborted":
+                ladder_summary(played, history, model)
+                return fail(failed, aborted_message(number, state, log))
             assert state.result is not None  # played to its end
             game = AnchoredGame(rung, llm_color, score_for(state.result, llm_color))
             history.append(game)
@@ -606,6 +626,15 @@ def play_ladder(
         return INTERRUPTED_EXIT_CODE
     ladder_summary(played, history, model)
     return 0
+
+
+def aborted_message(number: int, state: GameState, log: GameLog) -> str:
+    """Why a batch stops at its game number, which was aborted (ADR 0013): what the provider failed with, and that the
+    game, kept in its log, counts for no Rating, Move-quality estimate or record."""
+    return (
+        f"game {number} was aborted: {state.abort_reason}. It counts for no Rating, Move-quality estimate or "
+        f"record, and is kept in {log.path}; run the command again to go on"
+    )
 
 
 def outcome(game: AnchoredGame, state: GameState) -> str:

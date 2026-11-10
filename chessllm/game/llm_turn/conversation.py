@@ -61,7 +61,12 @@ class Conversation:
     its record holds), and once the LLM has answered, answered() with the answer; an answer that isn't played is
     followed by retry() with the Retry feedback, or under Retry feedback repeat by drop_answer()."""
 
-    def __init__(self, turn_memory: TurnMemory, color: Color, template: PromptTemplate) -> None:
+    def __init__(
+        self, turn_memory: TurnMemory, color: Color, template: PromptTemplate, context: int | None = None
+    ) -> None:
+        """context is the tokens the model's context holds, Ollama's CONTEXT_TOKENS unless given (a Hosted model's
+        is far larger)."""
+        self._context = context
         self._turn_memory = turn_memory
         self._color = color
         self._template = template
@@ -141,9 +146,10 @@ class Conversation:
     def _trim(self, earlier: list[list[Message]], last: list[Message], reserve: int) -> bool:
         """Drop the oldest whole turns of earlier, in place, until the System prompt, earlier and last fit the
         context with reserve tokens left for the reply, and say whether they fit."""
-        while self._size(self._sent(earlier, last)) + reserve > CONTEXT_TOKENS and earlier:
+        context = CONTEXT_TOKENS if self._context is None else self._context
+        while self._size(self._sent(earlier, last)) + reserve > context and earlier:
             del earlier[0]
-        return self._size(self._sent(earlier, last)) + reserve <= CONTEXT_TOKENS
+        return self._size(self._sent(earlier, last)) + reserve <= context
 
     def _sent(self, earlier: list[list[Message]], last: list[Message]) -> list[Message]:
         """The System prompt, then the earlier turns' messages, then last."""

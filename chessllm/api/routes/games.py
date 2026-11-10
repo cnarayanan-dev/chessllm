@@ -10,6 +10,7 @@ from chessllm.api.deps import ConfigDep, CurrentGame, EnginesDep, GameStoreDep, 
 from chessllm.api.errors import error_responses
 from chessllm.api.schemas.games import HumanMove, NewGame, SideIn
 from chessllm.api.state import Engines
+from chessllm.core.config import claude_token_from_environment
 from chessllm.core.types import Color
 from chessllm.exceptions import (
     InvalidSamplingConfig,
@@ -60,6 +61,7 @@ def start_game(
     )
     settings.check(engines.models)
     settings.check_installed(engines.missing_models)
+    settings.check_hosted_access(claude_token_from_environment() is not None)
     settings.check_served(engines.system1_missing_models)
     players = {color: engines.player_for(settings, color) for color in settings.llm_sides()}
     decision_models = {color: engines.decision_model_for(side) for color, side in settings.system1_sides().items()}

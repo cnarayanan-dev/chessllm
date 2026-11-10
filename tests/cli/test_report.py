@@ -236,3 +236,17 @@ def test_a_thinking_level_is_its_own_configuration_and_plain_thinking_on_keeps_i
         "qwen3.8:latest / free / thinking / standard / explained feedback",
         "qwen3.8:latest / free / thinking xhigh / standard / explained feedback",
     ]
+
+
+def test_an_aborted_game_is_told_from_an_unfinished_one_when_unfinished_games_are_included(tmp_path):
+    games_dir = tmp_path / "games"
+    write_log(games_dir, "2026-10-19T10-00-00_a", game(LLAMA, GEMMA, ["e4", "e5"]))  # unfinished
+    aborted = game(LLAMA, GEMMA, ["e4", "e5"])
+    aborted.append({"type": "game_aborted", "color": "white", "ply": 3, "reason": "no credit left", "aborted_at": "x"})
+    write_log(games_dir, "2026-10-19T10-00-01_b", aborted)
+
+    games, _ = load_games(games_dir)
+
+    assert analyse(games, Filters())["games"] == 0  # neither is finished
+    report = analyse(games, Filters(finished_only=False))
+    assert report["end_reasons"] == {"unfinished": 1, "aborted": 1}

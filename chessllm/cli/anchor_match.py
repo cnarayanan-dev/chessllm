@@ -18,12 +18,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from chessllm.cli.common import (
+    aborted_message,
     add_configuration_arguments,
     add_system1_arguments,
     add_system1_seed_argument,
     anchor_match_settings,
     default_anchor,
     fail,
+    has_claude_token,
     model_under_test,
     side_anchor_match_settings,
     system1_side,
@@ -92,6 +94,7 @@ def main(
         else:
             settings = side_anchor_match_settings(system1, args, llm_color, anchor_side, sampling_file)
         settings.check_installed(missing_models)
+        settings.check_hosted_access(has_claude_token())
         settings.check_served(system1_missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
@@ -112,6 +115,8 @@ def main(
         return fail(FAILED, f"{error}. The game was left unfinished in {log.path}")
     finally:
         anchor.close()
+    if state.status == "aborted":
+        return fail(FAILED, aborted_message(1, state, log))
     print(f"{state.result} by {state.end_reason}: {log.path}")
     return 0
 

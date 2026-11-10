@@ -375,3 +375,61 @@ def test_an_llm_and_a_system_1_model_of_the_same_name_are_two_models(ranking):
         ("llm", 10, 1),
         ("system1", 10, 6),
     ]
+
+
+HAIKU = LLAMA | {"model": "claude-haiku-5-5"}  # a Hosted model as game_start logs it: an LLM side like any other
+
+
+def test_a_hosted_model_is_ranked_with_the_others_in_one_list_marked_as_hosted(ranking):
+    entries = ranking(
+        *anchor_games(HAIKU, 3, wins=5, draws=1, losses=4),
+        *anchor_games(D3, 1, wins=6, losses=4),
+        *anchor_games(LLAMA, 1, wins=3, losses=5, forfeits=2),
+    )
+
+    assert [(entry["rank"], entry["model"], entry["kind"], entry.get("hosted", False)) for entry in entries] == [
+        (1, "claude-haiku-5-5", "llm", True),
+        (2, "d3:9b", "system1", False),
+        (3, "llama3:8b", "llm", False),
+    ]
+    assert record(entries[0]) == (10, 5, 1, 4, 0)
+
+
+def test_a_hosted_models_sampling_is_the_providers_so_the_config_files_changes_nothing(ranking):
+    # The sampling the config file set when the game was played is sent to local models only: a Hosted model plays
+    # under the Reference configuration whatever it was
+    config_file_sampling = {"temperature": 0.2}
+    games = [
+        reference(game(*sides, "1-0", mode="anchor_match", sampling=config_file_sampling))
+        for sides in [(HAIKU, dragon(1)), (dragon(1), HAIKU)]
+    ]
+    local = [
+        reference(game(*sides, "1-0", mode="anchor_match", sampling=config_file_sampling))
+        for sides in [(LLAMA, dragon(1)), (dragon(1), LLAMA)]
+    ]
+
+    entries = by_model(ranking(*games, *local))
+
+    assert entries["claude-haiku-5-5"]["games"] == 2  # counted under the Reference configuration
+    assert entries["llama3:8b"]["games"] == 0  # a local model's sampling is part of its configuration
+
+
+def test_a_hosted_model_with_thinking_on_is_another_configuration_and_not_the_reference(ranking):
+    thinking = HAIKU | {"thinking": True}
+    entries = ranking(
+        *anchor_games(HAIKU, 1, wins=6, losses=4),
+        *anchor_games(thinking, 3, wins=6, losses=4),
+    )
+
+    [entry] = entries
+    assert record(entry) == (10, 6, 0, 4, 0)  # only the thinking-off games
+    assert reference_configuration("claude-haiku-5-5") == REFERENCE.model_copy(update={"model": "claude-haiku-5-5"})
+
+
+def test_an_aborted_game_is_in_no_entry_of_the_ranking(ranking):
+    aborted = anchor_games(HAIKU, 1, wins=1)[0][:-1]  # no game_end: it stopped
+    aborted.append({"type": "game_aborted", "color": "black", "ply": 2, "reason": "no credit", "aborted_at": "x"})
+
+    assert ranking(aborted) == []
+    entries = ranking(aborted, *anchor_games(HAIKU, 1, wins=3, losses=1))
+    assert record(entries[0]) == (4, 3, 0, 1, 0)

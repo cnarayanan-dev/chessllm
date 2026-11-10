@@ -218,6 +218,14 @@ def load_games(games_dir: Path) -> tuple[list[Game], list[tuple[str, str]]]:
     return games, skipped
 
 
+def end_reason(game: Game) -> str:
+    """How the game ended, as the report counts it: its end reason, "aborted" for a game a Hosted model's provider
+    stopped (ADR 0013), or "unfinished" for any other game without an end."""
+    if game.end:
+        return str(game.end["reason"])
+    return "aborted" if game.events[-1].get("type") == "game_aborted" else "unfinished"
+
+
 def llm_sides(game: Game) -> list[LlmSide]:
     result: list[LlmSide] = []
     for color in COLORS:
@@ -633,7 +641,7 @@ def analyse(games: list[Game], filters: Filters, validation_file: Path = VALIDAT
         "games": len(selected),
         "llm_sides": len(sides),
         "configurations": configurations,
-        "end_reasons": dict(Counter(str(game.end["reason"]) if game.end else "unfinished" for game in selected)),
+        "end_reasons": dict(Counter(end_reason(game) for game in selected)),
         "overall_themes": overall.as_dict(validated_for),
         "openings": openings.most_common(TOP),
         "game_list": [game_summary(game, filters) for game in selected],

@@ -30,9 +30,11 @@ from chessllm.cli.common import (
     add_rules_arguments,
     add_system1_arguments,
     add_thinking_argument,
+    aborted_message,
     default_evaluator,
     default_move_model,
     fail,
+    has_claude_token,
     prompt_template,
     refuse_llm_settings,
     system1_side,
@@ -54,7 +56,7 @@ from chessllm.game.prompt_library import PromptLibrary
 from chessllm.game.runner import play_anchor_match
 from chessllm.game.settings import Settings
 from chessllm.game.sides import ALL_TOOLS, BenchmarkLlmSide, LlmSide, System1Side, ToolName
-from chessllm.llm.models import LLM_MODELS, load_sampling
+from chessllm.llm.models import KNOWN_MODELS, load_sampling
 from chessllm.llm.players import LlmPlayer
 from chessllm.logs.game_log import GameLog
 from chessllm.system1.port import DecisionModel
@@ -190,7 +192,7 @@ def faceoff_settings(args: argparse.Namespace, white: LlmSide | System1Side, bla
         legal_counterpart=not args.no_legal_counterpart,
         max_attempts=args.max_attempts,
     )
-    settings.check(LLM_MODELS)
+    settings.check(KNOWN_MODELS)
     return settings
 
 
@@ -263,6 +265,7 @@ def main(
         first, second = faceoff_sides(args, prompt_library)
         settings = faceoff_settings(args, first, second, sampling_file)
         settings.check_installed(missing_models)
+        settings.check_hosted_access(has_claude_token())
         settings.check_served(system1_missing_models)
     except (InvalidSettings, InvalidSamplingConfig) as error:
         return fail(FAILED, str(error))
@@ -278,6 +281,9 @@ def main(
             decision_models = {color: decision_model_for(side) for color, side in settings.system1_sides().items()}
             log = GameLog(args.games_dir, *settings.side_names())
             state = play_anchor_match(settings, players, {}, log, decision_models=decision_models)
+            if state.status == "aborted":
+                print(f"Batch: {side_label(first)} {scores['first']:g} - {scores['second']:g} {side_label(second)}")
+                return fail("Faceoff batch stopped", aborted_message(number, state, log))
             result = state.result
             assert result is not None  # played to its end
             white_score = {"1-0": 1.0, "0-1": 0.0}.get(result, 0.5)

@@ -42,6 +42,7 @@ from chessllm.analytics.move_quality import (
     read_validation,
 )
 from chessllm.game.llm_turn.prompt import prompt_file, side_template, text_version
+from chessllm.llm.models import is_hosted
 from chessllm.analytics.rating import RatedGame, Rating, ratings
 
 
@@ -406,6 +407,8 @@ def read_sides(start: dict[str, Any], end: dict[str, Any]) -> tuple[dict[Color, 
 def llm_configuration(start: dict[str, Any], color: Color, side: dict[str, Any]) -> PlayerConfiguration:
     prompt, position = logged_prompt(start, color, side)
     sampling = start.get("sampling")
+    if is_hosted(side["model"]):
+        sampling = {}  # never sent to a Hosted model, so no part of its configuration (ADR 0013)
     return PlayerConfiguration(
         model=side["model"],
         thinking=side["thinking"],
@@ -481,7 +484,7 @@ def settings_configuration(settings: Settings, color: Color) -> PlayerConfigurat
         rules=settings.rules,
         retry_feedback=side.retry_feedback,
         max_retries=settings.max_attempts - 1,
-        sampling=dict(settings.sampling),
+        sampling={} if is_hosted(side.model) else dict(settings.sampling),  # a Hosted model's is the provider's
         prompt=prompt,
         position=position,
         turn_memory=side.turn_memory,

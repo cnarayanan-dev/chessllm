@@ -16,10 +16,13 @@ router = APIRouter()
 def list_models(config: ConfigDep, engines: EnginesDep) -> list[ModelInfo]:
     """Each model with the sampling it would play at: its own defaults, overridden by the config file.
 
-    The sampling is None when Ollama can't show the model, e.g. when it isn't installed."""
+    The sampling is None when Ollama can't show the model, e.g. when it isn't installed, and for a Hosted model, which
+    Ollama knows nothing of and whose sampling is its provider's."""
     sampling_config = load_sampling(config.sampling_file)
 
     def sampling(model: LlmModel) -> Sampling | None:
+        if model.hosted:
+            return None
         try:
             return engines.sampling_defaults(model.name) | sampling_config
         except Exception:
@@ -29,6 +32,6 @@ def list_models(config: ConfigDep, engines: EnginesDep) -> list[ModelInfo]:
     with ThreadPoolExecutor() as pool:
         samplings = list(pool.map(sampling, engines.models))
     return [
-        ModelInfo(name=model.name, thinking=model.thinking, sampling=model_sampling)
+        ModelInfo(name=model.name, thinking=model.thinking, sampling=model_sampling, hosted=model.hosted)
         for model, model_sampling in zip(engines.models, samplings)
     ]

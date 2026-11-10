@@ -15,7 +15,8 @@ from chessllm.game.llm_turn.prompt import (
 from chessllm.game.modes import MODES, Mode
 from chessllm.game.rules import RULES, Rules
 from chessllm.game.sides import LISTED, AnchorSide, BenchmarkLlmSide, HumanSide, LlmSide, Side, System1Side
-from chessllm.llm.models import CONTEXT_TOKENS, THINKING_BUDGET_RANGE, LlmModel
+from chessllm.core.config import CLAUDE_TOKEN_VARIABLE
+from chessllm.llm.models import CONTEXT_TOKENS, HOSTED_MODELS, THINKING_BUDGET_RANGE, LlmModel
 from chessllm.system1.prompt import check_system1_template, side_template as system1_template
 
 # How many illegal moves an LLM may make in one turn before it forfeits: one attempt, the rest retries.
@@ -93,7 +94,9 @@ class Settings:
             model = next((model for model in models if model.name == side.model), None)
             if model is None:
                 raise InvalidSettings(f"{side.model} ({color}) is not in the model list")
-            if isinstance(side, BenchmarkLlmSide) and (level := side.thinking_level) is not None:
+            if model.hosted:
+                self._check_hosted(color, side)
+            elif isinstance(side, BenchmarkLlmSide) and (level := side.thinking_level) is not None:
                 if not model.thinking:
                     raise InvalidSettings(f"{side.model} ({color}) cannot think, so it has no Thinking levels")
                 if not model.thinking_levels:
@@ -128,14 +131,46 @@ class Settings:
             except InvalidSettings as refused:
                 raise InvalidSettings(f"{side.model} ({color}): {refused}", code=refused.code) from None
 
+    def _check_hosted(self, color: Color, side: LlmSide) -> None:
+        """Raises InvalidSettings if a Hosted model's side has a setting its provider doesn't allow (ADR 0013): a
+        Thinking level, a Thinking budget or Tools. Sampling is no setting of the side (it comes from the config file
+        and is not sent to a Hosted model)."""
+        hosted = f"{side.model} ({color}) is a Hosted model, so it has no"
+        if not isinstance(side, BenchmarkLlmSide):
+            return
+        if side.thinking_level is not None:
+            raise InvalidSettings(f"{hosted} Thinking levels, only thinking on or off")
+        if side.thinking_budget is not None:
+            raise InvalidSettings(f"{hosted} Thinking budget")
+        if side.tools:
+            raise InvalidSettings(f"{hosted} Tools")
+
+    def check_hosted_access(self, has_access: bool) -> None:
+        """Raises InvalidSettings, naming each Hosted model's side and with the code hosted_model_unavailable, if the
+        app has no access to the provider (has_access is whether a token is set): the game is refused before its
+        first request rather than started to be aborted by it. Apart from check, so checking settings needs no token;
+        the token is not validated here, so a wrong one surfaces as an Aborted game (ADR 0013)."""
+        if has_access:
+            return
+        hosted = {model.name for model in HOSTED_MODELS}
+        named = [f"{side.model} ({color})" for color, side in self.llm_sides().items() if side.model in hosted]
+        if named:
+            raise InvalidSettings(
+                f"{' and '.join(named)} is a Hosted model, and there is no token to reach its provider: set "
+                f"{CLAUDE_TOKEN_VARIABLE} in the environment or in a .env file",
+                code="hosted_model_unavailable",
+            )
+
     def check_installed(self, missing_models: Callable[[list[str]], list[str]]) -> None:
         """Raises InvalidSettings, naming each LLM side's model that missing_models finds Ollama doesn't have, and
         with the code ollama_unavailable if Ollama can't be asked. A missing model would fail its first call and
         forfeit, a rated result from an infrastructure fault. Apart from check, so checking settings needs no
-        Ollama; Anchors and the human aren't asked about."""
+        Ollama; Anchors, the human and Hosted models (check_hosted_access) aren't asked about."""
+        hosted = {model.name for model in HOSTED_MODELS}  # Ollama has none of them: their provider is asked, by play
         sides_by_model: dict[str, list[Color]] = {}
         for color, side in self.llm_sides().items():
-            sides_by_model.setdefault(side.model, []).append(color)
+            if side.model not in hosted:
+                sides_by_model.setdefault(side.model, []).append(color)
         if not sides_by_model:
             return
         named = {model: f"{model} ({' and '.join(colors)})" for model, colors in sides_by_model.items()}

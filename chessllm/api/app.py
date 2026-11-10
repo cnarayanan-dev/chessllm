@@ -16,7 +16,7 @@ from chessllm.engines.evaluator import Evaluator
 from chessllm.engines.move_model import MoveModel
 from chessllm.game.settings import Settings
 from chessllm.game.sides import System1Side
-from chessllm.llm.models import LLM_MODELS, LlmModel
+from chessllm.llm.models import LlmModel, offered_models
 from chessllm.llm.players import LlmPlayer
 from chessllm.system1.port import DecisionModel
 
@@ -24,7 +24,7 @@ from chessllm.system1.port import DecisionModel
 def create_app(
     player_for: Callable[[Settings, Color], LlmPlayer],
     games_dir: Path = GAMES_DIR,
-    models: list[LlmModel] = LLM_MODELS,
+    models: list[LlmModel] | None = None,
     sampling_defaults: Callable[[str], Sampling] = lambda model: {},
     missing_models: Callable[[list[str]], list[str]] = lambda models: [],
     sampling_file: Path = SAMPLING_FILE,
@@ -38,8 +38,9 @@ def create_app(
     system1_missing_models: Callable[[str, list[str]], list[str]] = lambda base_url, models: [],
 ) -> FastAPI:
     """The app with its AppConfig and Engines built from the arguments, and no game yet (see Engines for what
-    each engine is for). With a move_model or an evaluator, each game is analysed when it ends, after the response
-    is sent."""
+    each engine is for). models are the models it offers, by default the local ones and, with a token for their
+    provider, the Hosted ones (offered_models). With a move_model or an evaluator, each game is analysed when it ends,
+    after the response is sent."""
     config = AppConfig(
         games_dir=games_dir,
         sampling_file=sampling_file,
@@ -50,7 +51,7 @@ def create_app(
     app = FastAPI(title="ChessLLM")
     app.state.config = config
     app.state.engines = Engines(
-        player_for, models, sampling_defaults, missing_models, move_model, evaluator, clock, decision_model_for,
+        player_for, offered_models() if models is None else models, sampling_defaults, missing_models, move_model, evaluator, clock, decision_model_for,
         system1_missing_models,
     )
     app.state.games = GameStore()

@@ -17,8 +17,8 @@ from chessllm.core.types import COLORS, Color, color_of
 from chessllm.engines.anchors import Anchor, new_seed
 from chessllm.engines.evaluator import Evaluator
 from chessllm.exceptions import (
-    AnchorUnavailable, InvalidSettings, RefusedAnchorTurn, RefusedLlmTurn, RefusedProbe, RefusedSystem1Turn,
-    RejectedHumanMove,
+    AnchorUnavailable, HostedModelFailed, InvalidSettings, RefusedAnchorTurn, RefusedLlmTurn, RefusedProbe,
+    RefusedSystem1Turn, RejectedHumanMove,
 )
 from chessllm.game.chaos_gain import GainBaselines, for_mover, result_for_mover
 from chessllm.game.ending import GameEnd, check_end, position_key
@@ -134,6 +134,8 @@ class GameSession:
         self._llm_turns: list[LlmTurn] = []
         self._system1_forfeit_error: str | None = None
         self._end: GameEnd | None = None
+        # Why the game was aborted (ADR 0013): a game that stopped for a failure outside the players' play has no end.
+        self._abort_reason: str | None = None
         self._time_used: dict[Color, float] = dict.fromkeys(COLORS, 0.0)  # each side's finished moves
         # When the move of the side to move started, while it runs: a human's once the position is ready, an LLM's
         # once its Turn starts and an Anchor's once its move is asked for.
@@ -235,6 +237,8 @@ class GameSession:
         board = self._board
         if self._end is not None:
             raise RejectedHumanMove("the game is over", code="game_over")
+        if self._abort_reason is not None:
+            raise RejectedHumanMove("the game was aborted", code="game_aborted")
         if not self._mode.accepts_human_moves:
             raise RejectedHumanMove(f"an {self._mode.name} takes no human moves", code="not_human_turn")
         try:
@@ -264,6 +268,8 @@ class GameSession:
         board = self._board
         if self._end is not None:
             raise RefusedAnchorTurn("the game is over", code="game_over")
+        if self._abort_reason is not None:
+            raise RefusedAnchorTurn("the game was aborted", code="game_aborted")
         color = color_of(board.turn)
         anchor = self._anchors.get(color)
         if anchor is None:
@@ -393,11 +399,17 @@ class GameSession:
                 return
             if self._end is not None:
                 raise refusals.error("the game is over", code="game_over")
+            if self._abort_reason is not None:
+                raise refusals.error("the game was aborted", code="game_aborted")
             color = color_of(self._board.turn)
             if color not in sides:
                 raise refusals.error(refusals.not_its_turn, code=refusals.not_its_turn_code)
             self._move_started = started = self._clock()
-            outcome = produce(color, started)
+            try:
+                outcome = produce(color, started)
+            except HostedModelFailed as failure:
+                self._abort(color, failure)
+                return
             time_s = outcome.turn.time_s
             with self._ending:
                 with self._landing:
@@ -421,6 +433,20 @@ class GameSession:
                 finish(color, evaluation)
         finally:
             self._turn_running.release()
+
+    def _abort(self, color: Color, failure: HostedModelFailed) -> None:
+        """Stop the game because the Hosted model of the side to move failed in a way that is not its play (ADR 0013):
+        no side loses and the game has no end. It is logged as game_aborted, after the attempts the failed turn had
+        already made, and counts towards nothing. An abandoned game is left as it is."""
+        with self._ending:
+            if self._abandoned.is_set():
+                return
+            with self._landing:
+                self._abort_reason = str(failure)
+                self._move_started = self._move_ended = None  # no one is making a move now
+            self._log.write(
+                "game_aborted", color=color, ply=len(self._moves) + 1, reason=self._abort_reason, aborted_at=now()
+            )
 
     def probe(self, ply: int, color: Color, template: PromptTemplate) -> Probe:
         """Ask a Probe about the position of the past LLM turn at ply, color's, with the template, and append it to the
@@ -594,12 +620,13 @@ class GameSession:
             llm_turn=self._llm_turns[-1] if self._llm_turns else None,
             llm_turns=self._llm_turns,
             settings=self._game_settings,
-            status="over" if self._end else "playing",
+            status="aborted" if self._abort_reason is not None else "over" if self._end else "playing",
             result=self._end.result if self._end else None,
             end_reason=self._end.reason if self._end else None,
             stats=self._all_stats(),
             time_used=self._time_used_record(),
             running_s=self._time_since_move_started(self._clock()) if self._end is None else None,
+            abort_reason=self._abort_reason,
             evaluator=self._evaluation_engine,
             prompt_templates=self._played_templates,
             system1_forfeit_error=self._system1_forfeit_error,
@@ -609,7 +636,8 @@ class GameSession:
         """Start the human's move once the position is ready for it. An LLM's or an Anchor's move starts only when
         it is asked for, and no one's once the game is over."""
         to_move = self._settings.side(color_of(self._board.turn))
-        self._move_started = self._clock() if self._end is None and isinstance(to_move, HumanSide) else None
+        waiting = self._end is None and self._abort_reason is None and isinstance(to_move, HumanSide)
+        self._move_started = self._clock() if waiting else None
         self._move_ended = None
 
     def _time_since_move_started(self, now: float) -> float | None:
@@ -639,7 +667,9 @@ class GameSession:
 
     def _human_legal_moves(self) -> list[str]:
         board = self._board
-        if self._end is not None or color_of(board.turn) in (*self._llm_sides, *self._system1_sides):
+        if self._end is not None or self._abort_reason is not None:
+            return []
+        if color_of(board.turn) in (*self._llm_sides, *self._system1_sides):
             return []
         return [move.uci() for move in board.legal_moves]
 

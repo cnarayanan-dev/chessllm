@@ -12,7 +12,7 @@ from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Literal, get_args, overload
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from chessllm.analytics.analysis import analysis_path
 from chessllm.analytics.leaderboard import (
@@ -40,6 +40,7 @@ from chessllm.core.config import VALIDATION_FILE
 from chessllm.core.types import ModeKey
 from chessllm.engines.anchors import ANCHOR_RATINGS, AnchorRating
 from chessllm.game.llm_turn.prompt import default_template, prompt_file, text_version
+from chessllm.llm.models import is_hosted
 from chessllm.system1.prompt import DEFAULT_TEMPLATE as DEFAULT_SYSTEM1_TEMPLATE
 
 ALL_MODES: tuple[ModeKey, ...] = get_args(ModeKey)
@@ -110,6 +111,8 @@ class RankingEntry(BaseModel):
     rank: int | None  # 1 for the highest Rating; None without a Rating
     model: str
     kind: ModelKind  # an LLM or a System 1 model; a model of each kind with one name is two entries
+    # Whether it is a Hosted model (ADR 0013), an LLM that runs on a provider's servers; left out for any other
+    hosted: bool = Field(default=False, exclude_if=lambda hosted: not hosted)
     rating: Rating | None  # never blended with the Move-quality estimate (ADR 0005)
     no_rating: NoRating | None  # why there is no Rating; None when there is one
     move_quality: MoveQuality | None  # pooled from the analysis files of its games, Play LLM included
@@ -188,6 +191,7 @@ def ranking(
             rank=None,
             model=model,
             kind=kind,
+            hosted=kind == "llm" and is_hosted(model),
             rating=rating,
             no_rating=None if rating is not None else no_rating(key, tally.games),
             move_quality=move_quality(analysed[key], validated_for),

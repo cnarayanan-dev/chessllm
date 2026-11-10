@@ -347,7 +347,8 @@ class GameState(BaseModel):
     llm_turn: LlmTurn | None  # the last LLM turn
     llm_turns: list[LlmTurn]
     settings: GameSettings
-    status: Literal["playing", "over"]
+    # aborted: the game was stopped because a Hosted model's provider failed (ADR 0013), with no result
+    status: Literal["playing", "over", "aborted"]
     result: GameResult | None
     end_reason: EndReason | None
     stats: Stats
@@ -362,3 +363,5 @@ class GameState(BaseModel):
     # Why a System 1 model forfeited the game: the error of its failed call. An LLM's is in its last turn's attempts;
     # a System 1 turn is not in the state, only in the game log.
     system1_forfeit_error: str | None = Field(default=None, exclude_if=is_none)
+    # Why the game was aborted, when its status says so: what the provider failed with. The game log holds the same.
+    abort_reason: str | None = Field(default=None, exclude_if=is_none)

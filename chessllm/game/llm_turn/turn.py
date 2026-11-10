@@ -10,6 +10,7 @@ from typing import Any
 import chess
 
 from chessllm.core.types import Color
+from chessllm.exceptions import HostedModelFailed
 from chessllm.game.llm_turn.conversation import Conversation, reply_reserve
 from chessllm.game.llm_turn.counterpart import CounterpartAnswer, ask_legal_counterpart
 from chessllm.game.llm_turn.judging import answered, judge, no_answer
@@ -47,6 +48,7 @@ from chessllm.game.sides import (
     side_tools,
 )
 from chessllm.game.tools import ToolPosition, bound_tools
+from chessllm.llm.models import context_tokens
 from chessllm.llm.players import FailedAfterToolCalls, LlmPlayer, LlmReply, Message, ToolCall
 from chessllm.logs.game_log import GameLog
 
@@ -172,7 +174,7 @@ class LlmTurns:
         self._tools = side_tools(side)  # none for most sides (ADR 0011)
         self.stats = SideStats(side.llm_constraints, rules, self._tools, side_tool_call_cap(side))
         # What the side's turns send: one conversation for the game, or a new one every turn (Turn memory).
-        self._conversation = Conversation(side.turn_memory, color, template)
+        self._conversation = Conversation(side.turn_memory, color, template, context_tokens(side.model))
 
     def play(self, board: chess.Board, moves: Sequence[str], plies: Sequence[Ply], started: float) -> TurnOutcome:
         """Ask the LLM to move for a move, with a retry after each illegal move. It forfeits after max_attempts
@@ -225,6 +227,8 @@ class LlmTurns:
             own = {"remembered": turn.own_remembered(held)}
             try:
                 reply = player.reply(messages, allowed_moves, tools) if tools else player.reply(messages, allowed_moves)
+            except HostedModelFailed:
+                raise  # not the model's play: the game is aborted, no turn of it (ADR 0013)
             except Exception as failure:
                 error, made = failure, None
                 if isinstance(failure, FailedAfterToolCalls):  # the attempt keeps the Tool calls it made
