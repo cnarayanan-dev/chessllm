@@ -26,13 +26,14 @@ from chessllm.exceptions.game import (  # noqa: E402
     RefusedProbe,
     RejectedHumanMove,
 )
-from chessllm.exceptions.llm import LlmTimeout, OllamaUnavailable  # noqa: E402
+from chessllm.exceptions.llm import HostedModelFailed, LlmTimeout, OllamaUnavailable, ReplyDeclined  # noqa: E402
 from chessllm.exceptions.system1 import DecisionModelFailed, RefusedSystem1Turn, System1Unavailable  # noqa: E402
 
 __all__ = [
     "AnchorUnavailable",
     "ChessLlmError",
     "DecisionModelFailed",
+    "HostedModelFailed",
     "InvalidSamplingConfig",
     "InvalidSettings",
     "LlmTimeout",
@@ -43,6 +44,7 @@ __all__ = [
     "RefusedAnchorTurn",
     "RefusedLlmTurn",
     "RefusedProbe",
+    "ReplyDeclined",
     "RefusedSystem1Turn",
     "RejectedHumanMove",
     "StockfishUnavailable",
