@@ -292,6 +292,35 @@ describe('Opponent', () => {
     expect(started()).toMatchObject({ black: { model: 'llama3:8b' } })
   })
 
+  test('a Hosted model is listed last with its mark, the mark explained on hover; a local model has none', async () => {
+    const haiku: ModelInfo = { name: 'claude-haiku-5-5', thinking: true, sampling: null, hosted: true }
+    stubModels(() => Response.json([...models, haiku]))
+    const { user, started } = await openSheet()
+
+    await user.click(screen.getByRole('combobox', { name: 'Opponent' }))
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual([
+      'qwen3.5:9b',
+      'gemma3:4b',
+      'llama3:8b',
+      'claude-haiku-5-5Hosted',
+    ])
+    await user.click(screen.getByRole('option', { name: /claude-haiku-5-5/ }))
+
+    expect(screen.getByRole('combobox', { name: 'Opponent' })).toHaveTextContent('claude-haiku-5-5')
+    // It thinks, so Thinking stays a switch it can turn on, and it plays like any LLM
+    expect(screen.getByRole('switch', { name: 'Thinking' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Play as White' }))
+    expect(started()).toMatchObject({ black: { player: 'llm', model: 'claude-haiku-5-5' } })
+  })
+
+  test('without a token the API does not list Claude, so it is not offered', async () => {
+    const { user } = await openSheet()
+
+    await user.click(screen.getByRole('combobox', { name: 'Opponent' }))
+    await screen.findAllByRole('option')
+    expect(screen.queryByRole('option', { name: /claude/ })).not.toBeInTheDocument()
+  })
+
   test('says why when the models cannot be listed, and keeps the chosen model', async () => {
     stubModels(() => Response.json({ detail: 'Ollama is not running' }, { status: 503 }))
     await openSheet()

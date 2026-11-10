@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PauseState } from '@/game/gameLoop'
 import { rematchDescription } from '@/game/rematch'
-import { COLORS, COLOR_NAMES, gameSettings, resultText, type GameSetting } from '@/game/wording'
+import { COLORS, COLOR_NAMES, abortedText, gameSettings, resultText, type GameSetting } from '@/game/wording'
 import { cn } from '@/lib/utils'
 
 /** Each Mode as its players: you against a model, or a model against a model (an LLM or a System 1 model). */
@@ -147,7 +147,7 @@ function SettingsLine({
 
 export function GameCard({ game, error, onRematch, pause = null, onPause, onResume }: GameCardProps) {
   const mode = MODES[game.settings.mode]
-  const over = game.status === 'over' ? resultText(game) : null
+  const over = game.status === 'over' ? resultText(game) : game.status === 'aborted' ? abortedText(game) : null
   // The Rules, whether the game is wild, is the one setting shown, as an icon; the settings the LLMs share are not
   // shown, to keep the card simple, and in a faceoff the ones they differ in are on each player's row.
   const settings = gameSettings(game)

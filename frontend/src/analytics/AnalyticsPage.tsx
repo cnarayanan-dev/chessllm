@@ -1,12 +1,13 @@
 // The analytics page: the Ranking of models by their Rating under the Reference configuration (prototype
 // model-ranking, variant E's Ranking view), narrowed by a Mode filter, in a Luma card on the Stone page.
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Anchor, Bot, Info, User, Zap, type LucideIcon } from 'lucide-react'
+import { Anchor, Bot, Cloud, Info, User, Zap, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
   ABOUT_RANKING,
   ALL_MODES,
   COLUMNS,
+  HOSTED_MODEL,
   MODES,
   NO_INTERVAL,
   NO_MOVE_QUALITY,
@@ -113,6 +114,19 @@ function System1Mark() {
   )
 }
 
+/** The mark beside a Hosted model's name: an icon and a short name, what it means on hover. */
+function HostedMark() {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<Badge variant="outline" />} className="ml-2 font-normal text-muted-foreground">
+        <Cloud aria-hidden="true" />
+        Hosted
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80">{HOSTED_MODEL}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function RankingTable({ entries, modes }: { entries: RankingEntry[]; modes: ModeKey[] }) {
   return (
     <Table className="border-separate border-spacing-0">
@@ -140,6 +154,7 @@ function RankingTable({ entries, modes }: { entries: RankingEntry[]; modes: Mode
               <TableCell className="font-semibold">
                 {entry.model}
                 {entry.kind === 'system1' && <System1Mark />}
+                {entry.hosted && <HostedMark />}
               </TableCell>
               <TableCell className="text-right font-semibold tabular-nums">
                 <Explained tip={ratingTip}>{estimateText(entry.rating)}</Explained>

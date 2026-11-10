@@ -346,6 +346,34 @@ describe('new game', () => {
   })
 })
 
+describe('an aborted game', () => {
+  const REASON = 'claude-haiku-5-5: no credit left, or a billing problem'
+
+  test('is shown as it is, with no turn asked for, no board input and no pause', () => {
+    const asked = run(received(initialGameLoop, afterE4()))
+    expect(asked.request).toMatchObject({ kind: 'model-turn' })
+
+    const state = gameLoop(asked, received(asked, afterE4({ status: 'aborted', abort_reason: REASON, running_s: null })))
+
+    expect(state.game?.status).toBe('aborted')
+    expect(state.game?.abort_reason).toBe(REASON)
+    expect(state.request).toBeNull() // nobody drives it on: a Hosted model's provider failed, no side lost
+    expect(phase(state)).toBe('over')
+    expect(boardInput(state)).toBeNull()
+    expect(waitingForModel(state)).toBe(false)
+    expect(state.error).toBeNull()
+  })
+
+  test('a Rematch or a new game starts as from any finished game', () => {
+    const asked = run(received(initialGameLoop, afterE4()))
+    const aborted = gameLoop(asked, received(asked, afterE4({ status: 'aborted', abort_reason: REASON })))
+
+    const state = gameLoop(aborted, { type: 'new-game', newGame: null })
+
+    expect(state.request).toMatchObject({ kind: 'start' })
+  })
+})
+
 describe('an LLM faceoff', () => {
   const llm = afterE4().settings.black
   const settings = { ...aGame().settings, mode: 'llm_faceoff' as const, white: llm, black: llm }

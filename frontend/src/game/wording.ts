@@ -77,6 +77,15 @@ export function resultText(game: GameState): { result: string; detail: string | 
   return { result: `${title} ${reason}`, detail }
 }
 
+/**
+ * What the Game card says of an aborted game: a Hosted model's provider failed (an Aborted game, CONTEXT.md), so no
+ * side won or lost. The reason is the detail.
+ */
+export function abortedText(game: GameState): { result: string; detail: string } {
+  const why = game.abort_reason ?? 'The game stopped because the Hosted model’s provider failed.'
+  return { result: 'Game aborted', detail: `${why} No side loses. No Rating, Move-quality estimate or record counts it.` }
+}
+
 /** A setting of the running game as the Game card shows it: the Rules as an icon, the rest as text, the meaning in
  * the tooltip. */
 export type GameSetting = {

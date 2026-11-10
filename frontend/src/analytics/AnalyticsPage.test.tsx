@@ -79,6 +79,19 @@ test('a System 1 model is marked, and the mark explains it on hover; an LLM has 
   expect(screen.getByText(/Choice temperature of 1/)).toBeInTheDocument()
 })
 
+test('a Hosted model is marked, and the mark explains it on hover; a local LLM has none', async () => {
+  const user = userEvent.setup()
+  showPage([anEntry('qwen3.5:9b'), anEntry('claude-haiku-5-5', { rank: 2, rating: rated(300), hosted: true })])
+
+  expect(await screen.findByText('claude-haiku-5-5')).toBeInTheDocument()
+  expect(rows().map((cells) => cells[1])).toEqual(['qwen3.5:9b', 'claude-haiku-5-5Hosted'])
+  expect(screen.getAllByText('Hosted')).toHaveLength(1)
+
+  await user.hover(screen.getByText('Hosted'))
+  expect(await screen.findByText(/runs on a provider’s servers/)).toBeInTheDocument()
+  expect(screen.getByText(/never sampling/)).toBeInTheDocument()
+})
+
 test('an LLM and a System 1 model of one name are two rows', async () => {
   showPage([anEntry('d3:9b'), anEntry('d3:9b', { rank: 2, kind: 'system1' })])
 

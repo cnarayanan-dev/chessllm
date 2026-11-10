@@ -83,7 +83,7 @@ export type GameLoopAction =
   | { type: 'probe'; probe: ProbeRequest }
   | { type: 'probes-asked'; probes: readonly ProbeRequest[] }
 
-/** idle: no game yet. human: the human to move. model: waiting for a Model player. over: the game has ended. */
+/** idle: no game yet. human: the human to move. model: waiting for a Model player. over: the game has ended, or was aborted. */
 export type Phase = 'idle' | 'human' | 'model' | 'over'
 
 export const initialGameLoop: GameLoop = {
@@ -114,7 +114,7 @@ export const modelToMove = (game: GameState): boolean =>
 export function phase(state: GameLoop): Phase {
   const game = state.game
   if (!game) return 'idle'
-  if (game.status === 'over') return 'over'
+  if (game.status !== 'playing') return 'over' // ended, or aborted: a Hosted model's provider failed
   return game.turn === humanColor(game) ? 'human' : 'model'
 }
 

@@ -2,7 +2,7 @@
 // and its short name; what it means, or why it is disabled, is in a Tooltip and its aria-description.
 import { Radio } from '@base-ui/react/radio'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeftRight, Bot, ChevronDown, Cpu, type LucideIcon, User } from 'lucide-react'
+import { ArrowLeftRight, Bot, ChevronDown, Cloud, Cpu, type LucideIcon, User } from 'lucide-react'
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react'
 import { modelsQuery } from '@/api/models'
 import { promptLibraryQuery } from '@/api/promptLibrary'
@@ -84,6 +84,7 @@ const KIND_WORDS: Record<Kind, { name: string; description: string }> = {
     description: 'A decision model: it writes no text, and gives a probability for each legal move in one pass.',
   },
 }
+const HOSTED = 'A Hosted model: it runs on a provider’s servers and is paid for per token. It has no sampling.'
 const SYSTEM1_MODEL = `The name of the model the server is to run, e.g. ${DEFAULT_SYSTEM1_MODEL}.`
 const SYSTEM1_URL = 'The server that serves the model at /v1/systemone: Ollama, llama-server or the publisher\'s own.'
 const CHOICE_TEMPERATURE =
@@ -393,6 +394,7 @@ function ModelSelect({
 }) {
   const names = (models ?? []).map((model) => model.name)
   if (!names.includes(chosen)) names.unshift(chosen)
+  const hosted = new Set((models ?? []).filter((model) => model.hosted).map((model) => model.name))
   return (
     <Select value={chosen} onValueChange={(name) => name && onChange(name)}>
       <SelectTrigger aria-label={label} className="w-full">
@@ -402,6 +404,14 @@ function ModelSelect({
         {names.map((name) => (
           <SelectItem key={name} value={name}>
             {name}
+            {hosted.has(name) && (
+              <Tip description={HOSTED}>
+                <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                  <Cloud className="size-3.5" aria-hidden="true" />
+                  Hosted
+                </span>
+              </Tip>
+            )}
           </SelectItem>
         ))}
       </SelectContent>

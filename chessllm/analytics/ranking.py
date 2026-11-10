@@ -112,7 +112,7 @@ class RankingEntry(BaseModel):
     model: str
     kind: ModelKind  # an LLM or a System 1 model; a model of each kind with one name is two entries
     # Whether it is a Hosted model (ADR 0013), an LLM that runs on a provider's servers; left out for any other
-    hosted: bool = Field(default=False, exclude_if=lambda hosted: not hosted)
+    hosted: bool | None = Field(default=None, exclude_if=lambda hosted: not hosted)
     rating: Rating | None  # never blended with the Move-quality estimate (ADR 0005)
     no_rating: NoRating | None  # why there is no Rating; None when there is one
     move_quality: MoveQuality | None  # pooled from the analysis files of its games, Play LLM included

@@ -13,6 +13,10 @@ POST /e2e/script also takes "system1": {"<model>": [...]}, the SAN moves each Sy
 System 1 server has every model, except those "system1_missing" names (a game with one is refused, as when the server
 lacks the model).
 
+The app has a token for the Hosted model (a placeholder: nothing calls the provider), so Claude Haiku 5.5 is offered; it
+plays from the script like any LLM. POST /e2e/script also takes "provider_failure": the reason, when set, the provider
+fails with at the Hosted model's first turn of each game, which aborts the game.
+
 POST /e2e/ranking-games replaces every game log with the synthetic games of tests/e2e/ranking.py, for the
 analytics page.
 
@@ -21,6 +25,7 @@ visit. The script and the game logs are kept."""
 
 import argparse
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -30,9 +35,12 @@ from pydantic import BaseModel
 from starlette.types import Receive, Scope, Send
 
 from chessllm.api.app import create_app
+from chessllm.core.config import CLAUDE_TOKEN_VARIABLE
 from chessllm.core.types import Color
+from chessllm.exceptions import HostedModelFailed
 from chessllm.game.settings import Settings
 from chessllm.game.sides import System1Side
+from chessllm.llm.models import is_hosted
 from tests.conftest import Raw, ScriptedPlayer
 from tests.fakes import FakeDecisionModel, MaterialEvaluator
 from tests.e2e.ranking import write_ranking_games
@@ -43,17 +51,21 @@ class Script(BaseModel):
     black: list[str] = []
     system1: dict[str, list[str]] = {}  # by model name
     system1_missing: list[str] = []  # the models no System 1 server has
+    provider_failure: str | None = None  # why the Hosted model's provider fails, at its first turn of each game
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, required=True)
     port = parser.parse_args().port
+    os.environ.setdefault(CLAUDE_TOKEN_VARIABLE, "e2e-placeholder-not-a-token")  # offers the Hosted model; never used
 
     script = Script()
 
     def player_for(settings: Settings, color: Color) -> ScriptedPlayer:
         replies: list[str | BaseException] = list(getattr(script, color))
+        if script.provider_failure is not None and is_hosted(settings.llm_sides()[color].model):
+            return ScriptedPlayer([HostedModelFailed(script.provider_failure)]).for_settings(settings, color)
         if not settings.llm_sides()[color].thinking:
             replies = [Raw(json.dumps({"reasoning": f"Reasoning for {san}.", "move": san})) for san in replies]
         return ScriptedPlayer(replies).for_settings(settings, color)

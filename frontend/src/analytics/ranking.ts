@@ -33,13 +33,20 @@ export const SYSTEM_1_MODEL =
   'plays a move drawn from those probabilities. Its Reference configuration is Standard rules, its default Prompt ' +
   'template and a Choice temperature of 1.'
 
+/** What the mark on a Hosted model in the Ranking says on hover; local LLMs have none. */
+export const HOSTED_MODEL =
+  'A Hosted model: an LLM that runs on a provider’s servers and is paid for per token. Only the settings its ' +
+  'provider allows apply to it: thinking on or off, what it is given, the rules, retry feedback, what it ' +
+  'remembers and the Prompt template; never sampling, a Thinking level, a Thinking budget or Tools. Its Reference ' +
+  'configuration is the same, with thinking off and the provider’s own sampling.'
+
 export const REFERENCE_CONFIGURATION =
   'Thinking off, Free, Standard rules, 5 attempts per turn with explained Retry feedback, fresh Turn memory, no ' +
   'Tools, the default Prompt template and the model’s own sampling. Games under any other settings are left out.'
 
 /** What the page shows, in the tooltip of the info button beside its heading. */
 export const ABOUT_RANKING =
-  'Every model, LLMs and System 1 models together, ranked by its Rating on the chess.com Rapid scale, from its ' +
+  'Every model, local LLMs, Hosted models and System 1 models together, ranked by its Rating on the chess.com Rapid scale, from its ' +
   `games under the Reference configuration in the chosen Modes alone. The Reference configuration: ${REFERENCE_CONFIGURATION} ` +
   'A System 1 model’s is Standard rules, its default Prompt template and a Choice temperature of 1.'
 

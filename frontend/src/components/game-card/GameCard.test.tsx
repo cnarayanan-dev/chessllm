@@ -175,6 +175,22 @@ test("the result's detail shows in its tooltip on hover and keyboard focus, and 
   expect(await screen.findByText('no answer in 300 s')).toBeInTheDocument()
 })
 
+test('an aborted game says so, no side winning, the reason in its tooltip, and offers a Rematch', async () => {
+  const reason = 'claude-haiku-5-5: no credit left, or a billing problem: Your credit balance is too low'
+  const onRematch = vi.fn()
+  renderCard(aGame({ status: 'aborted', abort_reason: reason }), onRematch)
+  const result = within(gameCard()).getByTestId('result')
+
+  expect(result).toHaveTextContent('Game aborted')
+  expect(result).not.toHaveTextContent('wins')
+  expect(result).toHaveAttribute('aria-description', expect.stringContaining(reason))
+  expect(result).toHaveAttribute('aria-description', expect.stringContaining('No Rating'))
+  await userEvent.hover(result)
+  expect(await screen.findByText(/Your credit balance is too low/)).toBeInTheDocument()
+  await userEvent.click(within(gameCard()).getByRole('button', { name: 'Rematch' }))
+  expect(onRematch).toHaveBeenCalledOnce()
+})
+
 test('a result with no detail has no tooltip and takes no focus', () => {
   renderCard(over(aGame()))
 

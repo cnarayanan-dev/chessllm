@@ -11,4 +11,4 @@ class ModelInfo(BaseModel):
     sampling: Sampling | None  # None when Ollama can't show the model, and for a Hosted model, whose sampling is its provider's
     # Whether it is a Hosted model (ADR 0013): run on a provider's servers, with no sampling, Thinking level, Thinking
     # budget or Tools. Left out for a local model.
-    hosted: bool = Field(default=False, exclude_if=lambda hosted: not hosted)
+    hosted: bool | None = Field(default=None, exclude_if=lambda hosted: not hosted)
