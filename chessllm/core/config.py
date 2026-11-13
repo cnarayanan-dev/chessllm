@@ -62,8 +62,9 @@ load_environment()  # once, here, so every other module just reads the environme
 
 def claude_token_from_environment() -> str | None:
     """The token CLAUDE_TOKEN sets, read when asked like Dragon's path; None when it is unset or empty, and then the
-    Hosted model is not offered."""
-    return os.environ.get(CLAUDE_TOKEN_VARIABLE) or None
+    Hosted model is not offered. Stray spaces and quotes around it are dropped: a token never holds them, and a
+    half-quoted line in the env file would otherwise be refused by the provider."""
+    return (os.environ.get(CLAUDE_TOKEN_VARIABLE) or "").strip().strip("\"'").strip() or None
 
 
 def dragon_path_from_environment() -> str | None:

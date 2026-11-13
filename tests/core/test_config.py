@@ -43,3 +43,25 @@ def test_a_real_environment_variable_wins_over_the_env_file(tmp_path, monkeypatc
 
 def test_a_missing_env_file_is_no_error(tmp_path):
     load_environment(tmp_path / "no-such.env")
+
+
+def test_a_stray_quote_or_space_around_the_token_is_dropped(monkeypatch):
+    monkeypatch.setenv(CLAUDE_TOKEN_VARIABLE, ' sk-ant-token"\n')
+
+    assert claude_token_from_environment() == "sk-ant-token"
+
+
+def test_a_token_of_only_quotes_and_spaces_is_none(monkeypatch):
+    monkeypatch.setenv(CLAUDE_TOKEN_VARIABLE, " \"' ")
+
+    assert claude_token_from_environment() is None
+
+
+def test_a_token_with_a_stray_quote_in_the_env_file_still_works(tmp_path, monkeypatch):
+    monkeypatch.delenv(CLAUDE_TOKEN_VARIABLE, raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(f'{CLAUDE_TOKEN_VARIABLE}=sk-ant-token"\n', encoding="utf-8")
+
+    load_environment(env_file)
+
+    assert claude_token_from_environment() == "sk-ant-token"
